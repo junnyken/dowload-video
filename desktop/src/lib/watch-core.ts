@@ -1,10 +1,12 @@
-// Channel Watch ("Theo dõi kênh", Phase 33B, task #6259): pure rules, no
+// Channel Watch ("Theo dõi kênh", Phase 33B/33F): pure rules, no
 // Tauri / React / network, so they run under `npm test`.
 //
-// Server side: backend/app/api/watch.py (Phase 33A). The server scans the
-// channel; the app only asks GET /api/v1/watch/items?since=… and, when the
-// user taps "Tải", downloads the video itself through the normal queue
-// (bytes come through the user's own machine, daily allowance claimed first).
+// Server side: backend/app/api/watch.py (Phase 33A/33F). The server scans the
+// channel; the app polls GET /api/v1/watch/items and downloads videos on THIS
+// machine through the normal channel queue (enqueueWithClaims: daily allowance
+// claimed first, saved to <base>\<sanitizeFolderName(channel)>\).
+
+export type WatchMode = 'notify_only' | 'one_tap' | 'auto_download';
 
 export type WatchLimits = { max_sources: number; min_interval_sec: number; replace_cooldown_sec: number };
 
@@ -14,6 +16,7 @@ export type WatchStatus = {
   platforms: string[];
   limits: WatchLimits;
   used: number;
+  autoDownloadAllowed: boolean;
 };
 
 /** What GET /watch/status said, folded to what the app needs. */
@@ -36,7 +39,7 @@ export type WatchSource = {
 
 export type WatchSubscription = {
   id: string;
-  mode: 'notify_only' | 'one_tap' | string;
+  mode: WatchMode | string;
   status: 'active' | 'paused' | string;
   created_at: string | null;
   baseline_completed_at: string | null;
@@ -60,6 +63,37 @@ export type WatchItem = {
 export type InboxItem = WatchItem & { read: boolean };
 export type Inbox = { items: InboxItem[]; unread: number; ready: boolean };
 
+// ---- Windows-safe channel folder helpers -----------------------------------------
+
+const WIN_RESERVED_STEM = /^(CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])$/i;
+
+/** Folder-name safe version of a channel title (Windows rules). */
+export function sanitizeFolderName(s: string): string {
+  const normalized = String(s ?? '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Slice by Unicode code points so surrogate pairs (emoji) are never split in half.
+  let clean = Array.from(normalized)
+    .slice(0, 60)
+    .join('')
+    .replace(/[. ]+$/, '')
+    .trim();
+  if (!clean) return 'Kenh';
+  const stem = clean.split('.')[0] ?? clean;
+  if (WIN_RESERVED_STEM.test(stem)) {
+    clean = Array.from(`_${clean}`).slice(0, 60).join('').replace(/[. ]+$/, '');
+  }
+  return clean || 'Kenh';
+}
+
+export function joinPath(base: string, name: string): string {
+  return `${base.replace(/[\\/]+$/, '')}\\${name}`;
+}
+
+// ---- parsers & mode gates --------------------------------------------------------
+
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
@@ -81,15 +115,18 @@ export function parseStatus(httpStatus: number, data: unknown): StatusResult {
       platforms: Array.isArray(d.platforms) ? d.platforms.filter((p): p is string => typeof p === 'string') : [],
       limits: { max_sources: num(l.max_sources), min_interval_sec: num(l.min_interval_sec), replace_cooldown_sec: num(l.replace_cooldown_sec) },
       used: num(d.used),
+      autoDownloadAllowed: d.auto_download_allowed === true,
     },
   };
 }
 
-/**
- * The sidebar entry (and the background poll) exist only for a signed-in
- * user whose status says enabled — or who still has subscriptions to manage
- * (e.g. the trial was narrowed after they subscribed).
- */
+/** Modes selectable for this user's plan (`auto_download` requires paid tier). */
+export function allowedModes(status: WatchStatus | null | undefined): WatchMode[] {
+  return status?.autoDownloadAllowed
+    ? ['notify_only', 'one_tap', 'auto_download']
+    : ['notify_only', 'one_tap'];
+}
+
 /** `known`: this account had the entry before (saved per account). While the
  * server cannot be reached the entry stays, so a network problem does not look
  * like a removed feature. */
@@ -159,16 +196,17 @@ export function serverMessage(data: unknown, fallback: string): string {
 
 // ---- local state (persisted per account) -----------------------------------------
 
-/**
- * since: the newest discovered_at already seen by a poll (next poll asks
- * ?since=<it>). notified: item ids already announced — the server filters
- * with >= so the newest item comes back on every poll; this set stops a
- * second notification (also after a restart). done: items the user
- * downloaded or dismissed (hidden from the "Video mới" list).
- */
-export type WatchLocal = { since: string | null; notified: string[]; done: string[]; known?: boolean };
+export type WatchLocal = {
+  since: string | null;
+  notified: string[];
+  done: string[];
+  known?: boolean;
+  /** UTC YYYY-MM-DD when the daily quota-exhausted warning was already shown. */
+  quotaWarnedDay?: string;
+};
 
 export const MAX_IDS = 500;
+export const MAX_AUTO_PER_CHANNEL = 20;
 export const emptyLocal = (): WatchLocal => ({ since: null, notified: [], done: [], known: false });
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(-MAX_IDS) : []);
@@ -180,7 +218,15 @@ export function readLocal(raw: string | null, userId: string): WatchLocal {
     const v = all && typeof all === 'object' ? (all as Record<string, unknown>)[userId] : null;
     if (!v || typeof v !== 'object') return emptyLocal();
     const o = v as Record<string, unknown>;
-    return { since: str(o.since) && !Number.isNaN(Date.parse(o.since as string)) ? (o.since as string) : null, notified: ids(o.notified), done: ids(o.done), known: o.known === true };
+    const base: WatchLocal = {
+      since: str(o.since) && !Number.isNaN(Date.parse(o.since as string)) ? (o.since as string) : null,
+      notified: ids(o.notified),
+      done: ids(o.done),
+      known: o.known === true,
+    };
+    const qDay = str(o.quotaWarnedDay);
+    if (qDay) base.quotaWarnedDay = qDay;
+    return base;
   } catch {
     return emptyLocal();
   }
@@ -192,7 +238,14 @@ export function writeLocal(raw: string | null, userId: string, local: WatchLocal
     const p = JSON.parse(raw ?? 'null');
     if (p && typeof p === 'object' && !Array.isArray(p)) all = p as Record<string, unknown>;
   } catch { /* start over */ }
-  all[userId] = { since: local.since, notified: local.notified.slice(-MAX_IDS), done: local.done.slice(-MAX_IDS), known: local.known === true };
+  const entry: Record<string, unknown> = {
+    since: local.since,
+    notified: local.notified.slice(-MAX_IDS),
+    done: local.done.slice(-MAX_IDS),
+    known: local.known === true,
+  };
+  if (local.quotaWarnedDay) entry.quotaWarnedDay = local.quotaWarnedDay;
+  all[userId] = entry;
   return JSON.stringify(all);
 }
 
@@ -255,6 +308,20 @@ export function notifyText(b: Batch): { title: string; body: string } {
   };
 }
 
+/** Windows notification when auto_download queues new videos into the channel folder. */
+export function autoDownloadedNotifyText(count: number, channel: string): { title: string; body: string } {
+  return {
+    title: `Đã tải ${count} video mới từ ${channelLabel(channel)}`,
+    body: 'Bấm để mở thư mục kênh.',
+  };
+}
+
+/** Single daily notification when auto_download hits daily quota limit. */
+export function quotaExhaustedNotifyText(waiting: number): { title: string; body: string } {
+  const msg = `Hết lượt tải hôm nay, còn ${waiting} video chờ`;
+  return { title: 'Hết lượt tải hôm nay', body: msg };
+}
+
 /** Items still shown under "Video mới": not downloaded / dismissed, with a link. */
 export function pendingItems(items: WatchItem[], local: WatchLocal): WatchItem[] {
   const done = new Set(local.done);
@@ -283,36 +350,170 @@ export function nextPollDelay(rand: number = Math.random()): number {
   return POLL_MS + Math.round((rand * 2 - 1) * 2 * 60_000);
 }
 
-// ---- one-tap -------------------------------------------------------------------------
+// ---- one-tap & auto-download ---------------------------------------------------------
 
 type Video = ReturnType<typeof toChannelVideo>;
 export type ChannelTarget = { platform: string; title: string; quality: string; outDir: string };
 /** channels.ts enqueueWithClaims: claim-batch the daily allowance, then queue only the allowed ones. */
 export type EnqueueWithClaims = (videos: Video[], ch: ChannelTarget) => Promise<{ enqueued: { id: string }[]; refused: { video: { id: string }; detail: string | null }[] }>;
+export type FileExistsInDir = (outDir: string, item: WatchItem) => Promise<boolean> | boolean;
 
-export type OneTapResult = { local: WatchLocal; enqueued: number; refused: { item: WatchItem; detail: string | null }[] };
+export type DownloadedChannelBatch = { subscriptionId: string; channel: string; outDir: string; count: number };
+
+export type OneTapResult = {
+  local: WatchLocal;
+  enqueued: number;
+  refused: { item: WatchItem; detail: string | null }[];
+  downloadedBatches: DownloadedChannelBatch[];
+};
 
 /**
- * "Tải" on new videos: per channel, the videos go through the app's normal
- * channel path (allowance claimed first, then the local download queue).
- * Only queued items are marked done; refused ones stay in "Video mới".
+ * "Tải" on new videos (and auto_download): per channel, the videos go through
+ * the app's normal channel path (allowance claimed first, then the local
+ * download queue). Items already in `local.done` or already saved in the
+ * channel folder on disk are skipped and marked done. Only queued/existing
+ * items are marked done; refused ones stay in "Video mới".
  */
 export async function oneTap(
-  items: WatchItem[], local: WatchLocal,
-  o: { quality: string; outDirFor: (channel: string) => string },
+  items: WatchItem[],
+  local: WatchLocal,
+  o: { quality: string; outDirFor: (channel: string) => string; fileExistsInDir?: FileExistsInDir },
   enqueueWithClaims: EnqueueWithClaims,
 ): Promise<OneTapResult> {
   let enqueued = 0;
   const refused: OneTapResult['refused'] = [];
+  const doneSet = new Set(local.done);
   const doneIds: string[] = [];
-  for (const b of batchByChannel(items.filter((i) => !!i.url))) {
-    const byId = new Map(b.items.map((i) => [i.id, i]));
+  const downloadedBatches: DownloadedChannelBatch[] = [];
+
+  for (const b of batchByChannel(items.filter((i) => !!i.url && !doneSet.has(i.id)))) {
     const platform = b.items[0]?.platform || 'other';
     const title = (b.items[0]?.channel ?? '').trim() || b.channel;
-    const r = await enqueueWithClaims(b.items.map(toChannelVideo), { platform, title, quality: o.quality, outDir: o.outDirFor(title) });
+    const outDir = o.outDirFor(title);
+    const toQueue: WatchItem[] = [];
+    for (const it of b.items) {
+      if (o.fileExistsInDir && (await o.fileExistsInDir(outDir, it))) {
+        doneIds.push(it.id);
+      } else {
+        toQueue.push(it);
+      }
+    }
+    if (toQueue.length === 0) continue;
+
+    const byId = new Map(toQueue.map((i) => [i.id, i]));
+    const r = await enqueueWithClaims(toQueue.map(toChannelVideo), { platform, title, quality: o.quality, outDir });
     enqueued += r.enqueued.length;
     doneIds.push(...r.enqueued.map((v) => v.id));
-    for (const x of r.refused) { const it = byId.get(x.video.id); if (it) refused.push({ item: it, detail: x.detail }); }
+    if (r.enqueued.length > 0) {
+      downloadedBatches.push({
+        subscriptionId: b.subscriptionId,
+        channel: b.channel,
+        outDir,
+        count: r.enqueued.length,
+      });
+    }
+    for (const x of r.refused) {
+      const it = byId.get(x.video.id);
+      if (it) refused.push({ item: it, detail: x.detail });
+    }
   }
-  return { local: markDone(local, doneIds), enqueued, refused };
+  return { local: markDone(local, doneIds), enqueued, refused, downloadedBatches };
+}
+
+export type AutoDownloadPollResult = {
+  local: WatchLocal;
+  notifyBatches: Batch[];
+  downloadedBatches: DownloadedChannelBatch[];
+  quotaWarning: string | null;
+};
+
+/**
+ * Full poll + catch-up orchestration:
+ * - Updates `local.since` & `local.notified` via `applyPoll`.
+ * - Manual subscriptions (`notify_only` / `one_tap`) emit `notifyBatches`.
+ * - Active `auto_download` subscriptions (when `autoDownloadAllowed && baseDir`)
+ *   catch up undownloaded items capped at `MAX_AUTO_PER_CHANNEL` (20) per channel
+ *   through `oneTap(..., enqueueWithClaims)` into `<baseDir>\<sanitizeFolderName(channel)>`.
+ * - Quota refusals keep items pending in "Video mới" and emit `quotaWarning` once per UTC day.
+ */
+export async function runAutoDownloadPoll(opts: {
+  local: WatchLocal;
+  items: WatchItem[];
+  subs: WatchSubscription[];
+  autoDownloadAllowed: boolean;
+  nowIso: string;
+  quality: string;
+  baseDir: string | null;
+  enqueueWithClaims: EnqueueWithClaims;
+  fileExistsInDir?: FileExistsInDir;
+}): Promise<AutoDownloadPollResult> {
+  const { items, subs, autoDownloadAllowed, nowIso, quality, baseDir, enqueueWithClaims, fileExistsInDir } = opts;
+  const poll = applyPoll(opts.local, items, nowIso);
+  let nextLocal = poll.local;
+
+  const autoSubs = new Map<string, WatchSubscription>();
+  if (autoDownloadAllowed) {
+    for (const s of subs) {
+      if (s.status === 'active' && s.mode === 'auto_download') {
+        autoSubs.set(s.id, s);
+      }
+    }
+  }
+
+  // Manual channels get normal new-video notifications; auto_download channels notify after enqueueing.
+  const notifyBatches = batchByChannel(poll.toNotify.filter((i) => !autoSubs.has(i.subscription_id)));
+  if (autoSubs.size === 0 || !baseDir) {
+    return { local: nextLocal, notifyBatches, downloadedBatches: [], quotaWarning: null };
+  }
+
+  const done = new Set(nextLocal.done);
+  const perSubCount = new Map<string, number>();
+  let overflowWaiting = 0;
+  const candidates: WatchItem[] = [];
+
+  for (const it of items) {
+    const sub = autoSubs.get(it.subscription_id);
+    if (!sub || !it.url || done.has(it.id)) continue;
+    const cur = perSubCount.get(sub.id) ?? 0;
+    const channelName = it.channel || sub.source.display_name || null;
+    if (cur < MAX_AUTO_PER_CHANNEL) {
+      perSubCount.set(sub.id, cur + 1);
+      candidates.push(it.channel ? it : { ...it, channel: channelName });
+    } else {
+      overflowWaiting += 1;
+    }
+  }
+
+  if (candidates.length === 0) {
+    return { local: nextLocal, notifyBatches, downloadedBatches: [], quotaWarning: null };
+  }
+
+  const tap = await oneTap(
+    candidates,
+    nextLocal,
+    {
+      quality,
+      outDirFor: (channel) => joinPath(baseDir, sanitizeFolderName(channel.replace(/^@/, ''))),
+      fileExistsInDir,
+    },
+    enqueueWithClaims,
+  );
+  nextLocal = tap.local;
+
+  let quotaWarning: string | null = null;
+  const today = nowIso.slice(0, 10);
+  if (tap.refused.length > 0) {
+    const waiting = tap.refused.length + overflowWaiting;
+    if (nextLocal.quotaWarnedDay !== today) {
+      quotaWarning = quotaExhaustedNotifyText(waiting).body;
+      nextLocal = { ...nextLocal, quotaWarnedDay: today };
+    }
+  }
+
+  return {
+    local: nextLocal,
+    notifyBatches,
+    downloadedBatches: tap.downloadedBatches,
+    quotaWarning,
+  };
 }

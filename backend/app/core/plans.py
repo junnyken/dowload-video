@@ -172,21 +172,42 @@ def code_prefix(code: str) -> Optional[str]:
 
 # ── the plan table ──────────────────────────────────────────────────────────
 
+def _hours(seconds: int) -> int | float:
+    h = seconds / 3600
+    return int(h) if h.is_integer() else round(h, 4)
+
+
 def _watch() -> Dict[str, Any]:
     try:
         from app.core import watch_config as wc  # noqa: PLC0415
         open_to_users = wc.enabled() and not wc.admin_only() and not wc.kill_switch()
+        tiers = ("guest", "free", "starter", "pro", "team", "enterprise")
         return {
             "available": bool(open_to_users),
-            "free_sources": wc.max_sources("free"),
-            "starter_sources": wc.max_sources("starter"),
-            "pro_sources": wc.max_sources("pro"),
-            "free_interval_h": round(wc.min_interval_sec("free") / 3600),
-            "pro_interval_h": round(wc.min_interval_sec("pro") / 3600),
+            "sources": {t: wc.max_sources(t) for t in tiers},
+            "interval_h": {t: _hours(wc.min_interval_sec(t)) for t in tiers},
             "instagram_pro": "instagram" in wc.platforms_enabled(),
         }
     except Exception:  # noqa: BLE001
         return {"available": False}
+
+
+def _watch_sources_for(watch: Dict[str, Any], tier: str) -> int:
+    if not watch.get("available"):
+        return 0
+    sources = watch.get("sources")
+    if isinstance(sources, dict) and tier in sources:
+        return int(sources[tier])
+    from app.core import watch_config as wc  # noqa: PLC0415
+    return wc.max_sources(tier)
+
+
+def _watch_interval_h_for(watch: Dict[str, Any], tier: str) -> int | float:
+    intervals = watch.get("interval_h")
+    if isinstance(intervals, dict) and tier in intervals:
+        return intervals[tier]
+    from app.core import watch_config as wc  # noqa: PLC0415
+    return _hours(wc.min_interval_sec(tier))
 
 
 def build_plans() -> Dict[str, Any]:
@@ -224,7 +245,8 @@ def build_plans() -> Dict[str, Any]:
             "asr_minutes_per_day": 0,
             "translate_cues_per_day": 0,
             "photo_carousel": False,
-            "watch_sources": 0,
+            "watch_sources": _watch_sources_for(watch, "guest"),
+            "watch_interval_h": _watch_interval_h_for(watch, "guest"),
             "pins": 0, "pin_days": 0, "schedules": 0, "playlists": 0,
             "price_month_vnd": 0, "price_year_vnd": 0,
             "price_month_usd": 0, "price_year_usd": 0,
@@ -243,8 +265,8 @@ def build_plans() -> Dict[str, Any]:
             "asr_minutes_per_day": 0,
             "translate_cues_per_day": 0,
             "photo_carousel": "single",
-            "watch_sources": 0,
-            "watch_interval_h": None,
+            "watch_sources": _watch_sources_for(watch, "free"),
+            "watch_interval_h": _watch_interval_h_for(watch, "free"),
             "pins": _PIN_LIMITS["free"], "pin_days": _PIN_DAYS["free"],
             "schedules": _SCHEDULE_LIMITS["free"], "playlists": _PLAYLIST_LIMITS["free"],
             "price_month_vnd": 0, "price_year_vnd": 0,
@@ -270,8 +292,8 @@ def build_plans() -> Dict[str, Any]:
             "asr_minutes_per_day": 30,
             "translate_cues_per_day": 2000,
             "photo_carousel": "zip",
-            "watch_sources": watch.get("starter_sources", 2) if watch.get("available") else 0,
-            "watch_interval_h": watch.get("free_interval_h") or 24,
+            "watch_sources": _watch_sources_for(watch, "starter"),
+            "watch_interval_h": _watch_interval_h_for(watch, "starter"),
             "pins": 10, "pin_days": 14,
             "schedules": 5, "playlists": 5,
             "price_month_vnd": s["starter_month_vnd"], "price_year_vnd": s["starter_year_vnd"],
@@ -299,8 +321,8 @@ def build_plans() -> Dict[str, Any]:
             "asr_minutes_per_day": 120,
             "translate_cues_per_day": 6000,
             "photo_carousel": "zip",
-            "watch_sources": watch.get("pro_sources", 30) if watch.get("available") else 0,
-            "watch_interval_h": watch.get("pro_interval_h") or 6,
+            "watch_sources": _watch_sources_for(watch, "pro"),
+            "watch_interval_h": _watch_interval_h_for(watch, "pro"),
             "watch_instagram": bool(watch.get("available") and watch.get("instagram_pro")),
             "watch_webhook": bool(watch.get("available")),
             "pins": _PIN_LIMITS["pro"], "pin_days": _PIN_DAYS["pro"],
@@ -329,8 +351,8 @@ def build_plans() -> Dict[str, Any]:
             "asr_minutes_per_day": 300,
             "translate_cues_per_day": 15000,
             "photo_carousel": "zip",
-            "watch_sources": (watch.get("pro_sources", 30) * 3) if watch.get("available") else 0,
-            "watch_interval_h": watch.get("pro_interval_h") or 6,
+            "watch_sources": _watch_sources_for(watch, "team"),
+            "watch_interval_h": _watch_interval_h_for(watch, "team"),
             "watch_instagram": bool(watch.get("available")),
             "watch_webhook": bool(watch.get("available")),
             "pins": -1, "pin_days": 90,

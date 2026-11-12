@@ -6,6 +6,9 @@ const CACHE_KEY = 'vg_entitlement_cache';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Mirror backend PLAN_DEFS — fast client-side gating without extra round-trip
+const STARTER_FEATURES = new Set([
+  'bulk_zip', 'youtube_video', 'cloud_save', 'chapters',
+]);
 const PRO_FEATURES  = new Set([
   'bulk_zip', 'youtube_video', 'spotify_full', 'cloud_save',
   'chapters', 'logo_inpaint', 'api_key', 'webhook', 'ai_tools', 'priority_queue',
@@ -15,6 +18,7 @@ const ENTERPRISE_EXTRA = new Set(['white_label', 'sso', 'custom_domain', 'dedica
 
 const PLAN_FEATURES = {
   free:       new Set(['basic_platforms']),
+  starter:    new Set(['basic_platforms', ...STARTER_FEATURES]),
   pro:        new Set(['basic_platforms', ...PRO_FEATURES]),
   team:       new Set(['basic_platforms', ...PRO_FEATURES, ...TEAM_EXTRA]),
   enterprise: new Set(['basic_platforms', ...PRO_FEATURES, ...TEAM_EXTRA, ...ENTERPRISE_EXTRA]),

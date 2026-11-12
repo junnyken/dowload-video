@@ -1,16 +1,20 @@
-// "Theo dõi kênh" — Channel Watch (Phase 33A, task #6257).
+// "Theo dõi kênh" — Channel Watch (Phase 33A–33F).
 // Signed-in only; shown in the menu only when GET /watch/status says enabled.
 // All user-facing strings below: wording: BA review.
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Eye, Plus, Trash2, Pause, Play, RefreshCw, Bell, Download, AlertCircle } from 'lucide-react';
+import { useEntitlement } from '../hooks/useEntitlement';
+import { Eye, Plus, Trash2, Pause, Play, RefreshCw, Bell, Download, AlertCircle, FileDown, Monitor } from 'lucide-react';
 import EmptyState from '../components/shared/EmptyState';
 import { API_BASE } from '../lib/apiBase';
+import { localDownloadUrl, localFileId, toFileId } from '../lib/localFile';
+import { buildChannelZipFilename, groupWatchItemsByChannel, canShowWatchBulkZip } from '../lib/watchZip';
 import { enableWebPush, pushSupported } from '../lib/webPush';
 import { useTranslation } from 'react-i18next';
 import i18n, { getLang, useLocalePath } from '../i18n';
 
 const API = `${API_BASE}/api/v1/watch`;
+const CORE_API = `${API_BASE}/api/v1`;
 
 // wording: BA review
 // Text lives in locales/*/watch.json; getters read it at render time (language can change).
@@ -41,8 +45,12 @@ const T = {
   get degraded() { return w('degraded'); },
   get modeTap() { return w('modeTap'); },
   get modeNotify() { return w('modeNotify'); },
+  get modeAuto() { return w('modeAuto'); },
   get download() { return w('download'); },
   get inboxTitle() { return w('inboxTitle'); },
+  get newVideosGroup() { return w('newVideosGroup'); },
+  get newBadge() { return w('newBadge'); },
+  get unknownTime() { return w('unknownTime'); },
   get allChannels() { return w('allChannels'); },
   get unreadOnly() { return w('unreadOnly'); },
   get markAll() { return w('markAll'); },
@@ -50,12 +58,21 @@ const T = {
   get unreadDot() { return w('unreadDot'); },
   get pushBtn() { return w('pushBtn'); },
   get genericError() { return w('genericError'); },
+  get zipPacking() { return w('zipPacking'); },
+  get zipFailed() { return w('zipFailed'); },
+  get desktopHintText() { return w('desktopHintText'); },
+  get desktopHintCta() { return w('desktopHintCta'); },
   used: (used, max) => w('used', { used, max }),
   every: (hours) => w('every', { hours }),
   newItems: (count) => w('newItems', { count }),
   // wording: BA review — shown while the first read failed temporarily
   retrying: (when) => (when ? w('retryingAt', { when }) : w('retrying')),
   unreadCount: (count) => w('unreadCount', { count }),
+  publishedAt: (when) => w('publishedAt', { when }),
+  detectedAt: (when) => w('detectedAt', { when }),
+  downloadAllZip: (count) => w('downloadAllZip', { count }),
+  zipPreparing: (done, total) => w('zipPreparing', { done, total }),
+  zipReady: (file) => w('zipReady', { file }),
   push: {
     get ok() { return w('push.ok'); },
     get unsupported() { return w('push.unsupported'); },
@@ -67,17 +84,27 @@ const T = {
 
 function fmt(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(getLang() === 'en' ? 'en-US' : 'vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function errText(d) {
   return d?.message || d?.detail?.message || (typeof d?.detail === 'string' ? d.detail : '') || T.genericError;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function WatchPage() {
   useTranslation('watch'); // re-render on language change (T reads i18n at render)
   const lp = useLocalePath();
   const { isAuthenticated, session, withAuth } = useAuth();
+  const { canUseFeature } = useEntitlement();
   const [status, setStatus] = useState(null);       // null = loading, false = unavailable
   const [subs, setSubs] = useState([]);
   const [inbox, setInbox] = useState({ items: [], unread: 0, ready: true });
@@ -86,8 +113,15 @@ export default function WatchPage() {
   const [url, setUrl] = useState('');
   const [mode, setMode] = useState('one_tap');
   const [busy, setBusy] = useState(false);
+  const [zipState, setZipState] = useState({});
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const [reloadKey, setReloadKey] = useState(0);
   const load = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -233,7 +267,142 @@ export default function WatchPage() {
     setMsg(T.push[res] || T.push.failed);
   }
 
+  const bulkZipAllowed = canShowWatchBulkZip(status, canUseFeature('bulk_zip'));
+
+  async function downloadChannelZip(group) {
+    if (!bulkZipAllowed || zipState[group.key]) return;
+    const urls = [...new Set(group.items.map((x) => x.url).filter(Boolean))];
+    if (urls.length === 0) return;
+
+    setErr('');
+    setMsg('');
+    setZipState((s) => ({ ...s, [group.key]: { phase: 'downloading', done: 0, total: urls.length } }));
+
+    try {
+      // 1. Submit to existing /bulk-download flow (deducts daily quota normally)
+      const startRes = await fetch(`${CORE_API}/bulk-download`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          urls,
+          channel_mode: false,
+          max_videos: urls.length,
+          min_views: 0,
+          quality: 'video',
+          remove_watermark: true,
+        }),
+      }));
+      const startData = await startRes.json().catch(() => ({}));
+      if (!startRes.ok || !startData.batch_id) {
+        throw new Error(errText(startData));
+      }
+      const batchId = startData.batch_id;
+
+      // 2. Poll /jobs/{batchId} until all video jobs reach terminal state
+      let videoJobs = [];
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        if (!mountedRef.current) return;
+        await sleep(2500);
+        const jobsRes = await fetch(`${CORE_API}/jobs/${batchId}`, withAuth());
+        if (!jobsRes.ok) continue;
+        const jobsData = await jobsRes.json().catch(() => ({}));
+        videoJobs = (jobsData.jobs || []).filter((j) => j.original_url !== 'batch_zip');
+        const doneCount = videoJobs.filter((j) => ['success', 'failed', 'cancelled'].includes(j.status)).length;
+        if (mountedRef.current) {
+          setZipState((s) => ({
+            ...s,
+            [group.key]: { phase: 'downloading', done: doneCount, total: videoJobs.length || urls.length },
+          }));
+        }
+        if (videoJobs.length > 0 && doneCount === videoJobs.length) break;
+      }
+
+      const okJobs = videoJobs.filter((j) => j.status === 'success');
+      if (okJobs.length === 0) {
+        throw new Error(videoJobs[0]?.error_message || T.zipFailed);
+      }
+
+      // 3. Request archive via existing /bulk-zip endpoint
+      if (mountedRef.current) {
+        setZipState((s) => ({
+          ...s,
+          [group.key]: { phase: 'zipping', done: okJobs.length, total: videoJobs.length },
+        }));
+      }
+      const zipRes = await fetch(`${CORE_API}/bulk-zip`, withAuth({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: batchId, organize_by_channel: false }),
+      }));
+      const zipData = await zipRes.json().catch(() => ({}));
+      if (!zipRes.ok) {
+        throw new Error(errText(zipData));
+      }
+
+      // 4. Poll batch_zip job until ready, then download as <tên kênh>_<yyyy-mm-dd>.zip
+      let zipFileId = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        if (!mountedRef.current) return;
+        await sleep(2000);
+        const jobsRes = await fetch(`${CORE_API}/jobs/${batchId}`, withAuth());
+        if (!jobsRes.ok) continue;
+        const jobsData = await jobsRes.json().catch(() => ({}));
+        const zipJob = (jobsData.jobs || []).find((j) => j.original_url === 'batch_zip');
+        if (!zipJob) continue;
+        if (zipJob.status === 'failed') {
+          throw new Error(zipJob.error_message || T.zipFailed);
+        }
+        if (zipJob.status === 'success') {
+          zipFileId = toFileId(zipJob.direct_file_id || zipJob.direct_mp4_url || localFileId(zipJob));
+          break;
+        }
+      }
+
+      if (!zipFileId) {
+        throw new Error(T.zipFailed);
+      }
+
+      const zipFilename = buildChannelZipFilename(group.channel, new Date());
+      const downloadHref = localDownloadUrl(API_BASE, zipFileId, zipFilename);
+      const a = document.createElement('a');
+      a.href = downloadHref;
+      a.setAttribute('download', zipFilename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      const unreadIds = group.items.filter((x) => !x.read).map((x) => x.id);
+      if (unreadIds.length > 0 && inbox.ready) {
+        const unreadSet = new Set(unreadIds);
+        markRead(
+          { item_ids: unreadIds },
+          {
+            ...inbox,
+            items: inbox.items.map((x) => (unreadSet.has(x.id) ? { ...x, read: true } : x)),
+            unread: Math.max(0, inbox.unread - unreadIds.length),
+          },
+        );
+      }
+      if (mountedRef.current) {
+        setMsg(T.zipReady(zipFilename));
+      }
+    } catch (e) {
+      if (mountedRef.current) {
+        setErr(e?.message || T.zipFailed);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setZipState((s) => {
+          const next = { ...s };
+          delete next[group.key];
+          return next;
+        });
+      }
+    }
+  }
+
   const canAdd = status.enabled && status.used < status.limits.max_sources;
+  const channelGroups = groupWatchItemsByChannel(inbox.items);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -248,6 +417,18 @@ export default function WatchPage() {
             <Bell className="w-4 h-4" /> {T.pushBtn}
           </button>
         )}
+      </div>
+
+      {/* Windows desktop auto-download hint (no web auto-download) */}
+      <div className="mb-4 px-4 py-3 rounded-xl border border-accent/25 bg-accent-soft/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+        <span className="flex items-center gap-2 text-fg-2">
+          <Monitor className="w-4 h-4 text-accent-text shrink-0" />
+          <span>{T.desktopHintText}</span>
+        </span>
+        <a href={lp('/download')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-accent-fg font-bold hover:opacity-90 shrink-0 self-start sm:self-auto">
+          <Download className="w-3.5 h-3.5" /> {T.desktopHintCta}
+        </a>
       </div>
 
       <form onSubmit={add} className="mb-3 flex flex-col sm:flex-row gap-2">
@@ -268,7 +449,7 @@ export default function WatchPage() {
 
       <div className="mb-4 px-4 py-2.5 bg-surface-2 border border-line rounded-xl text-xs text-fg-muted flex flex-wrap gap-x-4 gap-y-1">
         <span>{T.used(status.used, status.limits.max_sources)}</span>
-        <span>{T.every(Math.round(status.limits.min_interval_sec / 3600))}</span>
+        <span>{T.every(Math.max(1, Math.round(status.limits.min_interval_sec / 3600)))}</span>
       </div>
 
       {err && (
@@ -284,6 +465,11 @@ export default function WatchPage() {
         <div className="flex flex-col gap-3">
           {subs.map((s) => {
             const paused = s.status === 'paused';
+            const modeLabel = s.mode === 'notify_only'
+              ? T.modeNotify
+              : s.mode === 'auto_download'
+                ? T.modeAuto
+                : T.modeTap;
             return (
               <div key={s.id} className="p-4 rounded-2xl border border-line bg-surface flex flex-col gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -294,7 +480,7 @@ export default function WatchPage() {
                 <div className="flex gap-4 text-xs text-fg-muted flex-wrap">
                   <span>{T.lastScan}: {fmt(s.source.last_scan_at) || T.never}</span>
                   {s.new_items_7d > 0 && <span className="text-accent-text">{T.newItems(s.new_items_7d)}</span>}
-                  <span>{s.mode === 'notify_only' ? T.modeNotify : T.modeTap}</span>
+                  <span>{modeLabel}</span>
                 </div>
                 {!s.baseline_completed_at && s.source.status !== 'degraded' && (
                   <p className="text-xs text-fg-muted">
@@ -342,25 +528,83 @@ export default function WatchPage() {
             {T.markAll}
           </button>
         </div>
-        {inbox.items.length === 0 ? (
+
+        {channelGroups.length === 0 ? (
           <p className="text-sm text-fg-muted px-1 py-4">{T.inboxEmpty}</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {inbox.items.map((it) => (
-              <div key={it.id} className="flex items-center gap-3 px-3 py-2 rounded-xl border border-line bg-surface min-w-0">
-                <span title={it.read ? undefined : T.unreadDot} aria-label={it.read ? undefined : T.unreadDot}
-                  className={`w-2 h-2 rounded-full shrink-0 ${it.read ? 'bg-transparent' : 'bg-accent'}`} />
-                <div className="flex-1 min-w-0">
-                  <a href={it.url} target="_blank" rel="noreferrer noopener" onClick={() => markOne(it)}
-                    className={`block text-sm text-fg truncate hover:underline ${it.read ? '' : 'font-bold'}`}>{it.title || it.url}</a>
-                  <p className="text-[11px] text-fg-muted truncate">{it.platform} · {it.channel} · {fmt(it.discovered_at)}</p>
+          <div className="flex flex-col gap-4">
+            {channelGroups.map((group) => {
+              const z = zipState[group.key];
+              return (
+                <div key={group.key} className="rounded-2xl border border-line bg-surface p-3.5 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap border-b border-line/60 pb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-sm text-fg truncate">{group.channel}</span>
+                      {group.platform && (
+                        <span className="text-[11px] px-2 py-0.5 rounded bg-surface-2 text-fg-muted uppercase shrink-0">
+                          {group.platform}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-fg-muted shrink-0">
+                        · {T.newVideosGroup} ({group.items.length})
+                      </span>
+                    </div>
+
+                    {bulkZipAllowed && group.items.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={Boolean(z)}
+                        onClick={() => downloadChannelZip(group)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 cursor-pointer disabled:opacity-60 shrink-0"
+                      >
+                        {z ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            {z.phase === 'zipping' ? T.zipPacking : T.zipPreparing(z.done, z.total)}
+                          </>
+                        ) : (
+                          <>
+                            <FileDown className="w-3.5 h-3.5" />
+                            {T.downloadAllZip(group.items.length)}
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {group.items.map((it) => {
+                      const pubText = fmt(it.published_at) || T.unknownTime;
+                      const discText = fmt(it.discovered_at) || T.unknownTime;
+                      return (
+                        <div key={it.id} className="flex items-center gap-3 px-3 py-2 rounded-xl border border-line bg-surface-2/40 min-w-0">
+                          <span title={it.read ? undefined : T.unreadDot} aria-label={it.read ? undefined : T.unreadDot}
+                            className={`w-2 h-2 rounded-full shrink-0 ${it.read ? 'bg-transparent' : 'bg-accent'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${it.read ? 'bg-surface-2 text-fg-muted' : 'bg-accent-soft text-accent-text'}`}>
+                                {T.newBadge}
+                              </span>
+                              <a href={it.url} target="_blank" rel="noreferrer noopener" onClick={() => markOne(it)}
+                                className={`block text-sm text-fg truncate hover:underline ${it.read ? '' : 'font-bold'}`}>
+                                {it.title || it.url}
+                              </a>
+                            </div>
+                            <p className="text-[11px] text-fg-muted truncate mt-0.5">
+                              {T.publishedAt(pubText)} · {T.detectedAt(discText)}
+                            </p>
+                          </div>
+                          <a href={lp(`/share-target?url=${encodeURIComponent(it.url)}`)} onClick={() => markOne(it)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft shrink-0">
+                            <Download className="w-3.5 h-3.5" /> {T.download}
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <a href={lp(`/share-target?url=${encodeURIComponent(it.url)}`)} onClick={() => markOne(it)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-accent/30 text-accent-text text-xs font-bold hover:bg-accent-soft shrink-0">
-                  <Download className="w-3.5 h-3.5" /> {T.download}
-                </a>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

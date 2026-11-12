@@ -126,7 +126,7 @@ struct AppFlags {
 
 impl Default for AppFlags {
     fn default() -> Self {
-        AppFlags { close_to_tray: AtomicBool::new(true), quitting: AtomicBool::new(false) }
+        AppFlags { close_to_tray: AtomicBool::new(false), quitting: AtomicBool::new(false) }
     }
 }
 

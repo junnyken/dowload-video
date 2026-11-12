@@ -1,13 +1,23 @@
 import { createStore } from './store';
 
 // ---- toasts -----------------------------------------------------------------
-export type Toast = { id: number; kind: 'success' | 'error' | 'info'; text: string };
+export type Toast = {
+  id: number;
+  kind: 'success' | 'error' | 'info';
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
 export const toasts = createStore<Toast[]>([]);
 let tid = 1;
-export function toast(kind: Toast['kind'], text: string) {
+export function toast(
+  kind: Toast['kind'],
+  text: string,
+  opts?: { actionLabel?: string; onAction?: () => void },
+) {
   const id = tid++;
-  toasts.set((l) => [...l.slice(-3), { id, kind, text }]);
-  setTimeout(() => dismissToast(id), kind === 'error' ? 8000 : 4500);
+  toasts.set((l) => [...l.slice(-3), { id, kind, text, actionLabel: opts?.actionLabel, onAction: opts?.onAction }]);
+  setTimeout(() => dismissToast(id), kind === 'error' || opts?.onAction ? 8000 : 4500);
 }
 export function dismissToast(id: number) {
   toasts.set((l) => l.filter((t) => t.id !== id));

@@ -21,21 +21,8 @@ import type { Channel, ChannelListing, ChannelVideo } from './types';
 
 // ---- helpers --------------------------------------------------------------------
 
-/** Folder-name safe version of a channel title (Windows rules). */
-export function sanitizeFolderName(s: string): string {
-  const clean = s
-    // eslint-disable-next-line no-control-regex
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 60)
-    .replace(/[. ]+$/, '');
-  return clean || 'Kenh';
-}
-
-export function joinPath(base: string, name: string): string {
-  return `${base.replace(/[\\/]+$/, '')}\\${name}`;
-}
+import { sanitizeFolderName, joinPath } from './watch-core';
+export { sanitizeFolderName, joinPath };
 
 export { looksLikeChannelUrl } from './urls';
 

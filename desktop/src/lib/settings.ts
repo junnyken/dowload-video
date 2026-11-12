@@ -44,7 +44,7 @@ export const NAME_STYLES: NameStyle[] = ['title', 'date_title', 'date_channel_ti
 export const FOLDER_STYLES: FolderStyle[] = ['none', 'platform', 'month', 'platform_month'];
 
 const KEY = 'vg.settings';
-const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: true, douyinDebugWindow: false, clipboardMode: 'ask', platformPresets: {},
+const DEFAULTS: Settings = { outDir: null, concurrency: 2, defaultQuality: 'best', theme: 'system', autoSync: true, closeToTray: false, douyinDebugWindow: false, clipboardMode: 'ask', platformPresets: {},
   nameStyle: 'title', folderStyle: 'none', cleanup: { enabled: false, olderThanDays: 30, minFreeGb: null }, codecPref: 'easy',
   audioKbps: 'best', subtitles: 'off' };
 

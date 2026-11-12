@@ -2062,6 +2062,11 @@ def expire_subscriptions(self):
                     continue
                 # Keep user_usage.plan in sync only when profile was actually downgraded
                 supabase.table("user_usage").update({"plan": "free"}).eq("user_id", uid).execute()
+                try:
+                    from app.services import channel_watch as _cw
+                    _cw.downgrade_expired_auto_download(supabase, uid, tier="free", is_admin=False)
+                except Exception:
+                    pass
                 downgraded += 1
                 print(f"[expire_subscriptions] Downgraded {uid}")
             except Exception as _de:

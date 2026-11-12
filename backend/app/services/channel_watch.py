@@ -55,7 +55,7 @@ from app.core import watch_config as cfg
 
 logger = logging.getLogger(__name__)
 
-MODES = ("notify_only", "one_tap")
+MODES = ("notify_only", "one_tap", "auto_download")
 SUB_LIVE = ("active", "paused")           # statuses that occupy a slot
 SCANNABLE = ("active", "degraded")
 
@@ -64,6 +64,7 @@ SCANNABLE = ("active", "degraded")
 _MESSAGES = {
     "login_required": "Vui lòng đăng nhập để theo dõi kênh.",  # wording: BA review
     "tier_required": "Tính năng Theo dõi Kênh tự động chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
+    "auto_download_tier_required": "Chế độ Tự động tải chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
     "watch_disabled": "Tính năng theo dõi kênh đang tạm tắt.",  # wording: BA review
     "admin_only": "Tính năng theo dõi kênh đang thử nghiệm nội bộ, chưa mở cho tài khoản của bạn.",  # wording: BA review
     "source_limit_reached": "Bạn đã theo dõi tối đa {limit} kênh. Hãy bỏ theo dõi một kênh hoặc nâng cấp Pro để theo dõi thêm.",  # wording: BA review
@@ -550,13 +551,113 @@ def _list_tiktok(source: dict, limit: int, *, embed_fetch=None) -> list:
     return entries
 
 
-def _list_youtube(source: dict, limit: int, *, extract=None) -> list:
-    """Newest uploads of a YouTube channel (its /videos tab, newest first)
-    via yt-dlp's flat listing — one page request, free, no login.
+_YT_ATOM_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "yt": "http://www.youtube.com/xml/schemas/2015",
+}
 
-    YouTube's RSS feed (feeds/videos.xml) answered 404 for every channel
-    on 12/10/2026, so it is not used. Shorts and live streams are other
-    tabs and are not watched."""
+
+def _youtube_rss_fetch(url: str) -> tuple[int, str]:
+    """Fetch YouTube's public Atom RSS feed (0 API quota, no cookies)."""
+    import httpx  # noqa: PLC0415
+    r = httpx.get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            "Accept": "application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+        },
+        timeout=15,
+        follow_redirects=True,
+    )
+    return r.status_code, r.text
+
+
+def parse_youtube_rss(xml_text: str, *, limit: int = 15) -> list[dict]:
+    """Parse YouTube's Atom XML feed (`feeds/videos.xml?channel_id=UC...`) into
+    watch entries newest-first. Raises ListingError(permanent=False) on invalid XML."""
+    import xml.etree.ElementTree as ET  # noqa: PLC0415
+
+    raw = (xml_text or "").strip()
+    if not raw:
+        raise ListingError("rss_empty_body", permanent=False)
+    upper_head = raw[:1024].upper()
+    if "<!DOCTYPE" in upper_head or "<!ENTITY" in upper_head:
+        raise ListingError("rss_xxe_rejected", permanent=False)
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        raise ListingError("rss_bad_xml", permanent=False)
+    if not (root.tag == "feed" or root.tag.endswith("}feed")):
+        raise ListingError("rss_not_feed", permanent=False)
+
+    entry_nodes = root.findall("atom:entry", _YT_ATOM_NS) or root.findall("entry")
+    out: list[dict] = []
+    for node in entry_nodes:
+        vid = (node.findtext("yt:videoId", default="", namespaces=_YT_ATOM_NS) or "").strip()
+        if not vid:
+            raw_id = (node.findtext("atom:id", default="", namespaces=_YT_ATOM_NS)
+                      or node.findtext("id") or "").strip()
+            if raw_id.startswith("yt:video:"):
+                vid = raw_id.split("yt:video:", 1)[1].strip()
+        if not _YT_VIDEO_ID_RE.match(vid):
+            continue
+        title = (node.findtext("atom:title", default="", namespaces=_YT_ATOM_NS)
+                 or node.findtext("title") or "YouTube Video").strip()[:200]
+        entry: dict[str, Any] = {
+            "id": vid,
+            "url": f"https://www.youtube.com/watch?v={vid}",
+            "title": title or "YouTube Video",
+        }
+        pub_raw = (node.findtext("atom:published", default="", namespaces=_YT_ATOM_NS)
+                   or node.findtext("published") or "").strip()
+        dt = _parse(pub_raw) if pub_raw else None
+        if dt is not None:
+            entry["published_at"] = _iso(dt)
+        out.append(entry)
+
+    out.sort(key=lambda e: e.get("published_at") or "", reverse=True)
+    return out[:max(1, int(limit))]
+
+
+def _ensure_youtube_channel_id(source: dict) -> Optional[str]:
+    """Return the `UC...` channel ID for a YouTube source, resolving `@handle`
+    once and persisting `external_channel_id` + `canonical_url` if an older row
+    lacked it."""
+    ext = (source.get("external_channel_id") or "").strip()
+    if _YT_CHANNEL_ID_RE.match(ext):
+        return ext
+
+    canonical = (source.get("canonical_url") or "").strip()
+    m = _YT_CHANNEL_PATH_RE.match(urlsplit(canonical).path or "") if canonical else None
+    if m and m.group(2) and _YT_CHANNEL_ID_RE.match(m.group(2)):
+        cid = m.group(2)
+    elif canonical:
+        try:
+            ref = _resolve_youtube(canonical)
+            cid = ref.external_channel_id
+        except Exception as e:  # noqa: BLE001
+            logger.info("[Watch] youtube channel_id resolve fallback failed (%s)", type(e).__name__)
+            return None
+    else:
+        return None
+
+    new_canonical = f"https://www.youtube.com/channel/{cid}"
+    source["external_channel_id"] = cid
+    source["canonical_url"] = new_canonical
+    if source.get("id"):
+        try:
+            _sb().table("watch_sources").update({
+                "external_channel_id": cid,
+                "canonical_url": new_canonical,
+            }).eq("id", source["id"]).execute()
+        except Exception as e:  # noqa: BLE001
+            logger.info("[Watch] could not persist resolved youtube channel_id: %s", type(e).__name__)
+    return cid
+
+
+def _list_youtube_ytdlp(source: dict, limit: int, *, extract=None) -> list:
+    """Fallback YouTube listing via yt-dlp flat extraction of `/videos`."""
     url = (source.get("canonical_url") or "").rstrip("/") + "/videos"
     try:
         if extract is None:
@@ -587,6 +688,33 @@ def _list_youtube(source: dict, limit: int, *, extract=None) -> list:
             entry["published_at"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
         out.append(entry)
     return out
+
+
+def _list_youtube(source: dict, limit: int, *, rss_fetch=None, extract=None) -> list:
+    """Primary YouTube listing via Atom RSS (`feeds/videos.xml?channel_id=UC...`,
+    0 quota, no cookie) when `"youtube"` is enabled in WATCH_PLATFORMS_ENABLED;
+    falls back seamlessly to yt-dlp flat listing on any RSS failure."""
+    if extract is not None and rss_fetch is None:
+        return _list_youtube_ytdlp(source, limit, extract=extract)
+
+    if cfg.platform_enabled("youtube") or rss_fetch is not None:
+        cid = _ensure_youtube_channel_id(source)
+        if cid:
+            rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}"
+            try:
+                status, xml_text = (rss_fetch or _youtube_rss_fetch)(rss_url)
+                if status != 200:
+                    raise ListingError(f"rss_http_{status}", permanent=False)
+                entries = parse_youtube_rss(xml_text, limit=limit)
+                if entries:
+                    return entries
+                raise ListingError("rss_empty_entries", permanent=False)
+            except ListingError as e:
+                logger.info("[Watch] youtube RSS unavailable (%s) — falling back to yt-dlp", e.category)
+            except Exception as e:  # noqa: BLE001
+                logger.info("[Watch] youtube RSS fetch error (%s) — falling back to yt-dlp", type(e).__name__)
+
+    return _list_youtube_ytdlp(source, limit, extract=extract)
 
 
 IG_PROVIDER = "apify_instagram_watch"
@@ -692,7 +820,7 @@ def _list_instagram(source: dict, limit: int, *, run=None) -> list:
 
 PROVIDERS: dict[str, tuple[str, Callable[[dict, int], list]]] = {
     "tiktok": ("tikwm", _list_tiktok),
-    "youtube": ("ytdlp_flat", _list_youtube),
+    "youtube": ("youtube_rss", _list_youtube),
     "instagram": (IG_PROVIDER, _list_instagram),
 }
 
@@ -1249,6 +1377,8 @@ def add_source(*, user_id: str, tier: str, is_admin: bool, email_verified: Optio
     mode = mode or "one_tap"
     if mode not in MODES:
         raise WatchError("invalid_mode")
+    if mode == "auto_download" and not cfg.auto_download_allowed(tier, is_admin=is_admin):
+        raise WatchError("auto_download_tier_required", 402)
     eff_tier = "pro" if is_admin else (tier or "free")
     paid = cfg.is_paid(eff_tier)
     if not paid and cfg.free_requires_verified_email() and email_verified is False:
@@ -1380,13 +1510,34 @@ def own_subscription(sb, user_id: str, sub_id: str) -> dict:
     return sub
 
 
+def downgrade_expired_auto_download(sb, user_id: str, *, tier: str = "free", is_admin: bool = False) -> int:
+    """Downgrade any live auto_download subscriptions to one_tap if the user's
+    current tier is no longer allowed auto_download."""
+    if cfg.auto_download_allowed(tier, is_admin=is_admin):
+        return 0
+    rows = [
+        s for s in (sb.table("watch_subscriptions").select("id, status, mode")
+                    .eq("user_id", user_id).eq("mode", "auto_download").execute()).data or []
+        if s.get("status") in SUB_LIVE
+    ]
+    if not rows:
+        return 0
+    ids = [r["id"] for r in rows if r.get("id")]
+    if ids:
+        sb.table("watch_subscriptions").update({"mode": "one_tap"}).in_("id", ids).execute()
+    return len(ids)
+
+
 def update_subscription(sb, user_id: str, sub_id: str, *, status: Optional[str] = None,
-                        mode: Optional[str] = None, now: Optional[datetime] = None) -> dict:
+                        mode: Optional[str] = None, tier: str = "free", is_admin: bool = False,
+                        now: Optional[datetime] = None) -> dict:
     sub = own_subscription(sb, user_id, sub_id)
     upd: dict = {}
     if mode is not None:
         if mode not in MODES:
             raise WatchError("invalid_mode")
+        if mode == "auto_download" and not cfg.auto_download_allowed(tier, is_admin=is_admin):
+            raise WatchError("auto_download_tier_required", 402)
         upd["mode"] = mode
     if status is not None:
         if status not in ("active", "paused"):

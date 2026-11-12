@@ -115,17 +115,47 @@ def is_paid(tier: str) -> bool:
     return (tier or "free") in PAID_TIERS
 
 
+DEFAULT_AUTO_DOWNLOAD_TIERS = "starter,pro,team,enterprise"
+
+
+def auto_download_tiers() -> frozenset:
+    raw = os.getenv("WATCH_AUTO_DOWNLOAD_TIERS")
+    if raw is None:
+        raw = DEFAULT_AUTO_DOWNLOAD_TIERS
+    return frozenset(t.strip().lower() for t in raw.split(",") if t.strip())
+
+
+def auto_download_allowed(tier: Optional[str], *, is_admin: bool = False) -> bool:
+    if is_admin:
+        return True
+    return (tier or "free").strip().lower() in auto_download_tiers()
+
+
 def max_sources(tier: str) -> int:
     t = (tier or "free").lower()
+    if t == "guest":
+        return 0
     if t == "starter":
         return _int("WATCH_STARTER_MAX_SOURCES", 2)
-    if t in ("pro", "team", "enterprise"):
+    if t == "pro":
         return _int("WATCH_PRO_MAX_SOURCES", 30)
+    if t == "team":
+        return _int("WATCH_TEAM_MAX_SOURCES", 90)
+    if t == "enterprise":
+        return _int("WATCH_ENTERPRISE_MAX_SOURCES", 90)
     return _int("WATCH_FREE_MAX_SOURCES", 0)
 
 
 def min_interval_sec(tier: str) -> int:
-    if is_paid(tier):
+    t = (tier or "free").lower()
+    per_tier_env = {
+        "starter": "WATCH_STARTER_MIN_INTERVAL_SEC",
+        "team": "WATCH_TEAM_MIN_INTERVAL_SEC",
+        "enterprise": "WATCH_ENTERPRISE_MIN_INTERVAL_SEC",
+    }.get(t)
+    if per_tier_env and (os.getenv(per_tier_env) or "").strip():
+        return _int(per_tier_env, 21600, lo=60)
+    if is_paid(t):
         return _int("WATCH_PRO_MIN_INTERVAL_SEC", 21600, lo=60)
     return _int("WATCH_FREE_MIN_INTERVAL_SEC", 86400, lo=60)
 
@@ -164,9 +194,14 @@ def max_interval_sec() -> int:
     return _int("WATCH_MAX_INTERVAL_SEC", 259200, lo=60)
 
 
+DEFAULT_PLATFORM_FLOOR_YOUTUBE_SEC = 1800
+
+
 def platform_floor_sec(platform: str) -> int:
-    default = _int("WATCH_PLATFORM_FLOOR_SEC", 21600, lo=60)
-    return _int(f"WATCH_PLATFORM_FLOOR_SEC_{(platform or '').upper()}", default, lo=60)
+    p = (platform or "").strip().lower()
+    default = (DEFAULT_PLATFORM_FLOOR_YOUTUBE_SEC if p == "youtube"
+               else _int("WATCH_PLATFORM_FLOOR_SEC", 21600, lo=60))
+    return _int(f"WATCH_PLATFORM_FLOOR_SEC_{p.upper()}", default, lo=60)
 
 
 def retry_base_sec() -> int:

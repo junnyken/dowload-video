@@ -12,7 +12,18 @@ export function Toasts() {
         return (
           <div key={t.id} className="vg-toast pointer-events-auto flex items-start gap-2.5 rounded-xl border border-line bg-surface p-3 shadow-lg">
             <Icon size={18} className={`mt-0.5 shrink-0 ${tone}`} aria-hidden />
-            <p className="min-w-0 flex-1 break-words text-[13px] text-fg">{t.text}</p>
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-[13px] text-fg">{t.text}</p>
+              {t.onAction && (
+                <button
+                  type="button"
+                  onClick={() => { t.onAction?.(); dismissToast(t.id); }}
+                  className="mt-1 text-xs font-semibold text-accent-text hover:underline"
+                >
+                  {t.actionLabel ?? 'Mở thư mục'}
+                </button>
+              )}
+            </div>
             <button type="button" aria-label="Đóng thông báo" onClick={() => dismissToast(t.id)} className="text-fg-muted hover:text-fg"><X size={14} /></button>
           </div>
         );

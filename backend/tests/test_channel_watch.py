@@ -43,6 +43,7 @@ class World:
 
         monkeypatch.setattr(cw, "_sb", lambda: self.db)
         monkeypatch.setattr(cw, "_rc", lambda: self.rc)
+        monkeypatch.setattr("app.core.admin_switches._r", lambda: self.rc)
         monkeypatch.setattr(cw, "utcnow", lambda: self.clock[0])
         monkeypatch.setitem(cw.PROVIDERS, "tiktok", ("tikwm", self._provider))
         monkeypatch.setattr("app.core.push_sender.send_push", self._send)
@@ -158,8 +159,11 @@ def test_flag_off_beat_and_tasks_are_noops(w, env, monkeypatch):
     assert w.db.calls == [] and w.provider_calls == []
 
 
-def test_defaults_are_off():
+def test_defaults_are_off(monkeypatch):
     import os
+    from app.core import admin_switches
+    monkeypatch.setattr(admin_switches, "_r", lambda: fakeredis.FakeRedis(decode_responses=True))
+    admin_switches.reset_cache()
     saved = {k: os.environ.pop(k) for k in list(os.environ) if k.startswith("WATCH_")}
     try:
         assert cfg.enabled() is False and cfg.kill_switch() is False
@@ -167,8 +171,8 @@ def test_defaults_are_off():
         assert cfg.platforms_enabled() == frozenset()
         assert cfg.scan_batch_per_minute() == 20 and cfg.items_per_scan() == 10
         assert cfg.gap_followup_max_pages() == 2 and cfg.max_interval_sec() == 259200
-        assert (cfg.max_sources("free"), cfg.max_sources("starter"), cfg.max_sources("pro"), cfg.max_sources("team")) == (0, 2, 30, 30)
-        assert (cfg.min_interval_sec("free"), cfg.min_interval_sec("pro")) == (86400, 21600)
+        assert (cfg.max_sources("free"), cfg.max_sources("starter"), cfg.max_sources("pro"), cfg.max_sources("team"), cfg.max_sources("enterprise")) == (0, 2, 30, 90, 90)
+        assert (cfg.min_interval_sec("free"), cfg.min_interval_sec("starter"), cfg.min_interval_sec("pro")) == (86400, 21600, 21600)
         assert (cfg.replace_cooldown_sec("free"), cfg.replace_cooldown_sec("pro")) == (86400, 3600)
         assert cfg.ip_daily_new_sources() == 3 and cfg.global_free_cap() == 200
     finally:
@@ -832,7 +836,9 @@ def test_patch_pause_resume_mode_and_ownership(app, w, api):
     r = app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"status": "paused", "mode": "notify_only"})
     assert r.status_code == 200 and r.json()["subscription"]["status"] == "paused"
     assert r.json()["subscription"]["mode"] == "notify_only"
-    assert app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"mode": "auto_download"}).json()["error_code"] == "invalid_mode"
+    assert app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"mode": "bogus_mode"}).json()["error_code"] == "invalid_mode"
+    r_auto = app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"mode": "auto_download"})
+    assert r_auto.status_code == 402 and r_auto.json()["error_code"] == "auto_download_tier_required"
     assert app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"status": "removed"}).json()["error_code"] == "invalid_status"
     login(api, uid="intruder")
     assert app.patch(f"/api/v1/watch/subscriptions/{sid}", json={"status": "active"}).status_code == 404

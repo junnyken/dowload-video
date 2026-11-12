@@ -1,16 +1,20 @@
-// Channel Watch ("Theo dõi kênh", Phase 33B, task #6259): server calls,
-// stores, the background poll and the one-tap download. Pure rules live in
-// watch-core.ts. Every call carries the user's token (signed-in only).
+// Channel Watch ("Theo dõi kênh", Phase 33B/33F): server calls,
+// stores, the background poll, auto-download and one-tap download.
+// Pure rules live in watch-core.ts. Every call carries the user's token.
 import { createStore } from './store';
 import { apiFetch } from './http';
 import { auth, getAccessToken } from './auth';
-import { settings, ensureOutDir } from './settings';
+import { ensureOutDir, samePath, settings } from './settings';
 import { enqueueWithClaims, joinPath, notifySafe, refusedText, sanitizeFolderName } from './channels';
+import { sameVideo, videoKey } from './dedupe-core';
+import { queue } from './queue';
+import { api } from './tauri';
 import { go, nav, toast } from './ui';
 import {
-  RESUME_MIN_GAP_MS, applyPoll, batchByChannel, emptyLocal, markDone, mergeItems, nextPollDelay, notifyText, oneTap, parseInbox, parseItems,
-  parseStatus, parseSubscriptions, readLocal, serverMessage, watchVisible, writeLocal,
-  type Inbox, type InboxItem, type StatusResult, type WatchItem, type WatchLocal, type WatchSubscription,
+  RESUME_MIN_GAP_MS, autoDownloadedNotifyText, emptyLocal, markDone, mergeItems, nextPollDelay, notifyText, oneTap,
+  parseInbox, parseItems, parseStatus, parseSubscriptions, quotaExhaustedNotifyText, readLocal, runAutoDownloadPoll,
+  serverMessage, watchVisible, writeLocal,
+  type Inbox, type InboxItem, type StatusResult, type WatchItem, type WatchLocal, type WatchMode, type WatchSubscription,
 } from './watch-core';
 
 const BASE = '/api/v1/watch';
@@ -59,6 +63,63 @@ function saveLocal(l: WatchLocal) {
   try { localStorage.setItem(LOCAL_KEY, writeLocal(localStorage.getItem(LOCAL_KEY), userKey(), l)); } catch { /* storage unavailable */ }
 }
 
+function parentFolder(filePath: string | null | undefined): string | null {
+  if (!filePath) return null;
+  const idx = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'));
+  return idx > 0 ? filePath.slice(0, idx) : null;
+}
+
+/** Checks if `item` is already queued or physically saved inside `outDir` on this PC. */
+async function fileExistsInChannelDir(outDir: string, item: WatchItem): Promise<boolean> {
+  if (!item.url) return false;
+  const inQueue = queue.get().some(
+    (q) => q.state !== 'failed' && sameVideo(q.url, item.url!) && samePath(q.outDir, outDir),
+  );
+  if (inQueue) return true;
+  const key = videoKey(item.url);
+  if (!key) return false;
+  try {
+    const rows = await api.historyList({ query: key, limit: 50 });
+    const hit = rows.find((h) => {
+      const dir = parentFolder(h.filePath);
+      return h.state === 'completed' && !!h.filePath && !!dir && samePath(dir, outDir) && sameVideo(h.url, item.url!);
+    });
+    if (!hit?.filePath) return false;
+    // subtitleList calls Rust's check_produced -> verifies the file still physically exists on disk!
+    await api.subtitleList(hit.filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Opens Windows Explorer on the channel folder (selecting the newest downloaded file inside it). */
+export async function openChannelFolder(outDir: string): Promise<void> {
+  const fromQueue = queue.get().find((q) => q.state === 'completed' && q.filePath && samePath(q.outDir, outDir));
+  if (fromQueue?.filePath) {
+    try { await api.revealPath(fromQueue.filePath); return; } catch { /* try history */ }
+  }
+  try {
+    const rows = await api.historyList({ limit: 100 });
+    const hit = rows.find((h) => {
+      const dir = parentFolder(h.filePath);
+      return h.state === 'completed' && !!h.filePath && !!dir && samePath(dir, outDir);
+    });
+    if (hit?.filePath) {
+      await api.revealPath(hit.filePath);
+      return;
+    }
+  } catch { /* ignore */ }
+  toast('info', `Thư mục kênh: ${outDir}`);
+}
+
+/** Resolves `<base>\<sanitizeFolderName(channel)>` for a channel display name. */
+export async function channelFolderFor(channelName: string): Promise<string | null> {
+  const base = await ensureOutDir();
+  if (!base) return null;
+  return joinPath(base, sanitizeFolderName(channelName.replace(/^@/, '')));
+}
+
 // ---- server calls ------------------------------------------------------------------------
 
 export async function refreshStatus(): Promise<StatusResult> {
@@ -66,7 +127,6 @@ export async function refreshStatus(): Promise<StatusResult> {
   const s = parseStatus(r.status, r.data);
   if (s.kind === 'error' && watchStatus.get()?.kind === 'ok') return watchStatus.get() as StatusResult; // keep what we knew
   watchStatus.set(s);
-  // Remember per account whether the entry exists, so an outage keeps it.
   const known = watchLocal.get().known === true;
   if (s.kind === 'ok' && watchVisible('in', s) && !known) saveLocal({ ...watchLocal.get(), known: true });
   if ((s.kind === 'off' || (s.kind === 'ok' && !watchVisible('in', s))) && known) saveLocal({ ...watchLocal.get(), known: false });
@@ -134,7 +194,7 @@ function failed(r: Answer): ActionResult {
   return { ok: false, message: serverMessage(r.data, GENERIC) };
 }
 
-export async function addSource(url: string, mode: 'one_tap' | 'notify_only'): Promise<ActionResult> {
+export async function addSource(url: string, mode: WatchMode): Promise<ActionResult> {
   const r = await call('/sources', 'POST', { url, mode });
   if (r.status !== 200 && r.status !== 201) return failed(r);
   await refreshAll();
@@ -149,6 +209,14 @@ export async function setPaused(id: string, paused: boolean): Promise<ActionResu
   return { ok: true };
 }
 
+export async function setMode(id: string, mode: WatchMode): Promise<ActionResult> {
+  const r = await call(`/subscriptions/${encodeURIComponent(id)}`, 'PATCH', { mode });
+  if (r.status !== 200) return failed(r);
+  await refreshAll();
+  if (mode === 'auto_download') void pollNow();
+  return { ok: true };
+}
+
 export async function removeSource(id: string): Promise<ActionResult> {
   const r = await call(`/subscriptions/${encodeURIComponent(id)}`, 'DELETE');
   if (r.status !== 200) return failed(r);
@@ -156,28 +224,68 @@ export async function removeSource(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-// ---- background poll ----------------------------------------------------------------------
+// ---- background poll + catch-up ----------------------------------------------------------
 
 let lastPollAt = 0;
 let polling: Promise<void> | null = null;
 
-/** GET /items?since=<last seen>: one notification per channel for ids never announced before. */
+/** Polls `/subscriptions` + `/items`: notifies manual channels and auto-downloads `auto_download` channels. */
 export function pollNow(): Promise<void> {
   polling ??= (async () => {
     if (auth.get().status !== 'in') return;
     const st = await refreshStatus();
-    if (!watchVisible('in', st)) return;
+    if (!watchVisible('in', st) || st.kind !== 'ok') return;
     lastPollAt = Date.now();
+
+    const subAns = await call('/subscriptions');
+    const subs = subAns.status === 200 ? parseSubscriptions(subAns.data) : watchSubs.get();
+    if (subAns.status === 200) watchSubs.set(subs);
+
+    const hasAuto = st.status.autoDownloadAllowed && subs.some((s) => s.status === 'active' && s.mode === 'auto_download');
     const local = watchLocal.get();
-    const r = await call(local.since ? `/items?since=${encodeURIComponent(local.since)}` : '/items');
+    // When auto_download is active, ask `/items` (7-day window) so any item refused yesterday
+    // by daily quota is caught up when allowance resets (capped at 20 videos/channel per run).
+    const itemsPath = !hasAuto && local.since ? `/items?since=${encodeURIComponent(local.since)}` : '/items';
+    const r = await call(itemsPath);
     if (r.status !== 200) return;
+
     const items = parseItems(r.data);
-    const out = applyPoll(local, items, new Date().toISOString());
-    saveLocal(out.local); // persisted BEFORE notifying: a crash cannot cause a second notification
+    const baseDir = hasAuto ? await ensureOutDir() : null;
+    const out = await runAutoDownloadPoll({
+      local,
+      items,
+      subs,
+      autoDownloadAllowed: st.status.autoDownloadAllowed,
+      nowIso: new Date().toISOString(),
+      quality: settings.get().defaultQuality,
+      baseDir,
+      enqueueWithClaims,
+      fileExistsInDir: fileExistsInChannelDir,
+    });
+
+    saveLocal(out.local);
     watchItems.set((cur) => mergeItems(items, cur));
-    for (const b of batchByChannel(out.toNotify)) {
+
+    for (const b of out.notifyBatches) {
       const t = notifyText(b);
       notifySafe(t.title, t.body);
+    }
+    for (const d of out.downloadedBatches) {
+      const t = autoDownloadedNotifyText(d.count, d.channel);
+      notifySafe(t.title, t.body);
+      toast('success', t.title, {
+        actionLabel: 'Mở thư mục',
+        onAction: () => { void openChannelFolder(d.outDir); },
+      });
+    }
+    if (out.quotaWarning) {
+      const q = quotaExhaustedNotifyText(0);
+      notifySafe(q.title, out.quotaWarning);
+      toast('info', out.quotaWarning);
+    }
+    if (out.downloadedBatches.length > 0) {
+      const autoDoneIds = out.local.done.filter((id) => !local.done.includes(id));
+      if (autoDoneIds.length > 0) void markInboxRead(autoDoneIds);
     }
   })().finally(() => { polling = null; });
   return polling;
@@ -195,7 +303,7 @@ function onResume() {
 
 let started = false;
 let lastUser: string | null = null;
-/** App start: poll after sign-in is known, then every ~15 min, and when the window comes back / the network returns. */
+/** App start: poll after sign-in is known (catches up missed auto_download items), then every ~15 min. */
 export function startWatch() {
   if (started) return;
   started = true;
@@ -235,11 +343,11 @@ export async function downloadItems(items: WatchItem[]): Promise<string[]> {
   const res = await oneTap(items, watchLocal.get(), {
     quality: settings.get().defaultQuality,
     outDirFor: (channel) => joinPath(base, sanitizeFolderName(channel.replace(/^@/, ''))),
+    fileExistsInDir: fileExistsInChannelDir,
   }, enqueueWithClaims);
   saveLocal(res.local);
   const queued = res.local.done.filter((id) => !before.has(id));
   if (res.enqueued) toast('success', `Đã thêm ${res.enqueued} video vào hàng đợi.`); // wording: BA review
-  // Refused (no downloads left today) stay under "Video mới", like the Channels review list.
   if (res.refused.length) toast('error', refusedText(res.refused.length, res.refused[0].detail));
   return queued; // ids that really went into the queue
 }

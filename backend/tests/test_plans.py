@@ -66,6 +66,47 @@ def test_watch_not_advertised_when_closed(rc, monkeypatch):
     assert t["pro"]["watch_instagram"] is False
 
 
+def test_watch_plans_match_enforced_limits_all_tiers(rc, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.core import watch_config as wc
+    from app.main import app as fastapi_app
+
+    monkeypatch.setenv("WATCH_ENABLED", "true")
+    monkeypatch.setenv("WATCH_ADMIN_ONLY", "false")
+    monkeypatch.setenv("WATCH_KILL_SWITCH", "false")
+    monkeypatch.delenv("WATCH_FREE_MAX_SOURCES", raising=False)
+    monkeypatch.delenv("WATCH_STARTER_MAX_SOURCES", raising=False)
+    monkeypatch.delenv("WATCH_PRO_MAX_SOURCES", raising=False)
+    monkeypatch.delenv("WATCH_TEAM_MAX_SOURCES", raising=False)
+    monkeypatch.delenv("WATCH_ENTERPRISE_MAX_SOURCES", raising=False)
+    monkeypatch.delenv("WATCH_FREE_MIN_INTERVAL_SEC", raising=False)
+    monkeypatch.delenv("WATCH_PRO_MIN_INTERVAL_SEC", raising=False)
+
+    assert wc.max_sources("starter") == 2
+    assert wc.max_sources("pro") == 30
+    assert wc.max_sources("team") == 90
+    assert wc.max_sources("enterprise") == 90
+
+    client = TestClient(fastapi_app, raise_server_exceptions=False)
+    data = client.get("/api/v1/plans").json()
+    by_id = {row["id"]: row for row in data["tiers"]}
+
+    for tier_id, row in by_id.items():
+        assert row["watch_sources"] == wc.max_sources(tier_id), f"{tier_id} watch_sources mismatch"
+        assert row["watch_interval_h"] == wc.min_interval_sec(tier_id) / 3600, f"{tier_id} watch_interval_h mismatch"
+
+    # Also verify custom env overrides propagate identically to both watch_config and /api/v1/plans
+    monkeypatch.setenv("WATCH_TEAM_MAX_SOURCES", "120")
+    monkeypatch.setenv("WATCH_ENTERPRISE_MAX_SOURCES", "150")
+    monkeypatch.setenv("WATCH_PRO_MIN_INTERVAL_SEC", "7200")
+    assert wc.max_sources("team") == 120
+    assert wc.max_sources("enterprise") == 150
+    data2 = client.get("/api/v1/plans").json()
+    by_id2 = {row["id"]: row for row in data2["tiers"]}
+    assert by_id2["starter"]["watch_interval_h"] == 2
+    assert by_id2["team"]["watch_sources"] == 120
+
+
 def test_no_unenforced_features_listed(rc):
     keys = set().union(*(t.keys() for t in plans.build_plans()["tiers"]))
     for banned in ("priority_queue", "cloud_save", "chapters", "concurrent_jobs"):

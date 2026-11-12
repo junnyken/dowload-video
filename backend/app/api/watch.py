@@ -115,15 +115,20 @@ def watch_status(request: Request, user=Depends(get_optional_user)):
     _require_enabled()
     user = _require_user(user)
     admin = _is_admin(request)
-    tier = "pro" if admin else _tier(user["id"])
+    raw_tier = _tier(user["id"])
+    tier = "pro" if admin else raw_tier
     can_add = (not cfg.kill_switch()) and (admin or not cfg.admin_only())
+    from app.core.quotas import TIER_PERMISSIONS
     sb = cw._sb()
+    bulk_zip_ok = True if admin else bool(TIER_PERMISSIONS.get(raw_tier, TIER_PERMISSIONS["free"]).get("bulk_zip", False))
     return {
         "enabled": can_add,
         "kill_switch": cfg.kill_switch(),
         "admin_only": cfg.admin_only(),
         "platforms": sorted(p for p in cfg.platforms_enabled() if p in cfg.IMPLEMENTED_PLATFORMS),
         "tier": tier,
+        "auto_download_allowed": cfg.auto_download_allowed(raw_tier, is_admin=admin),
+        "bulk_zip_allowed": bulk_zip_ok,
         "limits": _limits(tier),
         "used": cw.user_used(sb, user["id"]),
     }
@@ -161,10 +166,12 @@ def add_watch_source(payload: AddSourceRequest, request: Request, user=Depends(g
 
 
 @router.get("/watch/subscriptions")
-def get_watch_subscriptions(user=Depends(get_optional_user)):
+def get_watch_subscriptions(request: Request, user=Depends(get_optional_user)):
     _require_enabled()
     user = _require_user(user)
-    return {"subscriptions": cw.list_subscriptions(cw._sb(), user["id"])}
+    sb = cw._sb()
+    cw.downgrade_expired_auto_download(sb, user["id"], tier=_tier(user["id"]), is_admin=_is_admin(request))
+    return {"subscriptions": cw.list_subscriptions(sb, user["id"])}
 
 
 class PatchSubscriptionRequest(BaseModel):
@@ -173,11 +180,14 @@ class PatchSubscriptionRequest(BaseModel):
 
 
 @router.patch("/watch/subscriptions/{sub_id}")
-def patch_watch_subscription(sub_id: str, payload: PatchSubscriptionRequest, user=Depends(get_optional_user)):
+def patch_watch_subscription(sub_id: str, payload: PatchSubscriptionRequest, request: Request, user=Depends(get_optional_user)):
     _require_enabled()
     user = _require_user(user)
     sb = cw._sb()
-    sub = cw.update_subscription(sb, user["id"], sub_id, status=payload.status, mode=payload.mode)
+    sub = cw.update_subscription(
+        sb, user["id"], sub_id, status=payload.status, mode=payload.mode,
+        tier=_tier(user["id"]), is_admin=_is_admin(request),
+    )
     return {"subscription": cw.subscription_view(sub, cw.get_source(sb, sub["source_id"]) or {})}
 
 
@@ -190,9 +200,11 @@ def delete_watch_subscription(sub_id: str, user=Depends(get_optional_user)):
 
 
 @router.get("/watch/items")
-def get_watch_items(since: Optional[str] = None, user=Depends(get_optional_user)):
+def get_watch_items(request: Request, since: Optional[str] = None, user=Depends(get_optional_user)):
     _require_enabled()
     user = _require_user(user)
+    sb = cw._sb()
+    cw.downgrade_expired_auto_download(sb, user["id"], tier=_tier(user["id"]), is_admin=_is_admin(request))
     since_dt = None
     if since:
         since_dt = cw._parse(since)
@@ -200,16 +212,18 @@ def get_watch_items(since: Optional[str] = None, user=Depends(get_optional_user)
             raise WatchError("invalid_since", 400)
         # Never more than 30 days back.
         since_dt = max(since_dt, datetime.now(timezone.utc) - timedelta(days=30))
-    return {"items": cw.list_items(cw._sb(), user["id"], since=since_dt)}
+    return {"items": cw.list_items(sb, user["id"], since=since_dt)}
 
 
 @router.get("/watch/inbox")
-def get_watch_inbox(subscription_id: Optional[str] = None, unread: bool = False,
+def get_watch_inbox(request: Request, subscription_id: Optional[str] = None, unread: bool = False,
                     user=Depends(get_optional_user)):
     """Hộp thư: new videos of every followed channel (30 days), read state."""
     _require_enabled()
     user = _require_user(user)
-    return cw.inbox(cw._sb(), user["id"], subscription_id=subscription_id, unread_only=unread)
+    sb = cw._sb()
+    cw.downgrade_expired_auto_download(sb, user["id"], tier=_tier(user["id"]), is_admin=_is_admin(request))
+    return cw.inbox(sb, user["id"], subscription_id=subscription_id, unread_only=unread)
 
 
 class InboxReadRequest(BaseModel):

@@ -1,30 +1,39 @@
-// "Theo dõi kênh" (Phase 33B, task #6259): channels the VidGrab server
-// watches for this account; new videos are downloaded on THIS machine when
-// the user taps "Tải". All Vietnamese strings: wording: BA review.
+// "Theo dõi kênh" (Phase 33B/33F): channels the VidGrab server watches for this
+// account; new videos are downloaded on THIS machine into <base>\<tên kênh>\.
+// All Vietnamese strings: wording: BA review.
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bell, Download, Eye, Pause, Play, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertCircle, Bell, Crown, Download, Eye, FolderOpen, Info, Pause, Play, RefreshCw, Settings, Trash2 } from 'lucide-react';
 import { Badge, Button, EmptyState, IconButton, PlatformBadge, ScreenHeader, Spinner } from '../components/ui';
+import { WEBSITE_URL } from '../lib/config';
 import { formatDate } from '../lib/format';
-import { confirmDialog, toast } from '../lib/ui';
+import { api } from '../lib/tauri';
+import { confirmDialog, go, toast } from '../lib/ui';
 import {
-  addSource, downloadInboxItems, fetchInbox, inboxQuery, markInboxRead, refreshAll, removeSource, setPaused, watchInbox, watchLoading, watchStatus, watchSubs,
+  addSource, channelFolderFor, downloadInboxItems, fetchInbox, inboxQuery, markInboxRead,
+  openChannelFolder, refreshAll, removeSource, setMode, setPaused, watchInbox, watchLoading, watchStatus, watchSubs,
 } from '../lib/watch';
-import { channelLabel, type InboxItem, type WatchSubscription } from '../lib/watch-core';
+import { allowedModes, channelLabel, type InboxItem, type WatchMode, type WatchStatus, type WatchSubscription } from '../lib/watch-core';
 
 // wording: BA review
 const T = {
   title: 'Theo dõi kênh',
-  subtitle: 'Máy chủ VidGrab kiểm tra kênh giúp bạn; video mới được tải về ngay trên máy này khi bạn bấm “Tải”.',
+  subtitle: 'Máy chủ VidGrab kiểm tra kênh giúp bạn; video mới được lưu riêng theo từng thư mục tên kênh ngay trên máy này.',
+  openOnlyNote: 'Tự động tải chỉ chạy khi VidGrab đang mở.',
+  openOnlyHint: 'Bạn có thể bật “Khởi động cùng Windows” và “Thu nhỏ xuống khay khi đóng” trong Cài đặt nếu muốn theo dõi nền.',
+  bgSettingsBtn: 'Cài đặt chạy nền',
   unavailable: 'Tính năng theo dõi kênh hiện chưa mở cho tài khoản của bạn.',
-  // wording: BA review — shown while the VidGrab server cannot be reached
   offlineTitle: 'Chưa kết nối được máy chủ VidGrab',
   offlineText: 'Danh sách kênh và video mới sẽ hiện lại khi có kết nối. Ứng dụng tự thử lại; bạn cũng có thể bấm Thử lại.',
   retry: 'Thử lại',
   addLabel: 'Theo dõi kênh mới',
   placeholder: 'https://www.tiktok.com/@tenkenh hoặc https://www.youtube.com/@tenkenh',
   add: 'Theo dõi',
-  modeTap: 'Thông báo + bấm để tải',
-  modeNotify: 'Chỉ thông báo',
+  modeNotify: 'Chỉ báo',
+  modeTap: 'Bấm để tải',
+  modeAuto: 'Tự động tải',
+  upgradeBtn: 'Nâng cấp',
+  upgradeAutoHint: 'Nâng cấp gói để mở chế độ Tự động tải.',
+  openFolder: 'Mở thư mục kênh',
   used: (u: number, m: number) => `Đang theo dõi ${u}/${m} kênh`,
   every: (h: number) => `Máy chủ kiểm tra khoảng mỗi ${h} giờ`,
   emptyTitle: 'Chưa theo dõi kênh nào',
@@ -34,7 +43,6 @@ const T = {
   newItems: (n: number) => `${n} video mới (7 ngày)`,
   paused: 'Đang tạm dừng',
   baseline: 'Đang ghi nhận video hiện có của kênh…',
-  // wording: BA review — shown while the first read failed temporarily
   retrying: (t: string) => (t ? `Chưa đọc được kênh, máy chủ sẽ thử lại lúc ${t}.` : 'Chưa đọc được kênh, máy chủ sẽ thử lại sớm.'),
   degraded: 'Tạm thời không đọc được kênh, máy chủ sẽ thử lại.',
   pause: 'Tạm dừng',
@@ -42,22 +50,37 @@ const T = {
   remove: 'Bỏ theo dõi',
   confirmTitle: 'Bỏ theo dõi kênh này?',
   confirmText: 'Bạn có thể phải chờ một thời gian trước khi thêm kênh khác.',
-  inboxTitle: 'Hộp thư', // wording: BA review
-  unreadCount: (n: number) => `${n} chưa xem`, // wording: BA review
-  allChannels: 'Tất cả kênh', // wording: BA review
-  unreadOnly: 'Chỉ video chưa xem', // wording: BA review
-  markAll: 'Đánh dấu đã xem tất cả', // wording: BA review
-  unreadDot: 'Chưa xem', // wording: BA review
+  inboxTitle: 'Video mới',
+  newBadge: 'Mới',
+  publishedAt: (t: string) => `Đăng: ${t}`,
+  discoveredAt: (t: string) => `Phát hiện: ${t}`,
+  unreadCount: (n: number) => `${n} chưa xem`,
+  allChannels: 'Tất cả kênh',
+  unreadOnly: 'Chỉ video chưa xem',
+  markAll: 'Đánh dấu đã xem tất cả',
+  unreadDot: 'Chưa xem',
   downloadAll: (n: number) => `Tải tất cả (${n})`,
   download: 'Tải',
-  noRecent: 'Chưa có video mới.', // wording: BA review
+  noRecent: 'Chưa có video mới.',
   reload: 'Làm mới',
 };
 
-function SubCard({ s }: { s: WatchSubscription }) {
+const MODE_LABELS: Record<WatchMode, string> = {
+  notify_only: T.modeNotify,
+  one_tap: T.modeTap,
+  auto_download: T.modeAuto,
+};
+
+function openUpgrade() {
+  api.openUrl(`${WEBSITE_URL}/upgrade`).catch(() => toast('error', 'Không mở được trình duyệt.'));
+}
+
+function SubCard({ s, status }: { s: WatchSubscription; status: WatchStatus }) {
   const [busy, setBusy] = useState(false);
   const paused = s.status === 'paused';
   const name = s.source.display_name ? channelLabel(s.source.display_name) : (s.source.canonical_url ?? '');
+  const modes = allowedModes(status);
+  const currentMode: WatchMode = (s.mode === 'notify_only' || s.mode === 'auto_download') ? s.mode : 'one_tap';
 
   async function run(f: () => Promise<{ ok: boolean; message?: string }>) {
     setBusy(true);
@@ -70,6 +93,10 @@ function SubCard({ s }: { s: WatchSubscription }) {
     const ok = await confirmDialog({ title: T.confirmTitle, text: T.confirmText, okLabel: T.remove, danger: true });
     if (ok) await run(() => removeSource(s.id));
   }
+  async function openFolder() {
+    const dir = await channelFolderFor(s.source.display_name || s.source.canonical_url || 'Kenh');
+    if (dir) await openChannelFolder(dir);
+  }
 
   return (
     <article className="rounded-xl border border-line bg-surface p-3.5 shadow-card">
@@ -81,7 +108,13 @@ function SubCard({ s }: { s: WatchSubscription }) {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {s.source.platform && <PlatformBadge platform={s.source.platform} />}
-            {paused ? <Badge tone="warning">{T.paused}</Badge> : <Badge tone="neutral"><Bell size={11} aria-hidden /> {s.mode === 'notify_only' ? T.modeNotify : T.modeTap}</Badge>}
+            {paused ? (
+              <Badge tone="warning">{T.paused}</Badge>
+            ) : (
+              <Badge tone={currentMode === 'auto_download' ? 'accent' : 'neutral'}>
+                <Bell size={11} aria-hidden /> {MODE_LABELS[currentMode]}
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -98,7 +131,26 @@ function SubCard({ s }: { s: WatchSubscription }) {
           <AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{T.degraded}
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          aria-label={`Chế độ theo dõi cho ${name}`}
+          value={modes.includes(currentMode) ? currentMode : 'one_tap'}
+          disabled={busy}
+          onChange={(e) => void run(() => setMode(s.id, e.target.value as WatchMode))}
+          className="h-8 rounded-[10px] border border-line-strong bg-canvas px-2 text-xs text-fg"
+        >
+          {modes.map((m) => (
+            <option key={m} value={m}>{MODE_LABELS[m]}</option>
+          ))}
+        </select>
+        {!status.autoDownloadAllowed && (
+          <Button size="sm" variant="ghost" icon={<Crown size={13} />} onClick={openUpgrade} title={T.upgradeAutoHint}>
+            {T.upgradeBtn}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" disabled={busy} icon={<FolderOpen size={14} />} onClick={() => void openFolder()}>
+          {T.openFolder}
+        </Button>
         <Button size="sm" variant="ghost" disabled={busy} icon={paused ? <Play size={14} /> : <Pause size={14} />}
           onClick={() => void run(() => setPaused(s.id, !paused))}>{paused ? T.resume : T.pause}</Button>
         <span className="ml-auto flex items-center">
@@ -110,13 +162,22 @@ function SubCard({ s }: { s: WatchSubscription }) {
 }
 
 function ItemRow({ i }: { i: InboxItem }) {
+  const pubText = i.published_at ? formatDate(i.published_at) : '';
+  const discText = i.discovered_at ? formatDate(i.discovered_at) : '';
   return (
     <li className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
       <span role={i.read ? undefined : 'img'} aria-label={i.read ? undefined : T.unreadDot} title={i.read ? undefined : T.unreadDot}
         className={`h-2 w-2 shrink-0 rounded-full ${i.read ? 'bg-transparent' : 'bg-accent'}`} />
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-sm text-fg ${i.read ? '' : 'font-semibold'}`} title={i.title ?? i.url ?? ''}>{i.title || i.url}</p>
-        <p className="truncate text-xs text-fg-muted">{channelLabel(i.channel)}{i.discovered_at ? ` · ${formatDate(i.discovered_at)}` : ''}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {!i.read && <Badge tone="accent">{T.newBadge}</Badge>}
+          <p className={`truncate text-sm text-fg ${i.read ? '' : 'font-semibold'}`} title={i.title ?? i.url ?? ''}>{i.title || i.url}</p>
+        </div>
+        <p className="truncate text-xs text-fg-muted">
+          {channelLabel(i.channel)}
+          {pubText ? ` · ${T.publishedAt(pubText)}` : ''}
+          {discText ? ` · ${T.discoveredAt(discText)}` : ''}
+        </p>
       </div>
       <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => void downloadInboxItems([i])}>{T.download}</Button>
     </li>
@@ -130,7 +191,7 @@ export function WatchScreen() {
   const q = inboxQuery.use();
   const loading = watchLoading.use();
   const [url, setUrl] = useState('');
-  const [mode, setMode] = useState<'one_tap' | 'notify_only'>('one_tap');
+  const [mode, setModeState] = useState<WatchMode>('one_tap');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -139,7 +200,7 @@ export function WatchScreen() {
   const unreadOnly = q.unreadOnly === true;
   const first = useRef(true);
   useEffect(() => {
-    if (first.current) { first.current = false; return; } // refreshAll above already fetched
+    if (first.current) { first.current = false; return; }
     void fetchInbox({ subscriptionId: subId, unreadOnly });
   }, [subId, unreadOnly]);
 
@@ -168,6 +229,8 @@ export function WatchScreen() {
   }
 
   const s = st.status;
+  const modes = allowedModes(s);
+  const effectiveAddMode: WatchMode = modes.includes(mode) ? mode : 'one_tap';
   const pending = inbox.items.filter((i) => !i.read && !!i.url);
   const canAdd = s.enabled && s.used < s.limits.max_sources;
 
@@ -176,8 +239,8 @@ export function WatchScreen() {
     setBusy(true);
     setErr(null);
     try {
-      const r = await addSource(url.trim(), mode);
-      if (r.ok) { setUrl(''); if (r.message) toast('success', r.message); } else setErr(r.message); // server's text, verbatim
+      const r = await addSource(url.trim(), effectiveAddMode);
+      if (r.ok) { setUrl(''); if (r.message) toast('success', r.message); } else setErr(r.message);
     } finally { setBusy(false); }
   }
 
@@ -186,19 +249,40 @@ export function WatchScreen() {
       <ScreenHeader title={T.title} subtitle={T.subtitle}
         actions={<Button size="sm" icon={loading ? <Spinner /> : <RefreshCw size={14} />} disabled={loading} onClick={() => void refreshAll()}>{T.reload}</Button>} />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        {/* Explicit user notice required by spec */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-xs text-fg-2">
+          <div className="flex items-start gap-2 min-w-0">
+            <Info size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+            <div>
+              <p className="font-semibold text-fg">{T.openOnlyNote}</p>
+              <p className="mt-0.5 text-fg-muted">{T.openOnlyHint}</p>
+            </div>
+          </div>
+          <Button size="sm" variant="ghost" icon={<Settings size={13} />} onClick={() => go('settings')}>
+            {T.bgSettingsBtn}
+          </Button>
+        </div>
+
         <div className="rounded-xl border border-line bg-surface p-3 shadow-card">
           <label htmlFor="watch-url" className="text-[13px] font-semibold text-fg-2">{T.addLabel}</label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <input id="watch-url" value={url} disabled={busy || !s.enabled} spellCheck={false}
               onChange={(e) => { setUrl(e.target.value); setErr(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !busy) void add(); }}
               placeholder={T.placeholder}
-              className="h-9 min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 text-sm text-fg placeholder:text-fg-muted" />
-            <select aria-label="Chế độ nhận tin" value={mode} disabled={busy || !s.enabled} onChange={(e) => setMode(e.target.value as 'one_tap' | 'notify_only')}
+              className="h-9 min-w-[240px] flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 text-sm text-fg placeholder:text-fg-muted" />
+            <select aria-label="Chế độ nhận tin" value={effectiveAddMode} disabled={busy || !s.enabled}
+              onChange={(e) => setModeState(e.target.value as WatchMode)}
               className="h-9 rounded-[10px] border border-line-strong bg-canvas px-2 text-sm text-fg">
-              <option value="one_tap">{T.modeTap}</option>
-              <option value="notify_only">{T.modeNotify}</option>
+              {modes.map((m) => (
+                <option key={m} value={m}>{MODE_LABELS[m]}</option>
+              ))}
             </select>
+            {!s.autoDownloadAllowed && (
+              <Button size="sm" variant="ghost" icon={<Crown size={14} />} onClick={openUpgrade} title={T.upgradeAutoHint}>
+                {T.upgradeBtn}
+              </Button>
+            )}
             <Button variant="primary" icon={busy ? <Spinner /> : <Eye size={16} />} disabled={busy || !canAdd || !url.trim()} onClick={() => void add()}>{T.add}</Button>
           </div>
           <p className="mt-2 flex flex-wrap gap-x-3 text-xs text-fg-muted">
@@ -241,7 +325,7 @@ export function WatchScreen() {
           ? <EmptyState icon={<Eye size={24} />} title={T.emptyTitle} text={T.emptyText} />
           : (
             <section className="mt-4 flex flex-col gap-3" aria-label="Kênh đang theo dõi">
-              {subs.map((x) => <SubCard key={x.id} s={x} />)}
+              {subs.map((x) => <SubCard key={x.id} s={x} status={s} />)}
             </section>
           )}
       </div>
