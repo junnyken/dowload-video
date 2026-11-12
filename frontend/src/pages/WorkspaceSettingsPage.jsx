@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Building2, Users, Mail, Shield, Trash2, X, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../i18n';
 
@@ -139,9 +140,12 @@ export default function WorkspaceSettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 md:py-12">
-      <div className="flex items-center gap-3 mb-6">
-        <Building2 className="w-5 h-5 text-accent-text" />
-        <h1 className="text-xl font-bold text-fg">{t('title')}</h1>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <Building2 className="w-5 h-5 text-accent-text" />
+          <h1 className="text-xl font-bold text-fg">{t('title')}</h1>
+        </div>
+        <WorkspaceSwitcher forceShow align="right" />
       </div>
 
       {/* Tabs */}

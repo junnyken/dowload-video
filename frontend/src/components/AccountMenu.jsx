@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages, Key } from 'lucide-react';
+import { History, Settings2, BarChart2, LogOut, ChevronDown, Crown, ListVideo, Archive, Calendar, Building2, Shield, ClipboardCheck, Languages, Key, BellRing, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { API_BASE } from '../lib/apiBase';
 import { useTranslation } from 'react-i18next';
 
-export default function AccountMenu({ onNavigate }) {
+export default function AccountMenu({ onNavigate, watchEnabled = false, pwaInstallReady = false, onPwaInstall }) {
   const { user, session, signOut, isAuthenticated } = useAuth();
   const { can } = useWorkspace();
   const { t } = useTranslation('auth');
@@ -85,7 +85,7 @@ export default function AccountMenu({ onNavigate }) {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 bg-canvas border border-line rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-56 max-h-[calc(100vh-4.5rem)] overflow-y-auto bg-canvas border border-line rounded-xl shadow-2xl z-50">
           {/* User info */}
           <div className="px-4 py-3 border-b border-line">
             <div className="flex items-center gap-2">
@@ -136,6 +136,10 @@ export default function AccountMenu({ onNavigate }) {
               onClick={() => nav('archive', '/archive')} />
             <MenuItem icon={<Calendar className="w-4 h-4" />} label={t('menu.schedule')}
               onClick={() => nav('schedule', '/schedule')} />
+            {watchEnabled && (
+              <MenuItem icon={<BellRing className="w-4 h-4" />} label={t('menu.watch')}
+                onClick={() => nav('watch', '/watch')} />
+            )}
             <MenuItem icon={<ListVideo className="w-4 h-4" />} label={t('menu.playlists')}
               onClick={() => nav('playlists', '/playlists')} />
             <MenuItem icon={<BarChart2 className="w-4 h-4" />} label={t('menu.analytics')}
@@ -144,7 +148,11 @@ export default function AccountMenu({ onNavigate }) {
               onClick={() => nav('subtitle-hub', '/phu-de')} />
           </div>
           <div className="py-1 border-t border-line">
-            <MenuItem icon={<Key className="w-4 h-4 text-accent-text" />} label="Developer API Keys (PRO)"
+            {pwaInstallReady && onPwaInstall && (
+              <MenuItem icon={<Download className="w-4 h-4 text-accent-text" />} label={t('menu.installApp')}
+                onClick={() => { setOpen(false); onPwaInstall(); }} />
+            )}
+            <MenuItem icon={<Key className="w-4 h-4 text-accent-text" />} label={t('menu.apiKeys')}
               onClick={() => nav('api-keys', '/api-keys')} />
             <MenuItem icon={<Settings2 className="w-4 h-4" />} label={t('menu.preferences')}
               onClick={() => nav('preferences', '/preferences')} />

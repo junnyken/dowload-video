@@ -302,6 +302,8 @@ function AppInner() {
 
   const navItems = [
     // "Tìm kiếm" removed from the menu (owner 15/10: feature dropped).
+    // Keep only 4 core items on the top bar; Archive, Schedule, Channel Watch,
+    // and Install App live inside AccountMenu once signed in.
     { key: 'platforms', label: t('navPlatforms'), title: t('navPlatformsTitle'), active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
     {
       key: 'extension',
@@ -314,15 +316,9 @@ function AppInner() {
         window.open(CHROME_STORE_URL, '_blank', 'noopener,noreferrer');
       },
     },
-    ...(isAuthenticated ? [
-      { key: 'pricing', label: t('navPricing'), title: t('navPricingTitle'), icon: Crown, active: view === 'pricing', onClick: () => goTo('pricing', '/pricing') },
-      { key: 'archive', label: t('navArchive'), active: view === 'archive', onClick: () => goTo('archive', '/archive') },
-      { key: 'schedule', label: t('navSchedule'), active: view === 'schedule', onClick: () => goTo('schedule', '/schedule') },
-      // wording: BA review
-      ...(watchEnabled ? [{ key: 'watch', label: t('navWatch'), title: t('navWatchTitle'), active: view === 'watch', onClick: () => goTo('watch', '/watch') }] : []),
-      { key: 'subtitle-hub', label: t('navSubtitles'), title: t('navSubtitlesTitle'), icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
-    ] : []),
-    ...(pwaInstallReady ? [
+    { key: 'subtitle-hub', label: t('navSubtitles'), title: t('navSubtitlesTitle'), icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
+    { key: 'pricing', label: t('navPricing'), title: t('navPricingTitle'), icon: Crown, active: view === 'pricing', onClick: () => goTo('pricing', '/pricing') },
+    ...(!isAuthenticated && pwaInstallReady ? [
       { key: 'pwa', label: t('navInstall'), title: t('navInstallTitle'), active: false, onClick: () => { setMenuOpen(false); handlePwaInstall(); } },
     ] : []),
   ];
@@ -408,17 +404,15 @@ function AppInner() {
             <span className="text-lg font-semibold text-fg tracking-tight">VidGrab</span>
           </button>
 
-          {/* Inline links — desktop only (>= 1280px) */}
-          {/* xl, not lg: at 1024–1279 px seven items + workspace + account wrapped
-              their labels onto two lines (owner screenshot 15/10). */}
-          <div className="hidden xl:flex items-stretch h-full gap-0.5 flex-1 justify-center min-w-0">
+          {/* Inline links — desktop (>= 1024px) */}
+          <div className="hidden lg:flex items-stretch h-full gap-1 flex-1 justify-center min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 onClick={item.onClick}
                 title={item.title}
                 aria-current={item.active ? 'page' : undefined}
-                className={`relative inline-flex items-center gap-1.5 px-2.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`relative inline-flex items-center gap-1.5 px-3 text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors cursor-pointer ${
                   item.active
                     ? 'text-fg after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-accent'
                     : 'text-fg-2 hover:text-fg'
@@ -433,7 +427,7 @@ function AppInner() {
           {/* Right cluster */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {isAuthenticated && (
-              <div className="hidden lg:block">
+              <div className="hidden lg:block empty:hidden">
                 <WorkspaceSwitcher onNavigate={navigateTo} />
               </div>
             )}
@@ -444,7 +438,12 @@ function AppInner() {
             {isAuthenticated ? (
               <>
                 <NotificationCenter />
-                <AccountMenu onNavigate={navigateTo} />
+                <AccountMenu
+                  onNavigate={navigateTo}
+                  watchEnabled={watchEnabled}
+                  pwaInstallReady={pwaInstallReady}
+                  onPwaInstall={handlePwaInstall}
+                />
               </>
             ) : (
               <button
@@ -461,7 +460,7 @@ function AppInner() {
               aria-label={t('menu')}
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-sheet"
-              className="xl:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
+              className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line text-fg-2 hover:bg-surface-2 hover:text-fg transition-colors cursor-pointer"
             >
               {menuOpen ? <X className="w-4 h-4" aria-hidden="true" /> : <Menu className="w-4 h-4" aria-hidden="true" />}
             </button>
@@ -472,7 +471,7 @@ function AppInner() {
         {menuOpen && (
           <div
             id="mobile-nav-sheet"
-            className="xl:hidden absolute top-full inset-x-0 bg-surface border-b border-line shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+            className="lg:hidden absolute top-full inset-x-0 bg-surface border-b border-line shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
           >
             <div className="max-w-6xl mx-auto px-4 md:px-8 py-2 flex flex-col">
               {navItems.map((item) => (

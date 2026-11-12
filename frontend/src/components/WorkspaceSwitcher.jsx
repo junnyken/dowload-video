@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Building2, ChevronDown, Check, Plus, User, Users, Briefcase } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../lib/apiBase';
 import { useTranslation } from 'react-i18next';
 
 const TYPE_ICON = {
@@ -17,9 +18,9 @@ const ROLE_BADGE = {
   viewer: { label: 'Viewer', cls: 'text-fg-2 bg-surface-2 border-line-strong' },
 };
 
-export default function WorkspaceSwitcher({ onNavigate }) {
+export default function WorkspaceSwitcher({ onNavigate, forceShow = false, align = 'left' }) {
   const { t } = useTranslation('workspace');
-  const { workspaces, activeWorkspace, myRole, switchWorkspace, loading } = useWorkspace();
+  const { workspaces, activeWorkspace, myRole, switchWorkspace, refetchWorkspaces, loading } = useWorkspace();
   const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -34,7 +35,14 @@ export default function WorkspaceSwitcher({ onNavigate }) {
   }, []);
 
   if (!activeWorkspace || workspaces.length === 0) {
-    if (loading) return <div className="h-7 w-28 rounded-md bg-surface-2 animate-pulse" />;
+    if (loading && forceShow) return <div className="h-7 w-28 rounded-md bg-surface-2 animate-pulse" />;
+    return null;
+  }
+
+  // Hide the top-bar switcher when the account only uses its default personal
+  // workspace; show automatically once the user joins or creates 2+ workspaces.
+  const isSoloPersonal = workspaces.length <= 1 && activeWorkspace.type === 'personal';
+  if (!forceShow && isSoloPersonal) {
     return null;
   }
 
@@ -43,14 +51,14 @@ export default function WorkspaceSwitcher({ onNavigate }) {
     if (!name || !session?.access_token) return;
     setCreatingBusy(true);
     try {
-      const API = import.meta.env.VITE_API_URL || '';
-      const r = await fetch(`${API}/api/v1/workspaces`, {
+      const r = await fetch(`${API_BASE}/api/v1/workspaces`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, type: 'team' }),
       });
       if (r.ok) {
         const d = await r.json();
+        await refetchWorkspaces?.();
         switchWorkspace({ ...d.workspace, role: 'owner' });
         setCreating(false);
         setNewName('');
@@ -76,7 +84,7 @@ export default function WorkspaceSwitcher({ onNavigate }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-64 bg-canvas border border-line rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} top-full mt-2 w-64 bg-canvas border border-line rounded-xl shadow-2xl z-50 overflow-hidden`}>
           {/* Header */}
           <div className="px-3 py-2.5 border-b border-line">
             <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Workspace</p>
