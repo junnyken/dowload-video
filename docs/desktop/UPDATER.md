@@ -114,8 +114,8 @@ One-time Repository Secrets on `junnyken/dowload-video` (`Settings → Secrets a
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | Full content of `~/.config/vidgrab-updater.key` (key id `F84D51CB22023463`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Content of `~/.config/vidgrab-updater.key.password` (leave empty only if key has no password) |
-| `VIDGRAB_CLAIM_PUBKEYS` | `k1:<base64 public key>` matching `CLIENT_QUOTA_SIGNING_KEY` (`P3-KEY-ROTATION.md`) |
 | `VIDGRAB_RELEASES_PAT` | Fine-grained PAT scoped to `junnyken/vidgrab-releases` with `Contents: Read and write` |
+| `VIDGRAB_CLAIM_PUBKEYS` *(optional override)* | Defaults to active public key `k1:KBVXxhv2+H1IJmAtXW68LS96ayzVBJ5o06e2EeP89gc=`; set only when rotating claim keys (`P3-KEY-ROTATION.md`) |
 
 Trigger a release:
 * **GitHub UI:** `Actions → Release Desktop (Windows) → Run workflow` (uses `desktop/RELEASE_NOTES.md` when `release_notes` input is left empty), or

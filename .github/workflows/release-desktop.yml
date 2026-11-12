@@ -33,7 +33,7 @@ jobs:
       - name: Validate required GitHub Secrets
         env:
           SIGN_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS }}
+          CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS || 'k1:KBVXxhv2+H1IJmAtXW68LS96ayzVBJ5o06e2EeP89gc=' }}
           RELEASES_PAT: ${{ secrets.VIDGRAB_RELEASES_PAT }}
           PUBLISH_FLAG: ${{ github.event_name == 'push' || inputs.publish_to_releases }}
         run: |
@@ -110,7 +110,7 @@ jobs:
       - name: Build signed NSIS installer & updater .sig
         working-directory: desktop
         env:
-          VIDGRAB_CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS }}
+          VIDGRAB_CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS || 'k1:KBVXxhv2+H1IJmAtXW68LS96ayzVBJ5o06e2EeP89gc=' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
