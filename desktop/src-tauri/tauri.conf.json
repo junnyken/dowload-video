@@ -87,7 +87,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4NEQ1MUNCMjIwMjM0NjMKUldSak5BSWl5MUZOK0tlYVkvY1g3cThIU3MvQjEzVW83Y3VRTDJiKzVrOGtQbXhwZkNSWXc5LysK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0NTFCRUY4M0Y5N0EzRkMKUldUOG81Yy8rTDVSZE8zK09KeU0yK3ZiN0hES2E5aDJWMmNLdkhjS2svK1B3TithR0NORFNyWXQK",
       "endpoints": [
         "https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/update/{{target}}/{{arch}}/{{current_version}}"
       ],

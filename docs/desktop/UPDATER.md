@@ -14,7 +14,7 @@ phải tự tải bản mới bằng tay một lần** (không có cách nào kh
 |---|---|
 | Private key (minisign, password-protected) | `~/.config/vidgrab-updater.key` (chmod 600) on the build workspace — **secret** |
 | Its password | `~/.config/vidgrab-updater.key.password` (chmod 600) — **secret** |
-| Public key | `~/.config/vidgrab-updater.key.pub`, and committed in `desktop/src-tauri/tauri.conf.json` → `plugins.updater.pubkey` (key id `F84D51CB22023463`) |
+| Public key | `~/.config/vidgrab-updater.key.pub`, and committed in `desktop/src-tauri/tauri.conf.json` → `plugins.updater.pubkey` (key id `7451BEF83F97A3FC`, rotated at `v0.22.0`) |
 | Endpoint the app asks | `https://dvid-api.vibe1.tinhgon.xyz/api/v1/client/update/{{target}}/{{arch}}/{{current_version}}` (`plugins.updater.endpoints`, same host as `src/lib/config.ts` `API_BASE`) |
 | Server side | `backend/app/core/desktop_release.py` `update_offer()` + route in `backend/app/api/client_api.py` |
 | App side | `desktop/src-tauri/src/app_update.rs` (commands `update_check`, `update_install`), Settings screen |
@@ -112,7 +112,7 @@ One-time Repository Secrets on `junnyken/dowload-video` (`Settings → Secrets a
 
 | Secret | Value |
 |---|---|
-| `TAURI_SIGNING_PRIVATE_KEY` | Full content of `~/.config/vidgrab-updater.key` (key id `F84D51CB22023463`) |
+| `TAURI_SIGNING_PRIVATE_KEY` | Full content of `~/.config/vidgrab-updater.key` (key id `7451BEF83F97A3FC`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Content of `~/.config/vidgrab-updater.key.password` (leave empty only if key has no password) |
 | `VIDGRAB_RELEASES_PAT` | Fine-grained PAT scoped to `junnyken/vidgrab-releases` with `Contents: Read and write` |
 | `VIDGRAB_CLAIM_PUBKEYS` *(optional override)* | Defaults to active public key `k1:KBVXxhv2+H1IJmAtXW68LS96ayzVBJ5o06e2EeP89gc=`; set only when rotating claim keys (`P3-KEY-ROTATION.md`) |
