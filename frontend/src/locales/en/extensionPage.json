@@ -1,57 +1,29 @@
 {
   "_note": "wording: BA review — English drafted with AI",
-  "copy": "Copy",
-  "copied": "Copied",
-  "copyAria": "Copy {{text}}",
   "steps": {
-    "download": {
-      "title": "Download the ZIP file",
-      "body": "Click the button below to download the ZIP file (version <ver/>).",
-      "button": "Download extension (.ZIP)"
+    "store": {
+      "title": "Open the Chrome Web Store",
+      "body": "Click the button below to open the official <b>VidGrab</b> listing on the Chrome Web Store.",
+      "button": "Add to Chrome (Free)"
     },
-    "unzip": {
-      "title": "Unzip",
-      "body": "Unzip the ZIP file into a permanent folder. Don't delete this folder; the browser needs it to run the extension."
-    },
-    "open": {
-      "title": "Open the extensions page",
-      "body": "Paste this address into your browser's address bar and press Enter:"
-    },
-    "devMode": {
-      "title": "Turn on developer mode",
-      "body": "Turn on <b>Developer mode</b> in the top right corner."
-    },
-    "load": {
-      "title": "Load the unpacked extension",
-      "body": "Click <b>Load unpacked</b>, then select the folder you just unzipped."
+    "confirm": {
+      "title": "Add the extension",
+      "body": "Click <b>Add to Chrome</b> and confirm with <b>Add extension</b> — your browser will automatically keep VidGrab up to date."
     },
     "pin": {
-      "title": "Pin the extension",
-      "body": "Click the puzzle icon in the toolbar, then click the pin icon next to VidGrab."
-    },
-    "update": {
-      "title": "Update to a new version",
-      "body": "Download the new ZIP file and unzip it <b>over the old folder</b> (or delete the old folder and unzip into the same place), then click the reload button (circular arrow) on the VidGrab card on the <code>chrome://extensions</code> page."
+      "title": "Pin it to your toolbar",
+      "body": "Click the puzzle icon in your browser toolbar, then click the pin icon next to VidGrab for one-click downloads on any page."
     }
   },
   "heroTitle": "Install the <accent>VidGrab</accent> extension",
-  "heroSub": "Download videos in one click right on TikTok, YouTube, Facebook and more — no need to copy links.",
-  "download": "Download extension (.ZIP)",
-  "telegram": "Get it on Telegram",
+  "heroSub": "Download videos in one click right on TikTok, YouTube, Facebook and more — official Chrome Web Store listing with automatic updates.",
+  "download": "Add to Chrome — Chrome Web Store",
   "platformsAria": "Supported platforms",
   "supportedFrom": "Supports downloads from",
   "platformListAria": "Platform list",
-  "installHeading": "Installation guide",
-  "updateNoteAria": "About updates",
-  "updateNoteTitle": "Manually installed extensions don't update automatically",
-  "updateNoteBody1": "Because it is installed from a ZIP file (not through the Chrome Web Store), the browser won't upgrade VidGrab on its own.",
-  "updateNoteBody2": "When a new version is available, the extension popup shows a banner saying \"A new extension version is available\" with a Download button.",
-  "updateNoteBody3": "To update: download the new ZIP, unzip it over the old folder, then click the reload button on the VidGrab card in <mono>chrome://extensions</mono>.",
-  "otherBrowsersAria": "Other browsers",
-  "otherBrowsers": "Edge, Cốc Cốc and Brave install the same way. On Edge use <mono>edge://extensions</mono>, on Brave use <mono2>brave://extensions</mono2>.",
-  "tgHeading": "Get the file via the Telegram Bot",
-  "tgBody": "Send any message and the bot replies with the ZIP file and detailed install instructions.",
-  "tgOpen": "Open Telegram Bot",
+  "installHeading": "Install in 3 quick steps",
+  "otherBrowsersAria": "Compatible browsers",
+  "otherBrowsers": "Works seamlessly on Google Chrome, Microsoft Edge, Cốc Cốc and Brave — just open the Chrome Web Store link in your browser and click Add to Chrome.",
   "features": {
     "heading": "What the extension does",
     "sniff": {

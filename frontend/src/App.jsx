@@ -57,6 +57,8 @@ import MobileTabBar from './components/MobileTabBar';
 import ActiveJobsMobile from './components/ActiveJobsMobile';
 import MobileShareIntake from './components/MobileShareIntake';
 import MobileQuickTools from './components/MobileQuickTools';
+import { CHROME_STORE_URL } from './lib/chromeExtension';
+import { trackEvent, EVENT } from './utils/trackEvent';
 
 // ── Path → view mapping ──────────────────────────────────────────────
 const PATH_MAP = {
@@ -301,7 +303,17 @@ function AppInner() {
   const navItems = [
     // "Tìm kiếm" removed from the menu (owner 15/10: feature dropped).
     { key: 'platforms', label: t('navPlatforms'), title: t('navPlatformsTitle'), active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
-    { key: 'extension', label: t('navExtension'), title: t('navExtensionTitle'), active: view === 'extension', onClick: () => goTo('extension', '/extension') },
+    {
+      key: 'extension',
+      label: t('navExtension'),
+      title: t('navExtensionTitle'),
+      active: view === 'extension',
+      onClick: () => {
+        setMenuOpen(false);
+        trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'navbar' });
+        window.open(CHROME_STORE_URL, '_blank', 'noopener,noreferrer');
+      },
+    },
     ...(isAuthenticated ? [
       { key: 'pricing', label: t('navPricing'), title: t('navPricingTitle'), icon: Crown, active: view === 'pricing', onClick: () => goTo('pricing', '/pricing') },
       { key: 'archive', label: t('navArchive'), active: view === 'archive', onClick: () => goTo('archive', '/archive') },

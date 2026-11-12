@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, LogIn, Puzzle, RefreshCw, Server, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useLocalePath } from '../i18n';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
@@ -282,12 +282,6 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
     }
   };
 
-  const openExtensionPage = (e) => {
-    e.preventDefault();
-    window.history.pushState({}, '', '/extension');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  };
-
   return (
     <div className="mb-4 p-4 rounded-xl border border-line bg-surface space-y-3" aria-label={t('listLabel')}>
       <div className="flex items-start gap-2">
@@ -315,7 +309,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
           <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
           <span className="flex-1 min-w-0">{t('relayNoExt', { ver: isFacebookChannel(url) ? '5.16.1' : '5.11.1' })}</span>
           {/* new tab: leaving this page would stop the wait */}
-          <a href={lp('/extension')} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
+          <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
             <Puzzle className="w-3.5 h-3.5" /> {t('installExt')}
           </a>
         </div>
@@ -347,7 +341,7 @@ export default function ChannelPreview({ url, withAuth, signedIn, onDownload, on
                     <Puzzle className="w-3.5 h-3.5" /> {t('fetchWholeExt')}
                   </button>
                 )}
-                <a href={lp('/extension')} onClick={openExtensionPage} className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
+                <a href={CHROME_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-lg">
                   <Puzzle className="w-3.5 h-3.5" /> {t('installExt')}
                 </a>
                 {signedIn && (

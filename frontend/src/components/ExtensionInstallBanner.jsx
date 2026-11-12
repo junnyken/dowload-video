@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
+import { trackEvent, EVENT } from '../utils/trackEvent';
 
 const DISMISS_KEY = 'ext-banner-dismissed-at';
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -58,16 +60,18 @@ export default function ExtensionInstallBanner() {
           </div>
         </div>
         <div className="flex gap-2 mt-3">
-          <button
+          <a
+            href={CHROME_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={() => {
-              window.history.pushState({}, '', '/install');
-              window.dispatchEvent(new PopStateEvent('popstate'));
+              trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'install_banner' });
               dismiss();
             }}
             className="flex-1 text-center text-xs font-semibold bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded-lg transition-colors"
           >
             {t('banner.guide')}
-          </button>
+          </a>
           <button
             onClick={dismiss}
             className="text-xs text-fg-muted hover:text-fg-muted px-2 transition-colors"

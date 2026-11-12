@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocalePath } from '../i18n';
 import { X, Zap, AppWindow as Chrome, Send, Key, ArrowUpCircle } from 'lucide-react';
 import { trackEvent, EVENT } from '../utils/trackEvent';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
 import { useEffect } from 'react';
 
 const BANNER_CONFIG = {
@@ -61,7 +62,7 @@ const BANNER_CONFIG = {
 
 const ACTIONS = {
   upgrade:   () => { document.querySelector('[data-upgrade-trigger]')?.click(); },
-  extension: (lp) => { window.open(lp('/install'), '_blank'); },
+  extension: () => { window.open(CHROME_STORE_URL, '_blank', 'noopener,noreferrer'); },
   telegram:  () => { window.open('https://t.me/vidgrab_bot', '_blank'); },
   api_key:   () => { window.location.hash = '#/api-keys'; },
 };

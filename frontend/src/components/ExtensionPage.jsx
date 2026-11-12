@@ -1,11 +1,6 @@
-import { useEffect, useState } from 'react';
 import {
   Puzzle,
-  Download,
-  Copy,
-  Check,
-  Send,
-  ArrowRight,
+  ExternalLink,
   Info,
   Radar,
   ListVideo,
@@ -16,10 +11,7 @@ import {
 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { trackEvent, EVENT } from '../utils/trackEvent';
-
-// ── Constants ────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const TELEGRAM_BOT_URL = 'https://t.me/dowloadextension_bot';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
 
 // ── Platform SVG Icons (inline — no extra deps) ──────────────
 const TikTokIcon = () => (
@@ -53,7 +45,6 @@ const SpotifyIcon = () => (
   </svg>
 );
 
-// ── Feature chip data ────────────────────────────────────────
 const platforms = [
   { icon: TikTokIcon, label: 'TikTok',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#69C9D0]' },
   { icon: YouTubeIcon, label: 'YouTube',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#FF0000]' },
@@ -63,8 +54,6 @@ const platforms = [
   { icon: SpotifyIcon, label: 'Spotify',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
 ];
 
-// ── What the extension does (5.12–5.16) ──────────────────────
-// wording: BA review — text in locales/<lang>/extensionPage.json "features"
 const FEATURES = [
   { id: 'sniff',   icon: Radar },
   { id: 'channel', icon: CircleStop },
@@ -74,109 +63,31 @@ const FEATURES = [
   { id: 'drm',     icon: ShieldCheck },
 ];
 
-// ── Install guide ────────────────────────────────────────────
-// Fallback only: the page shows the version of the zip the server actually
-// serves (GET /api/v1/extension/version) — a hardcoded number said 5.2.5 while
-// the file was already 5.3.0 (08/10).
-const EXT_VERSION = '5.6.0';
-
-let _extVersion = null;
-function ExtVersion() {
-  const [v, setV] = useState(_extVersion || EXT_VERSION);
-  useEffect(() => {
-    if (_extVersion) return;
-    let alive = true;
-    fetch(`${API_BASE}/api/v1/extension/version`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d && d.version) { _extVersion = d.version; setV(d.version); } })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-  return v;
-}
-
-// Copyable mono chip — chrome:// links can't be opened from a web page.
-function CopyChip({ text }) {
-  const { t } = useTranslation('extensionPage');
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); } catch { /* ignore */ }
-      document.body.removeChild(ta);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <span className="inline-flex items-center gap-1 bg-surface border border-line rounded-lg pl-3 pr-1 py-1">
-      <code className="font-mono text-sm text-fg">{text}</code>
-      <button
-        type="button"
-        onClick={copy}
-        aria-label={t('copyAria', { text })}
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-accent-text hover:bg-accent-soft transition-colors"
-      >
-        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-        {copied ? t('copied') : t('copy')}
-      </button>
-    </span>
-  );
-}
-
-const Code = ({ children }) => (
-  <code className="font-mono text-[0.85em] bg-surface border border-line rounded px-1.5 py-0.5 text-fg">{children}</code>
-);
-
-// Step copy lives in locales/*/extensionPage.json (steps.<id>.title / body).
 const bold = <strong className="text-fg" />;
 
 function InstallSteps() {
   const { t } = useTranslation('extensionPage');
   const steps = [
     {
-      id: 'download',
+      id: 'store',
       body: (
         <>
-          <p><Trans t={t} i18nKey="steps.download.body" components={{ ver: <ExtVersion /> }} /></p>
+          <p><Trans t={t} i18nKey="steps.store.body" components={{ b: bold }} /></p>
           <a
-            href={`${API_BASE}/api/v1/extension/download`}
+            href={CHROME_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_guide' })}
-            download
             className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent text-accent-fg font-bold text-sm hover:bg-accent-hover transition-colors"
           >
-            <Download className="w-4 h-4" />
-            {t('steps.download.button')}
+            <ExternalLink className="w-4 h-4" />
+            {t('steps.store.button')}
           </a>
         </>
       ),
     },
-    { id: 'unzip', body: <p>{t('steps.unzip.body')}</p> },
-    {
-      id: 'open',
-      body: (
-        <>
-          <p className="mb-2">{t('steps.open.body')}</p>
-          <CopyChip text="chrome://extensions" />
-        </>
-      ),
-    },
-    { id: 'devMode', body: <p><Trans t={t} i18nKey="steps.devMode.body" components={{ b: bold }} /></p> },
-    { id: 'load', body: <p><Trans t={t} i18nKey="steps.load.body" components={{ b: bold }} /></p> },
+    { id: 'confirm', body: <p><Trans t={t} i18nKey="steps.confirm.body" components={{ b: bold }} /></p> },
     { id: 'pin', body: <p>{t('steps.pin.body')}</p> },
-    {
-      id: 'update',
-      body: (
-        <>
-          <p><Trans t={t} i18nKey="steps.update.body" components={{ b: bold, code: <Code>{null}</Code> }} /></p>
-        </>
-      ),
-    },
   ];
   return (
     <ol className="flex flex-col gap-3">
@@ -198,7 +109,6 @@ function InstallSteps() {
   );
 }
 
-// ── Component ────────────────────────────────────────────────
 export default function ExtensionPage() {
   const { t } = useTranslation('extensionPage');
   return (
@@ -207,12 +117,10 @@ export default function ExtensionPage() {
 
         {/* ── Hero ─────────────────────────────────────────── */}
         <section className="w-full flex flex-col items-center text-center gap-6">
-          {/* Icon badge */}
           <div className="w-20 h-20 md:w-24 md:h-24 rounded-3xl bg-accent flex items-center justify-center shadow-2xl">
             <Puzzle className="w-10 h-10 md:w-12 md:h-12 text-accent-fg" strokeWidth={2.5} />
           </div>
 
-          {/* Heading */}
           <div className="flex flex-col items-center gap-3">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-fg leading-tight">
               <Trans t={t} i18nKey="heroTitle" components={{ accent: <span className=" text-accent-text" /> }} />
@@ -222,25 +130,16 @@ export default function ExtensionPage() {
             </p>
           </div>
 
-          {/* CTA buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm sm:max-w-lg">
+          <div className="flex justify-center w-full max-w-sm">
             <a
-              href={`${API_BASE}/api/v1/extension/download`}
-              onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page' })}
-              download
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
-            >
-              <Download className="w-4 h-4 flex-shrink-0" />
-              {t('download')}
-            </a>
-            <a
-              href={TELEGRAM_BOT_URL}
+              href={CHROME_STORE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-surface/60 border border-line-strong text-fg font-bold text-sm hover:border-accent/50 hover:bg-surface/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer backdrop-blur-sm"
+              onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page' })}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
-              <Send className="w-4 h-4 flex-shrink-0" />
-              {t('telegram')}
+              <ExternalLink className="w-4 h-4 flex-shrink-0" />
+              {t('download')}
             </a>
           </div>
         </section>
@@ -250,8 +149,6 @@ export default function ExtensionPage() {
           <p className="text-center text-xs font-semibold text-fg-muted uppercase tracking-widest mb-4">
             {t('supportedFrom')}
           </p>
-          {/* Wraps at every width: the old hidden-scrollbar row showed 2.5 of 6
-              chips on a 390 px phone with no hint that it scrolled (13/10). */}
           <div className="relative">
             <div
               className="flex flex-wrap justify-center gap-2.5 pb-2"
@@ -267,7 +164,6 @@ export default function ExtensionPage() {
                 </span>
               ))}
             </div>
-            {/* Fade hint on right edge — mobile only */}
             <div className="sm:hidden absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-canvas to-transparent pointer-events-none" />
           </div>
         </section>
@@ -304,23 +200,6 @@ export default function ExtensionPage() {
           <InstallSteps />
         </section>
 
-        {/* ── Manual-install update note (Phase 34D-5) ── wording: BA review */}
-        <div
-          className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
-          role="note"
-          aria-label={t('updateNoteAria')}
-        >
-          <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-accent-text leading-relaxed">
-            <p className="font-bold mb-1">{t('updateNoteTitle')}</p>
-            <p>
-              {t('updateNoteBody1')}
-              {' '}{t('updateNoteBody2')}
-              {' '}<Trans t={t} i18nKey="updateNoteBody3" components={{ mono: <span className="font-mono font-semibold" /> }} />
-            </p>
-          </div>
-        </div>
-
         {/* ── Other browsers ────────────────────────────────── */}
         <div
           className="w-full flex items-start gap-3 p-4 rounded-2xl bg-accent-soft border border-accent/25"
@@ -329,44 +208,9 @@ export default function ExtensionPage() {
         >
           <Info className="w-5 h-5 text-accent-text flex-shrink-0 mt-0.5" />
           <p className="text-sm text-accent-text leading-relaxed">
-            <Trans t={t} i18nKey="otherBrowsers" components={{ mono: <span className="font-mono font-semibold" />, mono2: <span className="font-mono font-semibold" /> }} />
+            {t('otherBrowsers')}
           </p>
         </div>
-
-        {/* ── Telegram CTA ──────────────────────────────────── */}
-        <section
-          className="w-full"
-          aria-labelledby="telegram-heading"
-        >
-          <div className="flex flex-col items-center gap-5 p-8 md:p-10 rounded-3xl bg-surface-2 border border-line text-center backdrop-blur-sm">
-            {/* Bot icon */}
-            <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-line flex items-center justify-center">
-              <Send className="w-7 h-7 text-[#229ED9]" />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h2
-                id="telegram-heading"
-                className="text-xl sm:text-2xl font-black text-fg"
-              >
-                {t('tgHeading')}
-              </h2>
-              <p className="text-sm sm:text-base text-fg-muted max-w-sm mx-auto leading-relaxed">
-                {t('tgBody')}
-              </p>
-            </div>
-
-            <a
-              href={TELEGRAM_BOT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm hover:bg-accent-hover hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-lg cursor-pointer"
-            >
-              {t('tgOpen')}
-              <ArrowRight className="w-4 h-4" />
-            </a>
-          </div>
-        </section>
 
       </div>
     </div>

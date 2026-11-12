@@ -16,6 +16,7 @@ import BulkContent from './BulkContent';
 import HistoryContent from './HistoryContent';
 import FlowVeoCleanup from './FlowVeoCleanup';
 import { usePlatformHealth } from '../lib/usePlatformHealth';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
 
 // ── Platform Icons ──────────────────────────────────────────
 const TikTokIcon = () => <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 0010.86 4.46V13.2a8.16 8.16 0 005.58 2.2v-3.45a4.85 4.85 0 01-3.77-1.49V6.69h3.77z"/></svg>;
@@ -356,12 +357,10 @@ export default function LandingPage() {
               the loudest button on the page; it must stay a quiet link). The
               Puzzle glyph comes from lucide; no hotlinked Chrome mark. */}
           <a
-            href={lp('/extension')}
-            onClick={(e) => {
-              e.preventDefault();
-              window.history.pushState({}, '', '/extension');
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
+            href={CHROME_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'landing' })}
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-fg-2 border border-line hover:border-line-strong hover:text-fg rounded-control transition-colors"
           >
             <Puzzle className="w-4 h-4 text-accent-text" />

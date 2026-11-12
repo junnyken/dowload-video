@@ -4,6 +4,7 @@ import i18n, { useLocalePath } from '../i18n';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import { useAuth } from '../context/AuthContext';
 import { localAnyId, localMp3Id, toFileId } from '../lib/localFile';
+import { CHROME_STORE_URL } from '../lib/chromeExtension';
 import {
   Layers,
   Play,
@@ -67,12 +68,6 @@ export function bulkRefusalText(status, data) {
 // wording: BA review
 function DouyinExtensionHint() {
   const { t } = useTranslation('bulk');
-  const lp = useLocalePath();
-  const openExtensionPage = (e) => {
-    e.preventDefault();
-    window.history.pushState({}, '', '/extension');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  };
   return (
     <div className="mt-2 p-2.5 rounded-control border border-line bg-surface text-[11px] text-fg-2 whitespace-normal">
       <p className="font-semibold text-fg mb-1">{t('douyinHint.title')}</p>
@@ -80,8 +75,10 @@ function DouyinExtensionHint() {
         {t('douyinHint.body')}
       </p>
       <a
-        href={lp('/extension')}
-        onClick={openExtensionPage}
+        href={CHROME_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'douyin_hint' })}
         className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-accent-text border border-line hover:border-line-strong rounded-control transition-colors"
       >
         <Puzzle className="w-3.5 h-3.5" />
