@@ -13,6 +13,7 @@ User API Router
 /api/v1/user/api-key/status      GET    — Pro: check if key exists
 """
 
+import asyncio
 import csv
 import io
 import secrets
@@ -684,8 +685,13 @@ class PrecheckSignupPayload(BaseModel):
     email: str
 
 
+from app.core.client_ip import get_client_ip  # noqa: E402
+from app.main import limiter  # noqa: E402
+
+
 @router.post("/precheck-signup")
-async def precheck_signup(payload: PrecheckSignupPayload):
+@limiter.limit("10/minute", key_func=get_client_ip)
+async def precheck_signup(request: Request, payload: PrecheckSignupPayload):
     """
     Validate and normalize an email before sign-up:
       1. Rejects '+' sub-addresses (ten+1@gmail.com)
@@ -693,6 +699,7 @@ async def precheck_signup(payload: PrecheckSignupPayload):
       3. Normalizes Gmail dots (a.b.c@gmail.com -> abc@gmail.com)
       4. Checks if another account already exists with the same canonical email
     """
+    _ = request  # consumed by @limiter.limit decorator
     from app.core.email_guard import (
         validate_and_normalize_email,
         check_duplicate_canonical_email,
@@ -706,7 +713,7 @@ async def precheck_signup(payload: PrecheckSignupPayload):
             "normalized_email": "",
         }
 
-    if check_duplicate_canonical_email(normalized):
+    if await asyncio.to_thread(check_duplicate_canonical_email, normalized):
         return {
             "ok": False,
             "reason": "duplicate_gmail",
