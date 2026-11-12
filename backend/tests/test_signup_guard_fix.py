@@ -34,6 +34,7 @@ class _FakeCursor:
     def __init__(self, conn: "_FakeConn"):
         self.conn = conn
         self._next_row: Any = (True,)
+        self._next_rows: List[Any] = []
 
     def __enter__(self):
         return self
@@ -45,11 +46,18 @@ class _FakeCursor:
         self.conn.executed.append((sql, params))
         if "to_regclass('auth.users')" in sql:
             self._next_row = (self.conn.has_auth_users,)
+        elif "FROM pg_trigger" in sql:
+            self._next_rows = []
+        elif "FROM public.profiles" in sql:
+            self._next_row = (2,)
         elif "SELECT 1" in sql and "FROM auth.users" in sql:
             self._next_row = (1,) if self.conn.duplicate_match else None
 
     def fetchone(self):
         return self._next_row
+
+    def fetchall(self):
+        return self._next_rows
 
 
 class _FakeConn:
@@ -92,6 +100,8 @@ def test_ensure_db_email_guard_drops_target_and_installs_source(monkeypatch):
 
     res = email_guard.ensure_db_email_guard(rc=rc)
     assert res["target_postgres"] == "dropped"
+    assert res["target_auth_triggers"] == []
+    assert res["target_custom_domain_profiles"] == 2
     assert res["supabase_postgres"] == "installed"
 
     # Target DB only drops the trigger — never creates it, never drops function/table
@@ -184,6 +194,8 @@ def test_ensure_db_email_guard_runs_safely_when_redis_errors(monkeypatch):
 
     res = email_guard.ensure_db_email_guard()
     assert res["target_postgres"] == "dropped"
+    assert res["target_auth_triggers"] == []
+    assert res["target_custom_domain_profiles"] == 2
     assert res["supabase_postgres"] == "installed"
 
 
@@ -463,3 +475,24 @@ def test_precheck_signup_offloads_duplicate_check_to_worker_thread(monkeypatch):
     assert len(seen_threads) == 1
     assert seen_threads[0][0] == "abc@gmail.com"
     assert seen_threads[0][1] != loop_threads[0]
+
+
+def test_startup_lock_key_distinguishes_blue_green_containers(tmp_path, monkeypatch):
+    import socket
+    from app.core import email_guard
+
+    stat_cand = tmp_path / "stat_cand"
+    stat_live = tmp_path / "stat_live"
+    # Field 22 (index 19 after ') ') is PID 1 starttime in Linux /proc/1/stat
+    fields_cand = ["S"] + ["0"] * 18 + ["98765432"] + ["0"] * 10
+    fields_live = ["S"] + ["0"] * 18 + ["98769999"] + ["0"] * 10
+    stat_cand.write_text("1 (uvicorn) " + " ".join(fields_cand) + "\n", encoding="utf-8")
+    stat_live.write_text("1 (uvicorn) " + " ".join(fields_live) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(socket, "gethostname", lambda: "same-host")
+    k_cand = email_guard._startup_lock_key(str(stat_cand))
+    k_live_w1 = email_guard._startup_lock_key(str(stat_live))
+    k_live_w2 = email_guard._startup_lock_key(str(stat_live))
+
+    assert k_cand != k_live_w1
+    assert k_live_w1 == k_live_w2 == "startup:email_guard:same-host:98769999"

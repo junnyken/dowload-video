@@ -17,12 +17,31 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger("app.email_guard")
 
 STARTUP_EMAIL_GUARD_LOCK_KEY = "startup:email_guard"
 STARTUP_EMAIL_GUARD_LOCK_TTL_SEC = 120
+
+
+def _startup_lock_key(proc1_stat_path: str = "/proc/1/stat") -> str:
+    """
+    Build a per-container Redis lock key on Linux so a blue/green candidate container
+    does not mask the promoted live container's startup log, while all uvicorn workers
+    inside the same container share the exact same key.
+    Falls back to `STARTUP_EMAIL_GUARD_LOCK_KEY` when `/proc/1/stat` is absent.
+    """
+    try:
+        with open(proc1_stat_path, "r", encoding="utf-8") as fh:
+            raw = fh.read().strip()
+        after_comm = raw.rsplit(")", 1)[1].split()
+        pid1_start = after_comm[19]
+        host = socket.gethostname() or "container"
+        return f"{STARTUP_EMAIL_GUARD_LOCK_KEY}:{host}:{pid1_start}"
+    except Exception:  # noqa: BLE001
+        return STARTUP_EMAIL_GUARD_LOCK_KEY
 
 # Optional pre-existing pool for SUPABASE_DB_URL if configured by host runtime.
 _SOURCE_POOL: Any = None
@@ -254,12 +273,13 @@ def ensure_db_email_guard(rc: Any = None) -> Dict[str, Any]:
         Logs a clear warning when `SUPABASE_DB_URL` is missing.
     """
     redis_client = rc
+    lock_key = _startup_lock_key()
     try:
         if redis_client is None:
             from app.core.redis_client import get_redis  # noqa: PLC0415
             redis_client = get_redis()
         got = redis_client.set(
-            STARTUP_EMAIL_GUARD_LOCK_KEY,
+            lock_key,
             str(os.getpid()),
             nx=True,
             ex=STARTUP_EMAIL_GUARD_LOCK_TTL_SEC,
@@ -292,6 +312,22 @@ def ensure_db_email_guard(rc: Any = None) -> Dict[str, Any]:
                     if has_auth:
                         cur.execute(_DROP_TRIGGER_SQL)
                         results["target_postgres"] = "dropped"
+                        try:
+                            cur.execute(
+                                "SELECT tgname FROM pg_trigger "
+                                "WHERE tgrelid='auth.users'::regclass AND NOT tgisinternal "
+                                "ORDER BY tgname"
+                            )
+                            results["target_auth_triggers"] = [r[0] for r in (cur.fetchall() or [])]
+                            cur.execute(
+                                "SELECT count(*) FROM public.profiles p "
+                                "JOIN auth.users u ON u.id=p.id "
+                                "WHERE split_part(u.email,'@',2) IN ('matbao.com','eml.agency')"
+                            )
+                            cnt_row = cur.fetchone()
+                            results["target_custom_domain_profiles"] = int(cnt_row[0]) if cnt_row else 0
+                        except Exception as verify_exc:  # noqa: BLE001
+                            results["target_verify_error"] = type(verify_exc).__name__
                     else:
                         results["target_postgres"] = "no_auth_users_table"
             finally:
