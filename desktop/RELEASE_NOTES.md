@@ -1,3 +1,3 @@
-- Theo dõi kênh: thêm chế độ Tự động tải về thư mục riêng của từng kênh khi ứng dụng đang mở.
-- Tự động tải bù video mới khi mở lại ứng dụng và bấm thông báo để mở thẳng thư mục kênh.
+- Nâng cấp lõi tải yt-dlp lên bản 2026.10.26 giúp tải ổn định YouTube, TikTok, Facebook Reels và Instagram.
+- Theo dõi kênh: hỗ trợ chế độ Tự động tải về thư mục riêng từng kênh, tải bù khi mở lại ứng dụng và quét nhanh kênh YouTube qua RSS.
 - Hiển thị nhãn Mới kèm giờ đăng và giờ phát hiện cho từng video mới.
