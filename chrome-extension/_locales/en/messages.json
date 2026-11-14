@@ -2011,5 +2011,41 @@
   },
   "backend_down": {
     "message": "Not responding"
+  },
+  "sniff_auto_ep": {
+    "message": "⚡ Auto-download next episode on this tab"
+  },
+  "sniff_auto_ep_on": {
+    "message": "Auto-download for new episodes is enabled on this tab."
+  },
+  "sniff_sep_audio": {
+    "message": "Multi-Audio"
+  },
+  "sniff_sub_badge": {
+    "message": "CC ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_jobResume": {
+    "message": "▶ Resume ($p1$%)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_jobCheckpoint": {
+    "message": "Saved $p1$% · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
   }
 }

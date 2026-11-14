@@ -1,7 +1,7 @@
 // Download queue: persisted in localStorage, scheduled by the concurrency
 // setting, driven by Rust events (download://progress|done).
 import { createStore } from './store';
-import { api, onDone, onProgress } from './tauri';
+import { api, onDone, onProgress, type ExtSubtitle } from './tauri';
 import { samePath, settings } from './settings';
 import { errorMessage, rememberServerMessage, toAppError } from './errors';
 import { toast } from './ui';
@@ -119,15 +119,27 @@ export type NewJob = Pick<QueueItem, 'url' | 'title' | 'thumbnail' | 'platform' 
   fileTitle?: string | null;
   fileId?: string | null;
   localOnly?: boolean;
+  /** Ephemeral browser-session cookie jar & companion subtitles (in-memory only, NEVER persisted to localStorage). */
+  extCookieJar?: string;
+  extSubtitles?: ExtSubtitle[];
 };
 
+// Ephemeral extension handoff secrets & companion subtitles: kept strictly in RAM (never in `vg.queue` / localStorage).
+const extEphemeral = new Map<string, { cookieJar?: string; subtitles?: ExtSubtitle[] }>();
+
 export function enqueue(job: NewJob): string {
-  const { startAt, claimId, claimToken, ...rest } = job;
+  const { startAt, claimId, claimToken, extCookieJar, extSubtitles, ...rest } = job;
   const item: QueueItem = {
     ...rest, id: newId(), state: 'queued', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
     speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: null, addedAt: new Date().toISOString(),
     claimId: claimId || null, claimToken: claimToken || null, tried: startAt === 'S0' ? ['L0', 'L1'] : [],
   };
+  if (extCookieJar || (extSubtitles && extSubtitles.length > 0)) {
+    extEphemeral.set(item.id, {
+      ...(extCookieJar ? { cookieJar: extCookieJar } : {}),
+      ...(extSubtitles && extSubtitles.length > 0 ? { subtitles: extSubtitles } : {}),
+    });
+  }
   queue.set((l) => [...l, item]);
   pump();
   return item.id;
@@ -135,7 +147,7 @@ export function enqueue(job: NewJob): string {
 
 /** A channel video the daily allowance refused (claim-batch): shown as failed with the server's reason, never started. */
 export function enqueueRefused(job: NewJob, detail: string | null): string {
-  const { startAt: _s, claimId: _c, claimToken: _t, ...rest } = job;
+  const { startAt: _s, claimId: _c, claimToken: _t, extCookieJar: _ck, extSubtitles: _sb, ...rest } = job;
   const item: QueueItem = {
     ...rest, id: newId(), state: 'failed', stage: null, percent: null, downloadedBytes: null, totalBytes: null,
     speedBps: null, etaSec: null, filePath: null, fileSize: null, errorCode: 'api:quota_exceeded_daily', errorText: detail,
@@ -278,11 +290,14 @@ async function start(item: QueueItem) {
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
       const tok = queue.get().find((i) => i.id === item.id)?.claimToken;
+      const eph = extEphemeral.get(item.id);
       extra = {
         ...(tok ? { claimToken: tok } : {}),
         ...(step === 'L1' ? { useCookies: true } : {}),
         ...(item.extHeaders?.length ? { headers: item.extHeaders } : {}),
         ...(item.fileTitle && item.fileId ? { fileTitle: item.fileTitle, fileId: item.fileId } : {}),
+        ...(eph?.cookieJar ? { extCookieJar: eph.cookieJar } : {}),
+        ...(eph?.subtitles?.length ? { extSubtitles: eph.subtitles } : {}),
       };
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
@@ -383,6 +398,7 @@ export async function initQueue() {
     switch (e.state) {
       case 'completed':
         forget(e.jobId);
+        extEphemeral.delete(e.jobId);
         void settle(it.claimId, 'completed');
         // 0.21.0 (quality #3): the measured file replaces the label of what was asked for, in history too
         const formatLabel = mediaLabel(e.media) ?? it.formatLabel;
@@ -422,6 +438,7 @@ export async function initQueue() {
         break;
       case 'cancelled':
         forget(e.jobId);
+        extEphemeral.delete(e.jobId);
         void settle(it.claimId, 'cancelled');
         queue.set((l) => l.filter((i) => i.id !== e.jobId));
         pump();
@@ -459,6 +476,7 @@ export async function cancel(id: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
   forget(id);
+  extEphemeral.delete(id);
   void settle(it.claimId, 'cancelled');
   queue.set((l) => l.filter((i) => i.id !== id));
   if (it.state === 'running' || it.state === 'paused') {
@@ -468,10 +486,14 @@ export async function cancel(id: string) {
 }
 
 export function removeItem(id: string) {
+  extEphemeral.delete(id);
   queue.set((l) => l.filter((i) => i.id !== id));
 }
 
 export function clearFinished() {
+  for (const i of queue.get()) {
+    if (i.state === 'completed' || i.state === 'failed') extEphemeral.delete(i.id);
+  }
   queue.set((l) => l.filter((i) => i.state !== 'completed' && i.state !== 'failed'));
 }
 

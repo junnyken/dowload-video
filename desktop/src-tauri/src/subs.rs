@@ -83,6 +83,140 @@ pub fn write(media: &Path, lang: &str, content: &str) -> Result<PathBuf, String>
     Ok(p)
 }
 
+fn format_srt_ts(raw: &str) -> Option<String> {
+    let parts: Vec<&str> = raw.trim().split(':').collect();
+    let (h, m, rest) = match parts.as_slice() {
+        [m, s] => (0u32, m.parse::<u32>().ok()?, *s),
+        [h, m, s] => (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?, *s),
+        _ => return None,
+    };
+    let (sec_str, ms_str) = rest.split_once('.').or_else(|| rest.split_once(','))?;
+    let s = sec_str.parse::<u32>().ok()?;
+    if m >= 60 || s >= 60 {
+        return None;
+    }
+    let mut ms = ms_str.chars().take(3).collect::<String>();
+    if !ms.chars().all(|c| c.is_ascii_digit()) || ms.is_empty() {
+        return None;
+    }
+    while ms.len() < 3 {
+        ms.push('0');
+    }
+    Some(format!("{h:02}:{m:02}:{s:02},{ms}"))
+}
+
+fn parse_cue_timing(line: &str) -> Option<String> {
+    let (lhs, rhs_full) = line.split_once("-->")?;
+    let rhs = rhs_full.trim_start().split_whitespace().next()?;
+    Some(format!("{} --> {}", format_srt_ts(lhs)?, format_srt_ts(rhs)?))
+}
+
+fn strip_vtt_tags(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut in_tag = false;
+    for ch in line.chars() {
+        if ch == '<' {
+            in_tag = true;
+        } else if ch == '>' && in_tag {
+            in_tag = false;
+        } else if !in_tag {
+            out.push(ch);
+        }
+    }
+    out.trim().to_string()
+}
+
+/// Converts WebVTT text (including concatenated HLS WebVTT segments) into UTF-8 `.srt`,
+/// or normalizes text that is already SubRip `.srt`.
+pub fn vtt_to_srt(vtt: &str) -> String {
+    let clean = vtt.strip_prefix('\u{feff}').unwrap_or(vtt).replace("\r\n", "\n").replace('\r', "\n");
+    let trimmed = clean.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if !trimmed.starts_with("WEBVTT") && trimmed.contains(" --> ") && trimmed.contains(',') {
+        let mut s = trimmed.to_string();
+        s.push('\n');
+        return s;
+    }
+    let mut cues: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for block in clean.split("\n\n") {
+        let lines: Vec<&str> = block.lines().map(str::trim_end).skip_while(|l| l.trim().is_empty()).collect();
+        if lines.is_empty() {
+            continue;
+        }
+        let head = lines[0].trim();
+        if head.starts_with("WEBVTT")
+            || head.starts_with("STYLE")
+            || head.starts_with("NOTE")
+            || head.starts_with("REGION")
+            || head.starts_with("X-TIMESTAMP-MAP=")
+        {
+            continue;
+        }
+        let Some((idx, timing)) = lines.iter().enumerate().find_map(|(i, l)| parse_cue_timing(l.trim()).map(|t| (i, t))) else {
+            continue;
+        };
+        let body: Vec<String> = lines[idx + 1..]
+            .iter()
+            .map(|l| strip_vtt_tags(l))
+            .filter(|l| !l.is_empty())
+            .collect();
+        if body.is_empty() {
+            continue;
+        }
+        let joined = body.join("\n");
+        let key = format!("{timing}|{joined}");
+        if !seen.insert(key) {
+            continue;
+        }
+        cues.push(format!("{}\n{timing}\n{joined}", cues.len() + 1));
+    }
+    if cues.is_empty() {
+        String::new()
+    } else {
+        let mut out = cues.join("\n\n");
+        out.push('\n');
+        out
+    }
+}
+
+/// Writes an external companion subtitle (`srt` or `ass`) beside `media`, picking `<lang>-2`
+/// if `<stem>.<lang>.<ext>` already exists so existing files are never overwritten.
+pub fn write_companion(media: &Path, lang: &str, ext: &str, content: &str) -> Result<PathBuf, String> {
+    if !matches!(ext, "srt" | "ass") {
+        return Err("unsupported subtitle extension".into());
+    }
+    if !valid_lang(lang) {
+        return Err("invalid subtitle language".into());
+    }
+    if content.len() as u64 > 2 * MAX_BYTES || content.contains('\0') || content.trim().is_empty() {
+        return Err("not a subtitle file".into());
+    }
+    let (dir, stem) = stem_and_dir(media).ok_or("invalid media path")?;
+    for n in 1..=8u8 {
+        let tag = if n == 1 { lang.to_string() } else { format!("{lang}-{n}") };
+        if !valid_lang(&tag) {
+            break;
+        }
+        let candidate = dir.join(format!("{stem}.{tag}.{ext}"));
+        match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(content.as_bytes()) {
+                    drop(f);
+                    let _ = fs::remove_file(&candidate);
+                    return Err(e.to_string());
+                }
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Err("subtitle file already exists".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +270,24 @@ mod tests {
         assert!(write(&media, "vi/../x", "1\n").is_err());
         assert!(write(&media, "th", "   ").is_err());
         assert!(write(&media, "th", "a\0b").is_err());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn converts_vtt_and_writes_companion_files() {
+        let vtt = "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:90000,LOCAL:00:00:00.000\n\nSTYLE\n::cue { color: yellow; }\n\ncue-1\n00:01.250 --> 00:03.500 align:middle\n<c.yellow>Xin chào</c>\n\nWEBVTT\n\n00:01.250 --> 00:03.500\nXin chào\n\n00:04.000 --> 00:05.100\nTập 01\n";
+        let srt = vtt_to_srt(vtt);
+        assert_eq!(srt, "1\n00:00:01,250 --> 00:00:03,500\nXin chào\n\n2\n00:00:04,000 --> 00:00:05,100\nTập 01\n");
+
+        let d = dir();
+        let media = d.join("Episode 01 [ab12cd34].mp4");
+        let p1 = write_companion(&media, "vi", "srt", &srt).unwrap();
+        let p2 = write_companion(&media, "vi", "srt", &srt).unwrap();
+        let p3 = write_companion(&media, "ja", "ass", "[Script Info]\nTitle: Test\n").unwrap();
+        assert_eq!(p1, d.join("Episode 01 [ab12cd34].vi.srt"));
+        assert_eq!(p2, d.join("Episode 01 [ab12cd34].vi-2.srt"));
+        assert_eq!(p3, d.join("Episode 01 [ab12cd34].ja.ass"));
+        assert!(write_companion(&media, "vi", "exe", &srt).is_err());
         fs::remove_dir_all(d).unwrap();
     }
 }

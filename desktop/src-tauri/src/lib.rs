@@ -904,6 +904,92 @@ struct HeaderArg {
     value: String,
 }
 
+/// Companion external subtitle track discovered by the browser extension.
+#[derive(Deserialize, Clone)]
+struct ExtSubArg {
+    url: String,
+    lang: String,
+    format: String,
+}
+
+fn fetch_sub_text(agent: &ureq::Agent, raw_url: &str, headers: &[(String, String)]) -> Option<String> {
+    let clean_url = validate::url(raw_url).ok()?;
+    let mut req = agent.get(&clean_url);
+    for (k, v) in headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+    let mut resp = req.call().ok()?;
+    if resp.status().as_u16() != 200 {
+        return None;
+    }
+    resp.body_mut().with_config().limit(subs::MAX_BYTES).read_to_string().ok()
+}
+
+fn fetch_and_save_companion_subs(
+    canon_media: &Path,
+    job_id: &str,
+    subtitles: &[ExtSubArg],
+    headers: &[(String, String)],
+    db: Option<&history::Db>,
+) {
+    if subtitles.is_empty() {
+        return;
+    }
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(12)))
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let media_display = paths::display_form(canon_media);
+    for sub in subtitles.iter().take(4) {
+        let lang = if subs::valid_lang(&sub.lang) { sub.lang.as_str() } else { "sub" };
+        let Some(text) = fetch_sub_text(&agent, &sub.url, headers) else { continue };
+        let (content, ext) = if sub.format.eq_ignore_ascii_case("hls") || text.trim_start().starts_with("#EXTM3U") {
+            let Ok(base) = url::Url::parse(&sub.url) else { continue };
+            let mut seg_urls = Vec::new();
+            for line in text.lines() {
+                let l = line.trim();
+                if l.is_empty() || l.starts_with('#') {
+                    continue;
+                }
+                if let Ok(u) = base.join(l) {
+                    seg_urls.push(u.to_string());
+                }
+                if seg_urls.len() >= 300 {
+                    break;
+                }
+            }
+            if seg_urls.is_empty() {
+                continue;
+            }
+            let mut parts = Vec::new();
+            let mut total_bytes = 0usize;
+            for u in seg_urls {
+                if let Some(st) = fetch_sub_text(&agent, &u, headers) {
+                    total_bytes += st.len();
+                    parts.push(st);
+                    if total_bytes as u64 > subs::MAX_BYTES {
+                        break;
+                    }
+                }
+            }
+            (subs::vtt_to_srt(&parts.join("\n\n")), "srt")
+        } else if sub.format.eq_ignore_ascii_case("ass") || text.trim_start().starts_with("[Script Info]") {
+            (text, "ass")
+        } else {
+            (subs::vtt_to_srt(&text), "srt")
+        };
+        if content.trim().is_empty() {
+            continue;
+        }
+        if let Ok(written) = subs::write_companion(&media_display, lang, ext, &content) {
+            if let (Some(db), Ok(sub_canon)) = (db, paths::canonical(&written)) {
+                let _ = db.add_produced(&sub_canon, job_id);
+            }
+        }
+    }
+}
+
 /// quota_gate::Gate::check off the async runtime (it may wait up to 3 s for
 /// GET /client/version and touches SQLite).
 async fn check_quota(app: &AppHandle, job_id: &str, url_raw: &str, url_norm: &str, token: Option<String>) -> CmdResult<()> {
@@ -958,6 +1044,8 @@ async fn start_download(
     name_style: Option<String>,
     audio_kbps: Option<String>,
     subtitles: Option<String>,
+    ext_cookie_jar: Option<String>,
+    ext_subtitles: Option<Vec<ExtSubArg>>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
@@ -1007,6 +1095,17 @@ async fn start_download(
     // Random file name per run (not the job id): a second start of the same job
     // that is refused below must not delete the file the first run is using.
     let ck = run_cookies(&app, &url, use_cookies).await?;
+    let ext_ck = if ck.is_none() {
+        if let Some(clean_jar) = ext_cookie_jar.as_deref().and_then(cookies::sanitize_netscape) {
+            let tmp = cookie_tmp_dir(&app)?;
+            let key = cookies::random_key().map_err(CommandError::unknown)?;
+            Some(cookies::write_temp(&tmp, &key, &clean_jar).map_err(CommandError::unknown)?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let args = engine::download_args(
         &tools,
         &url,
@@ -1018,12 +1117,16 @@ async fn start_download(
         ck.as_ref().map(RunCookies::path),
     );
     let mut args = args;
+    if let Some(ref eck) = ext_ck {
+        engine::add_unpaced_cookies(&mut args, eck.path());
+    }
     engine::apply_extras(&mut args, &extras, audio_only);
     if out_name.is_none() && template != engine::OUTPUT_TEMPLATE {
         engine::set_output_template(&mut args, &template);
     }
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
     let ffprobe = paths[2].clone();
+    let ext_subs = ext_subtitles.unwrap_or_default();
 
     // Insert under the lock right after spawning so a concurrent start with
     // the same id cannot slip in between the check above and here.
@@ -1045,7 +1148,10 @@ async fn start_download(
         tracked: Mutex::new(HashSet::new()),
         final_path: Mutex::new(None),
         stderr_tail: Mutex::new(VecDeque::new()),
-        secret: ck.as_ref().map(RunCookies::needle),
+        secret: ck
+            .as_ref()
+            .map(RunCookies::needle)
+            .or_else(|| ext_ck.as_ref().map(|f| f.needle().to_string())),
     });
     let out = pump(app.clone(), io.clone(), child.stdout.take().expect("piped"), false);
     let err = pump(app.clone(), io.clone(), child.stderr.take().expect("piped"), true);
@@ -1060,7 +1166,11 @@ async fn start_download(
         let success = status.as_ref().is_ok_and(|s| s.success());
         let final_path = lock(&io.final_path).clone();
         let stop = running.stop.load(Ordering::SeqCst);
-        let mut ev = DoneEvent { job_id: job_id.clone(), cookies_used: ck.as_ref().map(|_| true), ..Default::default() };
+        let mut ev = DoneEvent {
+            job_id: job_id.clone(),
+            cookies_used: ck.as_ref().map(|_| true).or_else(|| ext_ck.as_ref().map(|_| true)),
+            ..Default::default()
+        };
 
         if success && final_path.is_some() {
             // Finished, even if pause/cancel was pressed in the last instant.
@@ -1071,6 +1181,9 @@ async fn start_download(
                     if let Some(db) = &store.0 {
                         let _ = db.add_produced(&canon, &job_id);
                         let _ = db.clear_partials(&job_id);
+                    }
+                    if !ext_subs.is_empty() {
+                        fetch_and_save_companion_subs(&canon, &job_id, &ext_subs, &headers, store.0.as_ref());
                     }
                     ev.state = "completed";
                     ev.file_size = std::fs::metadata(&canon).ok().map(|m| m.len());
@@ -1111,6 +1224,7 @@ async fn start_download(
             });
         }
         drop(ck); // yt-dlp has exited: delete the temp cookie file before telling the UI
+        drop(ext_ck);
         let _ = app.emit(EVENT_DONE, ev);
     });
 

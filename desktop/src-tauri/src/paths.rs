@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 pub const MEDIA_EXTENSIONS: &[&str] = &[
     "mp4", "mkv", "webm", "mov", "m4a", "mp3", "opus", "ogg", "wav", "flac", "aac", "jpg", "png", "webp", "srt",
-    "vtt",
+    "vtt", "ass",
 ];
 
 pub fn has_media_extension(p: &Path) -> bool {

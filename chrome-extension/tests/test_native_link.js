@@ -48,10 +48,21 @@ function makeChrome() {
   const listeners = [];
   const session = {};
   const local = {};
+  const sync = {};
   let cookie = null;
   let nativeError = null;
   let usagePayload = { tier: 'free', universal_stream: false };
+  const downloads = [];
+  let cookieJarEntries = [];
   const chrome = new Proxy({
+    downloads: new Proxy({
+      download: (opts, cb) => {
+        const id = downloads.length + 1;
+        downloads.push(opts);
+        if (cb) cb(id);
+        return Promise.resolve(id);
+      },
+    }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     runtime: new Proxy({
       lastError: undefined,
       id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi',
@@ -89,17 +100,23 @@ function makeChrome() {
         get: async (k) => ({ [k]: session[k] }),
         set: async (o) => { Object.assign(session, JSON.parse(JSON.stringify(o))); },
       },
+      sync: {
+        get: async (k) => (typeof k === 'string' ? (k in sync ? { [k]: sync[k] } : {}) : { ...sync }),
+        set: async (o) => { Object.assign(sync, JSON.parse(JSON.stringify(o))); },
+      },
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     tabs: new Proxy({
       create: async (o) => { tabs.push(o); return { id: tabs.length, windowId: 7 }; },
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     cookies: new Proxy({
       get: async (q) => (cookie && cookie.name === q.name && q.url.includes(cookie.host) ? { name: q.name, value: 'secret' } : null),
+      getAll: async (q) => cookieJarEntries.filter((c) => !q || !q.url || q.url.includes(c.matchHost || '')),
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
   }, { get: (t, k) => (k in t ? t[k] : anything()) });
   return {
-    chrome, posted, ports, tabs, fetches, listeners, session, local,
+    chrome, posted, ports, tabs, fetches, listeners, session, local, sync, downloads,
     setCookie: (c) => { cookie = c; },
+    setCookieJar: (arr) => { cookieJarEntries = arr; },
     setNativeError: (e) => { nativeError = e; },
     getUsagePayload: () => usagePayload,
     setUsagePayload: (u) => { usagePayload = u; },
@@ -130,11 +147,12 @@ vm.createContext(sandbox);
 vm.runInContext(src, sandbox, { filename: 'background.js' });
 
 const tick = () => new Promise((r) => setTimeout(r, 10));
-const send = (msg) => new Promise((resolve) => {
+  const send = (msg, senderOverride) => new Promise((resolve) => {
   let answered = false;
   const done = (v) => { if (!answered) { answered = true; resolve(v); } };
+  const sdr = senderOverride || { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', tab: { id: 3 }, url: 'https://www.douyin.com/user/x' };
   for (const f of env.listeners) {
-    const keep = f(msg, { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', tab: { id: 3 }, url: 'https://www.douyin.com/user/x' }, done);
+    const keep = f(msg, sdr, done);
     if (keep === true) return;
   }
   setTimeout(() => done(undefined), 50);
@@ -290,6 +308,152 @@ const send = (msg) => new Promise((resolve) => {
       && hLiveDrm && hLiveDrm.ok === false && hLiveDrm.error === 'drm_protected' && hLiveDrm.drmSystem === 'FairPlay'
       && hStop && hStop.ok === true && stoppedJob && stoppedJob.stopping === true,
     '[9f] VG_HLS_START allows SAMPLE-AES & non-DRM live, blocks live DRM, and VG_HLS_STOP sets stopping=true',
+  );
+
+  // [10] Upgrades #1, #2, #4, #5: ephemeral cookies + companion subtitles + series folder + auto-episode + HLS resume
+  env.setCookieJar([
+    { matchHost: 'cdn.x', domain: '.cdn.x', path: '/', secure: true, expirationDate: 1900000000, name: 'cf_clearance', value: 'tok_123' },
+    { matchHost: 'player.embed.x', domain: 'player.embed.x', path: '/', secure: true, expirationDate: 0, name: 'sid', value: 'sess_456' },
+  ]);
+  sandbox.vgSniffList = async () => [
+    {
+      id: 'ep-hls-1',
+      kind: 'hls',
+      encryption: 'none',
+      live: false,
+      url: 'https://cdn.x/anime/ep01/master.m3u8',
+      title: 'Hành Trình Biển Đông - Tập 01',
+      pageUrl: 'https://cinema.example/watch/ep-01',
+      refererUrl: 'https://player.embed.x/e/1',
+      subtitles: [{ url: 'https://subs.cdn.x/ep01.vi.vtt', lang: 'vi', format: 'vtt' }],
+    },
+    {
+      id: 'ep-mp4-2',
+      kind: 'file',
+      encryption: 'none',
+      live: false,
+      url: 'https://cdn.x/anime/ep02/video.mp4',
+      title: 'Hành Trình Biển Đông - Tập 02',
+      pageUrl: 'https://cinema.example/watch/ep-02',
+      refererUrl: 'https://player.embed.x/e/2',
+      subtitles: [{ url: 'https://subs.cdn.x/ep02.vi.vtt', lang: 'vi', format: 'vtt' }],
+    },
+  ];
+
+  // 10a: Ephemeral Netscape cookieJar + subtitles sent when vg_send_cookies !== false, omitted when vg_send_cookies === false
+  env.sync.vg_send_cookies = true;
+  env.posted.length = 0;
+  const rWithCk = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'ep-hls-1', height: 1080 });
+  const msgWithCk = env.posted.find((x) => x.t === 'download');
+  assert(
+    rWithCk && rWithCk.ok === true && msgWithCk
+      && typeof msgWithCk.cookieJar === 'string'
+      && msgWithCk.cookieJar.startsWith('# Netscape HTTP Cookie File')
+      && msgWithCk.cookieJar.includes('cf_clearance\ttok_123')
+      && msgWithCk.cookieJar.includes('sid\tsess_456')
+      && Array.isArray(msgWithCk.subtitles) && msgWithCk.subtitles.length === 1 && msgWithCk.subtitles[0].lang === 'vi',
+    '[10a] VG_APP_SEND forwards Netscape cookieJar + companion subtitles when vg_send_cookies is enabled',
+  );
+
+  env.sync.vg_send_cookies = false;
+  env.posted.length = 0;
+  await send({ type: 'VG_APP_SEND', tabId: 3, id: 'ep-hls-1', height: 1080 });
+  const msgNoCk = env.posted.find((x) => x.t === 'download');
+  assert(
+    msgNoCk && msgNoCk.cookieJar === undefined && Array.isArray(msgNoCk.subtitles) && msgNoCk.subtitles.length === 1,
+    '[10a] VG_APP_SEND omits cookieJar when vg_send_cookies === false while keeping companion subtitles',
+  );
+  env.sync.vg_send_cookies = true;
+
+  // 10b: VG_SNIFF_DOWNLOAD saves video + converted .vi.srt into VidGrab/<Series>/<Title>
+  const origSandboxFetch = sandbox.fetch;
+  sandbox.fetch = async (url, init = {}) => {
+    if (String(url) === 'https://subs.cdn.x/ep02.vi.vtt') {
+      const vtt = 'WEBVTT\n\n00:01.000 --> 00:03.000\nXin chào tập 2\n';
+      return { ok: true, status: 200, text: async () => vtt };
+    }
+    return origSandboxFetch(url, init);
+  };
+  env.downloads.length = 0;
+  const rFileDl = await send({ type: 'VG_SNIFF_DOWNLOAD', tabId: 3, id: 'ep-mp4-2' });
+  await tick(); await tick();
+  const dlFilenames = env.downloads.map((d) => d.filename);
+  assert(
+    rFileDl && rFileDl.ok === true
+      && dlFilenames.includes('VidGrab/Hành Trình Biển Đông/Hành Trình Biển Đông - Tập 02.mp4')
+      && dlFilenames.includes('VidGrab/Hành Trình Biển Đông/Hành Trình Biển Đông - Tập 02.vi.srt'),
+    `[10b] VG_SNIFF_DOWNLOAD groups series into VidGrab/<Series>/ and saves companion .vi.srt (${JSON.stringify(dlFilenames)})`,
+  );
+  sandbox.fetch = origSandboxFetch;
+
+  // 10c: Auto-queue next episode toggle (Team gated + deduplicated)
+  env.local.vg_auth_token = 'tok-pro-user';
+  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const autoDenied = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
+  assert(autoDenied && autoDenied.ok === false && autoDenied.error === 'tier_required',
+    '[10c] VG_SNIFF_AUTO_EP_SET refuses non-Team tier');
+
+  env.local.vg_auth_token = 'tok-team-user';
+  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const autoOk = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
+  const autoState = await send({ type: 'VG_SNIFF_AUTO_EP_GET', tabId: 9 });
+  env.posted.length = 0;
+  const ep3Item = {
+    id: 'ep-hls-3',
+    kind: 'hls',
+    encryption: 'none',
+    live: false,
+    height: 1080,
+    url: 'https://cdn.x/anime/ep03/master.m3u8',
+    title: 'Hành Trình Biển Đông - Tập 03',
+    pageUrl: 'https://cinema.example/watch/ep-03',
+    refererUrl: 'https://player.embed.x/e/3',
+  };
+  await sandbox.vgOnSniffStreamReady(9, ep3Item);
+  await sandbox.vgOnSniffStreamReady(9, ep3Item); // duplicate call for same URL on same tab
+  assert(
+    autoOk && autoOk.ok === true && autoState && autoState.enabled === true
+      && env.posted.filter((x) => x.t === 'download' && x.url === ep3Item.url).length === 1,
+    '[10c] vgOnSniffStreamReady auto-sends next episode to connected Desktop App exactly once',
+  );
+
+  // 10d: VG_HLS_RESUME resumes a checkpointed HLS job for Team tier and refuses Pro tier
+  const extPageSender = { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', origin: 'chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi', url: 'chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi/offscreen.html' };
+  const hStartRes = await send({ type: 'VG_HLS_START', tabId: 3, id: 'ep-hls-1', height: 720 }, extPageSender);
+  const rJobId = hStartRes && hStartRes.job && hStartRes.job.id;
+  await send({
+    target: 'sw',
+    type: 'HLS_FAILED',
+    id: rJobId,
+    reason: 'http',
+    message: 'HTTP 503',
+    resumable: true,
+    done: 12,
+    total: 40,
+    bytes: 409600,
+    checkpoint: { mediaUrl: 'https://cdn.x/anime/ep01/720.m3u8', written: 12, total: 40, bytes: 409600, fmp4Mode: false },
+  }, extPageSender);
+  await tick(); await tick();
+  const keepResp = await send({ type: 'VG_HLS_KEEP_FILES' }, extPageSender);
+  assert(keepResp && keepResp.ok === true && keepResp.keep.includes(`hls-${rJobId}.mp4`),
+    '[10d] VG_HLS_KEEP_FILES preserves OPFS file of resumable failed HLS job');
+
+  env.local.vg_auth_token = 'tok-pro-user';
+  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const resumePro = await send({ type: 'VG_HLS_RESUME', id: rJobId }, extPageSender);
+  assert(resumePro && resumePro.ok === false && resumePro.error === 'tier_required',
+    '[10d] VG_HLS_RESUME refuses non-Team tier');
+
+  env.local.vg_auth_token = 'tok-team-user';
+  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const resumeTeam = await send({ type: 'VG_HLS_RESUME', id: rJobId }, extPageSender);
+  assert(
+    resumeTeam && resumeTeam.ok === true && resumeTeam.job && resumeTeam.job.state === 'running' && resumeTeam.job.done === 12,
+    '[10d] VG_HLS_RESUME restarts checkpointed job at done=12 for Team tier',
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

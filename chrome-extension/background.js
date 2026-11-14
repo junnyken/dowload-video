@@ -366,8 +366,8 @@ async function vgSaveViaPage(url, name) {
 
 // Download preferring the user's own IP; fall back to the server proxy if the
 // direct download is interrupted (403 / CORS / referer-gated CDN).
-function smartDownload({ rawUrl, base, safeName, finalExt, saveAs }) {
-  const filename = `VidGrab/${safeName}.${finalExt}`;
+function smartDownload({ rawUrl, base, safeName, finalExt, saveAs, subDir }) {
+  const filename = subDir ? `VidGrab/${subDir}/${safeName}.${finalExt}` : `VidGrab/${safeName}.${finalExt}`;
   const proxyUrl = _serverWrap(rawUrl, base, safeName, finalExt);
 
   if (!_isBrowserDirectUrl(rawUrl)) {
@@ -495,6 +495,145 @@ function hlsSafeName(t) {
   return String(t || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
 }
 
+function vgSafeFolder(raw) {
+  const s = String(raw || '')
+    .replace(/[/\\?%*:|"<>\n\r\t\x00-\x1f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s-]+|[.\s-]+$/g, '')
+    .slice(0, 80);
+  if (!s || /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(s)) return '';
+  return s;
+}
+
+function vgStreamPaths(title, suffix = '') {
+  const safeName = hlsSafeName(title);
+  const ep = self.VGSniff && typeof self.VGSniff.parseSeriesEpisode === 'function'
+    ? self.VGSniff.parseSeriesEpisode(title)
+    : null;
+  const subDir = ep && ep.seriesTitle ? vgSafeFolder(ep.seriesTitle) : '';
+  const stem = `${safeName}${suffix}`;
+  return {
+    safeName: stem,
+    subDir,
+    relBase: subDir ? `VidGrab/${subDir}/${stem}` : `VidGrab/${stem}`,
+  };
+}
+
+async function vgFetchSubtitleContent(sub, refererUrl) {
+  if (!sub || !sub.url || !/^https?:/i.test(sub.url)) return null;
+  if (refererUrl) await vgEnsureStreamReferer(sub.url, refererUrl).catch(() => {});
+  const resp = await fetch(sub.url, { credentials: 'include', cache: 'no-store' });
+  if (!resp.ok) return null;
+  const text = await resp.text();
+  if (!text || text.length > 2 * 1024 * 1024) return null;
+  if (sub.format === 'hls' || /^\s*#EXTM3U/m.test(text)) {
+    const segUrls = [];
+    for (const rawLine of text.split(/\r?\n/)) {
+      const l = rawLine.trim();
+      if (!l || l.startsWith('#')) continue;
+      try {
+        segUrls.push(new URL(l, sub.url).toString());
+      } catch { /* ignore */ }
+      if (segUrls.length >= 300) break;
+    }
+    if (!segUrls.length) return null;
+    const parts = [];
+    let totalChars = 0;
+    for (const u of segUrls) {
+      if (refererUrl) await vgEnsureStreamReferer(u, refererUrl).catch(() => {});
+      const sr = await fetch(u, { credentials: 'include', cache: 'no-store' }).catch(() => null);
+      if (!sr || !sr.ok) continue;
+      const st = await sr.text().catch(() => '');
+      totalChars += st.length;
+      if (totalChars > 2 * 1024 * 1024) break;
+      parts.push(st);
+    }
+    const srt = self.VGSniff && typeof self.VGSniff.vttToSrt === 'function'
+      ? self.VGSniff.vttToSrt(parts.join('\n\n'))
+      : parts.join('\n\n');
+    return srt ? { content: srt, ext: 'srt' } : null;
+  }
+  if (sub.format === 'ass' || /^\s*\[Script Info\]/im.test(text)) {
+    return { content: text, ext: 'ass' };
+  }
+  const srt = self.VGSniff && typeof self.VGSniff.vttToSrt === 'function'
+    ? self.VGSniff.vttToSrt(text)
+    : text;
+  return srt ? { content: srt, ext: 'srt' } : null;
+}
+
+async function vgSaveCompanionSubtitles(subtitles, relBase, refererUrl) {
+  if (!Array.isArray(subtitles) || !subtitles.length || !relBase) return 0;
+  const usedTags = new Set();
+  let saved = 0;
+  for (const sub of subtitles.slice(0, 4)) {
+    try {
+      const got = await vgFetchSubtitleContent(sub, refererUrl);
+      if (!got || !got.content) continue;
+      const baseLang = String(sub.lang || 'sub').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 12) || 'sub';
+      let langTag = baseLang;
+      let idx = 2;
+      while (usedTags.has(`${langTag}.${got.ext}`)) {
+        langTag = `${baseLang}-${idx++}`;
+      }
+      usedTags.add(`${langTag}.${got.ext}`);
+      const dataUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(got.content)}`;
+      chrome.downloads.download({
+        url: dataUrl,
+        filename: `${relBase}.${langTag}.${got.ext}`,
+        saveAs: false,
+        conflictAction: 'uniquify',
+      }, () => { void chrome.runtime.lastError; });
+      saved += 1;
+    } catch { /* non-fatal */ }
+  }
+  return saved;
+}
+
+async function vgGetStreamCookieJar(streamUrl, refererUrl) {
+  if (!chrome.cookies || typeof chrome.cookies.getAll !== 'function') return undefined;
+  let send;
+  try { send = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
+  if (typeof send !== 'boolean') {
+    try { send = Boolean(chrome.runtime.getManifest().key); } catch { send = false; }
+  }
+  if (!send) return undefined;
+
+  const urls = [];
+  for (const cand of [streamUrl, refererUrl]) {
+    if (!cand) continue;
+    try {
+      const u = new URL(cand);
+      if (!/^https?:$/.test(u.protocol)) continue;
+      if (LOCAL_HOSTS.includes(u.hostname.toLowerCase()) || isFirstPartyHost(u.hostname)) continue;
+      const originSlash = `${u.origin}/`;
+      if (!urls.includes(originSlash)) urls.push(originSlash);
+    } catch { /* ignore */ }
+  }
+  if (!urls.length) return undefined;
+
+  const merged = [];
+  const seen = new Set();
+  for (const u of urls) {
+    try {
+      const list = await chrome.cookies.getAll({ url: u });
+      for (const c of list || []) {
+        if (!c || !c.name || !c.domain) continue;
+        const k = `${c.domain}|${c.path || '/'}|${c.name}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(c);
+        if (merged.length >= 60) break;
+      }
+    } catch { /* ignore */ }
+    if (merged.length >= 60) break;
+  }
+  if (!merged.length) return undefined;
+  const text = _toNetscapeCookieFile(merged);
+  if (text.length > 12 * 1024) return undefined;
+  return text;
+}
+
 function vgCleanStreamTitle(item) {
   const raw = (item && item.title) || '';
   const cleaned = self.VGSniff && typeof self.VGSniff.cleanMediaTitle === 'function'
@@ -570,9 +709,14 @@ async function hlsStart(item, height) {
   const cleanTitle = vgCleanStreamTitle(item);
   const now = Date.now();
   const isLive = !!item.live;
+  const subtitles = Array.isArray(item.subtitles)
+    ? item.subtitles.slice(0, 6).map((s) => ({ url: s.url, lang: s.lang || 'sub', format: s.format || 'vtt' }))
+    : [];
   const job = {
-    id, title: cleanTitle, url: item.url, height: height || null, state: 'running',
-    live: isLive, stopping: false, startedAt: now, elapsedSec: 0,
+    id, title: cleanTitle, url: item.url, referer, subtitles,
+    height: height || null, state: 'running',
+    live: isLive, stopping: false, resumable: false, checkpoint: null,
+    startedAt: now, elapsedSec: 0,
     done: 0, total: 0, bytes: 0, at: now, message: '',
   };
   console.info('[VidGrab][HLS] Starting job:', {
@@ -593,6 +737,116 @@ async function hlsStart(item, height) {
   });
   return job;
 }
+
+async function hlsResume(id) {
+  await hlsLoad();
+  const job = hlsJobs.get(id);
+  if (!job || job.state !== 'failed' || !job.resumable || !job.checkpoint) {
+    return { ok: false, error: 'not_resumable' };
+  }
+  if (job.referer) await vgEnsureStreamReferer(job.url, job.referer).catch(() => {});
+  const cp = job.checkpoint;
+  Object.assign(job, {
+    state: 'running',
+    stopping: false,
+    resumable: false,
+    message: '',
+    at: Date.now(),
+  });
+  hlsSave();
+  await ensureOffscreen();
+  await chrome.runtime.sendMessage({
+    target: 'offscreen',
+    type: 'HLS_START',
+    job: {
+      id: job.id,
+      url: job.url,
+      height: cp.height || job.height || null,
+      title: job.title,
+      referer: job.referer || '',
+      live: false,
+      allowLive: false,
+      resume: cp,
+    },
+  });
+  return { ok: true, job };
+}
+
+const VG_AUTO_EP_KEY = 'vg_auto_ep_tabs';
+const _vgAutoEpSeen = new Map(); // tabId -> Set<canonicalUrl>
+
+async function vgAutoEpMap() {
+  try {
+    return (await chrome.storage.session.get(VG_AUTO_EP_KEY))[VG_AUTO_EP_KEY] || {};
+  } catch {
+    return {};
+  }
+}
+
+async function vgAutoEpGet(tabId) {
+  if (tabId == null) return false;
+  const m = await vgAutoEpMap();
+  return Boolean(m[String(tabId)]);
+}
+
+async function vgAutoEpSet(tabId, enabled) {
+  if (tabId == null) return false;
+  const m = await vgAutoEpMap();
+  if (enabled) {
+    m[String(tabId)] = Date.now();
+  } else {
+    delete m[String(tabId)];
+    _vgAutoEpSeen.delete(tabId);
+  }
+  await chrome.storage.session.set({ [VG_AUTO_EP_KEY]: m }).catch(() => {});
+  return Boolean(enabled);
+}
+
+self.vgOnSniffStreamReady = async (tabId, item) => {
+  if (!item || item.hidden || item.encryption === 'drm' || item.live) return;
+  if (!(await vgAutoEpGet(tabId))) return;
+  const gate = await vgCheckUniversalStreamTier();
+  if (!gate.allowed) {
+    await vgAutoEpSet(tabId, false);
+    return;
+  }
+  const canon = self.VGSniff && typeof self.VGSniff.canonicalUrl === 'function'
+    ? self.VGSniff.canonicalUrl(item.url)
+    : item.url;
+  let seen = _vgAutoEpSeen.get(tabId);
+  if (!seen) { seen = new Set(); _vgAutoEpSeen.set(tabId, seen); }
+  if (seen.has(canon)) return;
+  seen.add(canon);
+  if (seen.size > 60) {
+    const first = seen.values().next().value;
+    seen.delete(first);
+  }
+
+  // Wait briefly for SPA episode title / <track> subtitle DOM updates before dispatching.
+  await new Promise((r) => setTimeout(r, 450));
+  if (typeof self.vgSniffProbe === 'function') {
+    await self.vgSniffProbe(tabId).catch(() => {});
+  }
+  if (item.hidden || item.encryption === 'drm' || item.live) return;
+
+  const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+  if (appConnected) {
+    const res = await vgSendToApp(item, item.height || undefined).catch(() => ({ ok: false }));
+    if (res && res.ok) return;
+  }
+  if (item.kind === 'hls') {
+    await hlsStart(item, item.height || null);
+  } else if (item.kind === 'file') {
+    const ref = item.refererUrl || item.pageUrl || '';
+    if (ref) await vgEnsureStreamReferer(item.url, ref);
+    const base = await getApiBase();
+    const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
+      || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
+    const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item));
+    smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
+    void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
+  }
+};
 
 // One video: server fetch-link -> the file straight to this computer (smartDownload),
 // subtitles, history. Shared by VG_DOWNLOAD_NOW and the 5.17.0 bulk queue.
@@ -1062,18 +1316,32 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           reason: msg.encryptionReason || 'DRM protected',
         });
       }
+      const resumable = Boolean(msg.resumable && msg.checkpoint);
       Object.assign(job, {
         state: msg.reason === 'cancelled' ? 'cancelled' : 'failed',
         stopping: false,
+        resumable,
+        checkpoint: resumable ? msg.checkpoint : null,
+        ...(resumable && typeof msg.done === 'number' ? { done: msg.done } : {}),
+        ...(resumable && typeof msg.total === 'number' ? { total: msg.total } : {}),
+        ...(resumable && typeof msg.bytes === 'number' ? { bytes: msg.bytes } : {}),
         drmSystem: msg.drmSystem || null,
         encryptionReason: msg.encryptionReason || null,
         message: vgHlsMessage(msg),
       });
       closeOffscreenIfIdle();
     } else if (msg.type === 'HLS_DONE') {
-      Object.assign(job, { state: 'saving', stopping: false, bytes: msg.bytes, done: job.total || job.done });
+      Object.assign(job, {
+        state: 'saving',
+        stopping: false,
+        resumable: false,
+        checkpoint: null,
+        bytes: msg.bytes,
+        done: job.total || job.done,
+      });
       if (typeof msg.elapsedSec === 'number') job.elapsedSec = msg.elapsedSec;
-      const filename = `VidGrab/${hlsSafeName(job.title)}${job.height ? ` (${job.height}p)` : ''}.${msg.ext || 'mp4'}`;
+      const { relBase } = vgStreamPaths(job.title, job.height ? ` (${job.height}p)` : '');
+      const filename = `${relBase}.${msg.ext || 'mp4'}`;
       chrome.downloads.download({ url: msg.url, filename, saveAs: false }, (downloadId) => {
         const finish = (state, message) => {
           Object.assign(job, { state, message: message || '' });
@@ -1081,6 +1349,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_RELEASE', id: job.id })
             .catch(() => {}).finally(() => closeOffscreenIfIdle());
           if (state === 'done') {
+            if (Array.isArray(job.subtitles) && job.subtitles.length) {
+              void vgSaveCompanionSubtitles(job.subtitles, relBase, job.referer || '');
+            }
             chrome.notifications.create(`vg-hls-${job.id}`, {
               type: 'basic', iconUrl: 'assets/icon128.png', title: t('hls_done_title'),
               message: t('hls_done_msg', job.title.slice(0, 80)),
@@ -1139,13 +1410,24 @@ async function vgSendToApp(item, height) {
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent).slice(0, 512) : '';
   const h = Number.isInteger(height) && height >= 144 && height <= 4320 ? height : undefined;
   const cleanTitle = item.title ? vgCleanStreamTitle(item) : '';
+  const isStream = Boolean(item.kind);
+  const cookieJar = isStream ? await vgGetStreamCookieJar(item.url, referer).catch(() => undefined) : undefined;
+  const subtitles = (isStream && Array.isArray(item.subtitles) && item.subtitles.length)
+    ? item.subtitles.slice(0, 6).map((s) => ({
+      url: s.url,
+      lang: String(s.lang || 'sub').slice(0, 12),
+      format: String(s.format || 'vtt').slice(0, 8),
+    }))
+    : undefined;
   const payload = {
     url: item.url,
     title: cleanTitle,
     referer,
     ...(ua ? { userAgent: ua } : {}),
     ...(h ? { height: h } : {}),
-    ...(item.kind ? { stream: true } : {}),
+    ...(isStream ? { stream: true } : {}),
+    ...(cookieJar ? { cookieJar } : {}),
+    ...(subtitles ? { subtitles } : {}),
   };
   // 5.22.0: over the native link when the app is on it (only the app's own
   // host can be on that end; the HTTP port stays for apps before 0.20.0)
@@ -1660,6 +1942,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     self.vgSniffClear(msg.tabId).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.type === 'VG_SNIFF_AUTO_EP_GET') {
+    vgAutoEpGet(msg.tabId).then((enabled) => sendResponse({ ok: true, enabled }), () => sendResponse({ ok: false, enabled: false }));
+    return true;
+  }
+  if (msg.type === 'VG_SNIFF_AUTO_EP_SET') {
+    (async () => {
+      if (msg.enabled) {
+        const gate = await vgCheckUniversalStreamTier();
+        if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
+      }
+      const enabled = await vgAutoEpSet(msg.tabId, Boolean(msg.enabled));
+      sendResponse({ ok: true, enabled });
+    })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (msg.type === 'VG_ENSURE_REFERER') {
     if (!_fromExtensionPage) { sendResponse({ ok: false }); return false; }
     vgEnsureStreamReferer(msg.url, msg.referer).then((ok) => sendResponse({ ok }), () => sendResponse({ ok: false }));
@@ -1677,8 +1974,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const base = await getApiBase();
       const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
         || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-      const safeName = hlsSafeName(vgCleanStreamTitle(item));
-      smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false });
+      const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item));
+      smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
+      if (Array.isArray(item.subtitles) && item.subtitles.length) {
+        void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
+      }
       sendResponse({ ok: true });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
@@ -1704,6 +2004,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const job = await hlsStart(item, msg.height);
       sendResponse({ ok: true, job });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_HLS_RESUME') {
+    (async () => {
+      const gate = await vgCheckUniversalStreamTier();
+      if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
+      sendResponse(await hlsResume(msg.id));
+    })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_HLS_KEEP_FILES') {
+    if (!_fromExtensionPage) { sendResponse({ ok: false, keep: [] }); return false; }
+    hlsLoad().then(() => {
+      const keep = [...hlsJobs.values()]
+        .filter((j) => j.state === 'running' || j.state === 'saving' || (j.state === 'failed' && j.resumable))
+        .map((j) => `hls-${j.id}.mp4`);
+      sendResponse({ ok: true, keep });
+    }, () => sendResponse({ ok: false, keep: [] }));
     return true;
   }
   if (msg.type === 'VG_APP_STATUS') {
@@ -1753,9 +2071,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'VG_HLS_CANCEL') {
-    chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_CANCEL', id: msg.id }).catch(() => {});
-    sendResponse({ ok: true });
-    return false;
+    (async () => {
+      await hlsLoad();
+      const j = hlsJobs.get(msg.id);
+      if (j && j.state === 'failed' && j.resumable) {
+        Object.assign(j, { state: 'cancelled', resumable: false, checkpoint: null });
+        hlsSave();
+        await ensureOffscreen().catch(() => {});
+        await chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_RELEASE', id: msg.id }).catch(() => {});
+        closeOffscreenIfIdle();
+      } else {
+        chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_CANCEL', id: msg.id }).catch(() => {});
+      }
+      sendResponse({ ok: true });
+    })().catch(() => sendResponse({ ok: true }));
+    return true;
   }
 
   // ── 5.17.0: bulk download to this computer (popup channel list) ──
@@ -2058,7 +2388,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ── Dọn storage khi tab đóng ─────────────────────────────────────
-chrome.tabs.onRemoved.addListener((tabId) => { clearStore(tabId); });
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clearStore(tabId);
+  void vgAutoEpSet(tabId, false);
+});
 
 // ── Right-click Context Menu ─────────────────────────────────────
 chrome.runtime.onInstalled.addListener((details) => {

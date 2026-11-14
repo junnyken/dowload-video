@@ -655,6 +655,172 @@
     return ISO_BMFF_BOXES.has(box);
   }
 
+  function readUint32BE(u8, off) {
+    return (((u8[off] << 24) >>> 0) + (u8[off + 1] << 16) + (u8[off + 2] << 8) + u8[off + 3]) >>> 0;
+  }
+
+  function writeUint32BE(u8, off, val) {
+    u8[off] = (val >>> 24) & 0xff;
+    u8[off + 1] = (val >>> 16) & 0xff;
+    u8[off + 2] = (val >>> 8) & 0xff;
+    u8[off + 3] = val & 0xff;
+  }
+
+  function iterMp4Boxes(u8, start = 0, end = u8.length) {
+    const boxes = [];
+    let pos = start;
+    while (pos + 8 <= end) {
+      let size = readUint32BE(u8, pos);
+      let hdr = 8;
+      if (size === 1) {
+        if (pos + 16 > end) break;
+        const hi = readUint32BE(u8, pos + 8);
+        const lo = readUint32BE(u8, pos + 12);
+        size = hi * 4294967296 + lo;
+        hdr = 16;
+      } else if (size === 0) {
+        size = end - pos;
+      }
+      if (size < hdr || pos + size > end) break;
+      const type = String.fromCharCode(u8[pos + 4], u8[pos + 5], u8[pos + 6], u8[pos + 7]);
+      boxes.push({ type, start: pos, hdr, size, end: pos + size });
+      pos += size;
+    }
+    return boxes;
+  }
+
+  function makeMp4Box(type, children) {
+    let bodyLen = 0;
+    for (const c of children) bodyLen += c.byteLength;
+    const out = new Uint8Array(8 + bodyLen);
+    writeUint32BE(out, 0, out.byteLength);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    let off = 8;
+    for (const c of children) { out.set(c, off); off += c.byteLength; }
+    return out;
+  }
+
+  function setTrakTrackId(trakBytes, trackId) {
+    const copy = new Uint8Array(trakBytes);
+    for (const b of iterMp4Boxes(copy, 8, copy.length)) {
+      if (b.type === 'tkhd' && b.size >= b.hdr + 16) {
+        const version = copy[b.start + b.hdr];
+        const idOff = b.start + b.hdr + 4 + (version === 1 ? 16 : 8);
+        if (idOff + 4 <= b.end) writeUint32BE(copy, idOff, trackId);
+      }
+    }
+    return copy;
+  }
+
+  function makeTrexBox(trackId, templateBytes) {
+    if (templateBytes && templateBytes.byteLength >= 32) {
+      const copy = new Uint8Array(templateBytes);
+      writeUint32BE(copy, 12, trackId);
+      return copy;
+    }
+    const out = new Uint8Array(32);
+    writeUint32BE(out, 0, 32);
+    out[4] = 0x74; out[5] = 0x72; out[6] = 0x65; out[7] = 0x78; // 'trex'
+    writeUint32BE(out, 12, trackId);
+    writeUint32BE(out, 16, 1); // default_sample_description_index = 1
+    return out;
+  }
+
+  /**
+   * Merges a single-track video fMP4 init segment (`ftyp` + `moov`) and a single-track
+   * audio fMP4 init segment into one multi-track fMP4 init segment (video = track 1, audio = track 2).
+   */
+  function mergeMp4InitSegments(videoInit, audioInit) {
+    if (!videoInit || !videoInit.byteLength) return audioInit || new Uint8Array(0);
+    if (!audioInit || !audioInit.byteLength) return videoInit;
+    const vBoxes = iterMp4Boxes(videoInit);
+    const aBoxes = iterMp4Boxes(audioInit);
+    const vMoovBox = vBoxes.find((b) => b.type === 'moov');
+    const aMoovBox = aBoxes.find((b) => b.type === 'moov');
+    if (!vMoovBox || !aMoovBox) return videoInit;
+
+    const vChildren = iterMp4Boxes(videoInit, vMoovBox.start + vMoovBox.hdr, vMoovBox.end);
+    const aChildren = iterMp4Boxes(audioInit, aMoovBox.start + aMoovBox.hdr, aMoovBox.end);
+    const vTrakBox = vChildren.find((b) => b.type === 'trak');
+    const aTrakBox = aChildren.find((b) => b.type === 'trak');
+    if (!vTrakBox || !aTrakBox) return videoInit;
+
+    const vTrak = setTrakTrackId(videoInit.subarray(vTrakBox.start, vTrakBox.end), 1);
+    const aTrak = setTrakTrackId(audioInit.subarray(aTrakBox.start, aTrakBox.end), 2);
+
+    let vTrexTemplate = null;
+    const mvexExtras = [];
+    const vMvex = vChildren.find((b) => b.type === 'mvex');
+    if (vMvex) {
+      for (const mb of iterMp4Boxes(videoInit, vMvex.start + vMvex.hdr, vMvex.end)) {
+        if (mb.type === 'trex' && !vTrexTemplate) vTrexTemplate = videoInit.subarray(mb.start, mb.end);
+        else if (mb.type !== 'trex') mvexExtras.push(videoInit.subarray(mb.start, mb.end));
+      }
+    }
+    let aTrexTemplate = null;
+    const aMvex = aChildren.find((b) => b.type === 'mvex');
+    if (aMvex) {
+      const tb = iterMp4Boxes(audioInit, aMvex.start + aMvex.hdr, aMvex.end).find((x) => x.type === 'trex');
+      if (tb) aTrexTemplate = audioInit.subarray(tb.start, tb.end);
+    }
+    const mergedMvex = makeMp4Box('mvex', [
+      ...mvexExtras,
+      makeTrexBox(1, vTrexTemplate),
+      makeTrexBox(2, aTrexTemplate),
+    ]);
+
+    const moovParts = [];
+    for (const b of vChildren) {
+      if (b.type === 'mvhd') {
+        const mvhd = new Uint8Array(videoInit.subarray(b.start, b.end));
+        const version = mvhd[b.hdr];
+        const nextIdOff = b.hdr + 4 + (version === 1 ? 28 : 16) + 76;
+        if (nextIdOff + 4 <= mvhd.length) writeUint32BE(mvhd, nextIdOff, 3);
+        moovParts.push(mvhd);
+      } else if (b.type === 'trak') {
+        moovParts.push(vTrak);
+        moovParts.push(aTrak);
+      } else if (b.type === 'mvex') {
+        // appended cleanly after tracks
+      } else {
+        moovParts.push(videoInit.subarray(b.start, b.end));
+      }
+    }
+    moovParts.push(mergedMvex);
+    const mergedMoov = makeMp4Box('moov', moovParts);
+
+    const ftypBox = vBoxes.find((b) => b.type === 'ftyp');
+    const ftyp = ftypBox ? videoInit.subarray(ftypBox.start, ftypBox.end) : new Uint8Array(0);
+    const out = new Uint8Array(ftyp.byteLength + mergedMoov.byteLength);
+    out.set(ftyp, 0);
+    out.set(mergedMoov, ftyp.byteLength);
+    return out;
+  }
+
+  /**
+   * Rewrites `tfhd.track_ID` (and `sidx.reference_ID` if present) in-place on a copy
+   * of an fMP4 media fragment (`moof` + `mdat`), keeping box lengths and `trun.data_offset` intact.
+   */
+  function rewriteMoofTrackId(fragmentU8, newTrackId) {
+    const out = new Uint8Array(fragmentU8);
+    for (const top of iterMp4Boxes(out)) {
+      if (top.type === 'sidx' && top.size >= top.hdr + 8) {
+        writeUint32BE(out, top.start + top.hdr + 4, newTrackId);
+      } else if (top.type === 'moof') {
+        for (const child of iterMp4Boxes(out, top.start + top.hdr, top.end)) {
+          if (child.type === 'traf') {
+            for (const leaf of iterMp4Boxes(out, child.start + child.hdr, child.end)) {
+              if (leaf.type === 'tfhd' && leaf.size >= leaf.hdr + 8) {
+                writeUint32BE(out, leaf.start + leaf.hdr + 4, newTrackId);
+              }
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }
+
   /**
    * Strips a fake image/header prefix prepended before 188-byte MPEG-TS packets
    * (e.g. a PNG/JPEG/BMP header before `0x47` sync bytes). Leaves valid TS or
@@ -727,12 +893,23 @@
     return { segs, map, fmp4, live: !ended, targetDuration, mediaSequence: mediaSeq, hasMediaSeq };
   }
 
-  /** The variant to download (by height) and whether its audio is a separate playlist. */
+  /** The variant to download (by height) and its optional separate `#EXT-X-MEDIA:TYPE=AUDIO` playlist. */
   async function pickMedia(job, state) {
+    if (job.resume && job.resume.mediaUrl) {
+      const text = await fetchText(job.resume.mediaUrl, job, state);
+      let audioMedia = null;
+      if (job.resume.audioMediaUrl) {
+        audioMedia = {
+          url: job.resume.audioMediaUrl,
+          text: await fetchText(job.resume.audioMediaUrl, job, state),
+        };
+      }
+      return { url: job.resume.mediaUrl, text, height: job.resume.height || job.height || null, audioMedia };
+    }
     const text = await fetchText(job.url, job, state);
-    if (!/#EXT-X-STREAM-INF/.test(text)) return { url: job.url, text };
+    if (!/#EXT-X-STREAM-INF/.test(text)) return { url: job.url, text, audioMedia: null };
     const lines = text.split(/\r?\n/).map((l) => l.trim());
-    const audioWithUri = new Set();
+    const audioGroups = new Map(); // groupId -> array of renditions
     for (const l of lines) {
       if (l.startsWith('#EXT-X-SESSION-KEY')) parseKeyAttr(attrs(l), job.url);
     }
@@ -740,46 +917,91 @@
     lines.forEach((line, i) => {
       if (line.startsWith('#EXT-X-MEDIA:')) {
         const a = attrs(line);
-        if ((a.TYPE || '').toUpperCase() === 'AUDIO' && a.URI) audioWithUri.add(a['GROUP-ID']);
+        if ((a.TYPE || '').toUpperCase() === 'AUDIO' && a.URI && a['GROUP-ID']) {
+          const gid = a['GROUP-ID'];
+          const list = audioGroups.get(gid) || [];
+          list.push({
+            url: resolve(job.url, a.URI),
+            name: a.NAME || '',
+            language: a.LANGUAGE || '',
+            default: a.DEFAULT === 'YES',
+            autoselect: a.AUTOSELECT === 'YES',
+          });
+          audioGroups.set(gid, list);
+        }
       } else if (line.startsWith('#EXT-X-STREAM-INF')) {
         const a = attrs(line);
         let j = i + 1;
         while (j < lines.length && (!lines[j] || lines[j].startsWith('#'))) j++;
         if (j < lines.length) {
-          variants.push({ url: resolve(job.url, lines[j]), height: Number((a.RESOLUTION || '').split('x')[1]) || 0,
-                          bandwidth: Number(a.BANDWIDTH) || 0, audio: a.AUDIO || '' });
+          variants.push({
+            url: resolve(job.url, lines[j]),
+            height: Number((a.RESOLUTION || '').split('x')[1]) || 0,
+            bandwidth: Number(a.BANDWIDTH) || 0,
+            codecs: a.CODECS || '',
+            audio: a.AUDIO || '',
+          });
         }
       }
     });
     if (!variants.length) throw new JobError('not_hls', 'Không thấy chất lượng nào trong danh sách.');
     variants.sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth);
-    const v = (job.height && variants.find((x) => x.height === job.height)) || variants[0];
-    if (v.audio && audioWithUri.has(v.audio)) {
-      throw new JobError('separate_audio', 'Hình và tiếng nằm riêng — hãy dùng "App" (app VidGrab trên máy) hoặc "Qua VidGrab".');
+
+    const isHevcOrAv1 = (c) => /\b(?:hvc1|hev1|av01)\b/i.test(c || '');
+    const isAvc = (c) => /\bavc1\b/i.test(c || '');
+    let v = null;
+    if (job.height) {
+      const sameHeight = variants.filter((x) => x.height === job.height);
+      v = sameHeight.find((x) => isAvc(x.codecs)) || sameHeight[0] || null;
     }
-    return { url: v.url, text: await fetchText(v.url, job, state), height: v.height };
+    if (!v) {
+      // In-browser mux.js TS transmuxer only remuxes H.264 AVC; prefer AVC when an AVC rendition is offered.
+      const top = variants[0];
+      if (isHevcOrAv1(top.codecs)) {
+        const bestAvc = variants.find((x) => isAvc(x.codecs) && x.height === top.height)
+          || variants.find((x) => isAvc(x.codecs));
+        v = bestAvc || top;
+      } else {
+        v = top;
+      }
+    }
+
+    let audioMedia = null;
+    if (v.audio && audioGroups.has(v.audio)) {
+      const group = audioGroups.get(v.audio);
+      const picked = group.find((r) => r.default) || group.find((r) => r.autoselect) || group[0];
+      if (picked && picked.url && picked.url !== v.url) {
+        audioMedia = { url: picked.url, text: await fetchText(picked.url, job, state) };
+      }
+    }
+    return { url: v.url, text: await fetchText(v.url, job, state), height: v.height, audioMedia };
   }
 
-  /** Writes chunks in order to an OPFS file. */
-  async function opfsWriter(name) {
+  /** Writes chunks in order to an OPFS file, optionally resuming at `resumeBytes`. */
+  async function opfsWriter(name, resumeBytes = 0) {
     const dir = await navigator.storage.getDirectory();
     const handle = await dir.getFileHandle(name, { create: true });
-    const w = await handle.createWritable();
-    let bytes = 0;
+    const keep = resumeBytes > 0;
+    const w = await handle.createWritable(keep ? { keepExistingData: true } : undefined);
+    if (keep && typeof w.seek === 'function') {
+      await w.seek(resumeBytes);
+    }
+    let bytes = keep ? resumeBytes : 0;
     return {
       async write(u8) { if (u8 && u8.byteLength) { await w.write(u8); bytes += u8.byteLength; } },
       async close() { await w.close(); return handle.getFile(); },
       async abort() { try { await w.abort(); } catch { /* closed */ } try { await dir.removeEntry(name); } catch { /* gone */ } },
+      async sealPartial() { await w.close(); return handle.getFile(); },
       get bytes() { return bytes; },
     };
   }
 
   /** TS -> fragmented MP4 through mux.js; output is written as it comes. */
-  function tsRemuxer(writer) {
-    const t = new root.muxjs.mp4.Transmuxer({ remux: true });
-    let initDone = false;
+  function tsRemuxer(writer, opts = {}) {
+    const t = new root.muxjs.mp4.Transmuxer({ remux: true, keepOriginalTimestamps: true });
+    let initDone = Boolean(opts.skipInit);
     let pending = Promise.resolve();
-    let produced = 0;
+    let produced = initDone ? 1 : 0;
     t.on('data', (seg) => {
       const parts = [];
       if (!initDone) { parts.push(seg.initSegment); initDone = true; }
@@ -790,6 +1012,101 @@
     return {
       async push(u8) { t.push(u8); t.flush(); await pending; },
       async end() { await pending; if (!produced) throw new JobError('remux_failed', 'Không chuyển được sang MP4.'); },
+    };
+  }
+
+  /**
+   * Muxes separate HLS video + audio playlists (fMP4 `EXT-X-MAP` or TS/ADTS via `mux.js`
+   * `remux: false`) into a single fragmented MP4 file with track 1 = video and track 2 = audio.
+   */
+  function dualTrackMuxer(writer, opts = {}) {
+    let vInit = opts.vInit ? new Uint8Array(opts.vInit) : null;
+    let aInit = opts.aInit ? new Uint8Array(opts.aInit) : null;
+    let initWritten = Boolean(opts.skipInit);
+    let produced = initWritten ? 1 : 0;
+    let vFmp4 = Boolean(opts.videoFmp4 || vInit);
+    let aFmp4 = Boolean(opts.audioFmp4 || aInit);
+    const pendingFrags = []; // { track: 1 | 2, data: Uint8Array }
+
+    const makeTrackTransmuxer = (expectedType) => {
+      if (!root.muxjs || !root.muxjs.mp4 || !root.muxjs.mp4.Transmuxer) {
+        throw new JobError('separate_audio', 'Trình duyệt thiếu bộ ghép kênh — hãy dùng App Windows.');
+      }
+      const tm = new root.muxjs.mp4.Transmuxer({ remux: false, keepOriginalTimestamps: true });
+      const out = [];
+      tm.on('data', (seg) => {
+        if (!seg.type || seg.type === expectedType) out.push(seg);
+      });
+      return {
+        feed(u8) {
+          out.length = 0;
+          tm.push(u8);
+          tm.flush();
+          return out.slice();
+        },
+      };
+    };
+
+    let vTrans = null;
+    let aTrans = null;
+
+    const flushReady = async () => {
+      if (!initWritten) {
+        if (!vInit || !aInit) return;
+        const mergedInit = mergeMp4InitSegments(vInit, aInit);
+        await writer.write(mergedInit);
+        initWritten = true;
+      }
+      while (pendingFrags.length) {
+        const f = pendingFrags.shift();
+        const bytes = f.track === 2 ? rewriteMoofTrackId(f.data, 2) : f.data;
+        await writer.write(bytes);
+        produced += 1;
+      }
+    };
+
+    return {
+      async pushPair(rawVideo, rawAudio) {
+        if (rawVideo && rawVideo.byteLength) {
+          if (!vFmp4 && isIsoBmffSegment(rawVideo)) vFmp4 = true;
+          if (vFmp4) {
+            pendingFrags.push({ track: 1, data: rawVideo });
+          } else {
+            if (!vTrans) vTrans = makeTrackTransmuxer('video');
+            const segs = vTrans.feed(stripDisguisedTsPrefix(rawVideo));
+            for (const s of segs) {
+              if (!vInit && s.initSegment) vInit = new Uint8Array(s.initSegment);
+              if (s.data && s.data.byteLength) pendingFrags.push({ track: 1, data: new Uint8Array(s.data) });
+            }
+          }
+        }
+        if (rawAudio && rawAudio.byteLength) {
+          if (!aFmp4 && isIsoBmffSegment(rawAudio)) aFmp4 = true;
+          if (aFmp4) {
+            pendingFrags.push({ track: 2, data: rawAudio });
+          } else {
+            if (!aTrans) aTrans = makeTrackTransmuxer('audio');
+            const segs = aTrans.feed(stripDisguisedTsPrefix(rawAudio));
+            for (const s of segs) {
+              if (!aInit && s.initSegment) aInit = new Uint8Array(s.initSegment);
+              if (s.data && s.data.byteLength) pendingFrags.push({ track: 2, data: new Uint8Array(s.data) });
+            }
+          }
+        }
+        await flushReady();
+      },
+      async end() {
+        if (!initWritten && (vInit || aInit)) {
+          await writer.write(vInit && aInit ? mergeMp4InitSegments(vInit, aInit) : (vInit || aInit));
+          initWritten = true;
+        }
+        while (pendingFrags.length) {
+          const f = pendingFrags.shift();
+          await writer.write(f.track === 2 ? rewriteMoofTrackId(f.data, 2) : f.data);
+          produced += 1;
+        }
+        if (!produced) throw new JobError('remux_failed', 'Không ghép được luồng hình và tiếng sang MP4.');
+      },
     };
   }
 
@@ -822,15 +1139,31 @@
     };
 
     let writer = null;
+    let media = null;
+    let isLive = false;
+    let total = 0;
+    let written = 0;
+    let fmp4Mode = false;
     try {
-      const media = await pickMedia(job, state);
+      media = await pickMedia(job, state);
       const allowLive = job.allowLive !== false;
       const plan = mediaPlan(media.text, media.url, { allowLive });
-      writer = await opfsWriter(fileName);
+      isLive = Boolean(plan.live);
+      const audioPlan = (!isLive && media.audioMedia)
+        ? mediaPlan(media.audioMedia.text, media.audioMedia.url, { allowLive: false })
+        : null;
+
+      total = audioPlan ? Math.max(plan.segs.length, audioPlan.segs.length) : plan.segs.length;
+      const startIdx = (!isLive && job.resume && Number(job.resume.written) > 0 && Number(job.resume.bytes) > 0)
+        ? Math.min(Number(job.resume.written), total)
+        : 0;
+      const resumeBytes = startIdx > 0 ? Number(job.resume.bytes) : 0;
+
+      writer = await opfsWriter(fileName, resumeBytes);
 
       const rawSink = { push: (u8) => writer.write(u8), end: async () => {} };
-      let fmp4Mode = plan.fmp4;
-      let sink = fmp4Mode ? rawSink : null;
+      fmp4Mode = Boolean(plan.fmp4 || (startIdx > 0 && job.resume && job.resume.fmp4Mode));
+      let sink = fmp4Mode && !audioPlan ? rawSink : null;
 
       if (plan.live) {
         const startedAt = Date.now();
@@ -840,7 +1173,6 @@
         let lastMapKey = '';
         const seenUrls = [];
         const seenUrlSet = new Set();
-        let written = 0;
         let idlePolls = 0;
 
         send({
@@ -953,27 +1285,56 @@
         return;
       }
 
-      const total = plan.segs.length;
-      send({ type: 'HLS_PROGRESS', id: job.id, done: 0, total, bytes: 0, height: media.height || null });
+      written = startIdx;
+      send({
+        type: 'HLS_PROGRESS',
+        id: job.id,
+        done: written,
+        total,
+        bytes: writer.bytes,
+        height: media.height || null,
+      });
 
-      if (plan.map) {
+      let dualSink = null;
+      if (audioPlan) {
+        const [vInit, aInit] = startIdx === 0
+          ? await Promise.all([
+            plan.map ? loadSegment(plan.map, true) : Promise.resolve(null),
+            audioPlan.map ? loadSegment(audioPlan.map, true) : Promise.resolve(null),
+          ])
+          : [null, null];
+        dualSink = dualTrackMuxer(writer, {
+          vInit,
+          aInit,
+          videoFmp4: plan.fmp4,
+          audioFmp4: audioPlan.fmp4,
+          skipInit: startIdx > 0,
+        });
+      } else if (plan.map && startIdx === 0) {
         fmp4Mode = true;
         sink = rawSink;
         await sink.push(await loadSegment(plan.map, true));
+      } else if (startIdx > 0 && !fmp4Mode) {
+        sink = tsRemuxer(writer, { skipInit: true });
       }
 
       // parallel fetch + decrypt, in-order write: at most POOL segments in flight or waiting
       const ready = new Map();
-      let next = 0;          // next index to start
-      let written = 0;       // next index to write
+      let next = startIdx;   // next index to start
       let failure = null;
       await new Promise((done) => {
         const pump = () => {
           if (failure || state.cancelled) { done(); return; }
           while (next < total && next - written < POOL) {
             const i = next++;
-            loadSegment(plan.segs[i], false).then((u8) => {
-              ready.set(i, u8);
+            const fetchTask = audioPlan
+              ? Promise.all([
+                i < plan.segs.length ? loadSegment(plan.segs[i], false) : Promise.resolve(null),
+                i < audioPlan.segs.length ? loadSegment(audioPlan.segs[i], false) : Promise.resolve(null),
+              ])
+              : loadSegment(plan.segs[i], false);
+            fetchTask.then((payload) => {
+              ready.set(i, payload);
               drain();
             }, (e) => { failure = failure || e; done(); });
           }
@@ -985,14 +1346,19 @@
           draining = true;
           try {
             while (ready.has(written)) {
-              const rawU8 = ready.get(written);
+              const payload = ready.get(written);
               ready.delete(written);
-              if (!sink) {
-                fmp4Mode = fmp4Mode || isIsoBmffSegment(rawU8);
-                sink = fmp4Mode ? rawSink : tsRemuxer(writer);
+              if (dualSink) {
+                await dualSink.pushPair(payload[0], payload[1]);
+              } else {
+                const rawU8 = payload;
+                if (!sink) {
+                  fmp4Mode = fmp4Mode || isIsoBmffSegment(rawU8);
+                  sink = fmp4Mode ? rawSink : tsRemuxer(writer);
+                }
+                const u8 = fmp4Mode ? rawU8 : stripDisguisedTsPrefix(rawU8);
+                await sink.push(u8);
               }
-              const u8 = fmp4Mode ? rawU8 : stripDisguisedTsPrefix(rawU8);
-              await sink.push(u8);
               written += 1;
               if (written % 3 === 0 || written === total) {
                 send({ type: 'HLS_PROGRESS', id: job.id, done: written, total, bytes: writer.bytes });
@@ -1006,21 +1372,52 @@
       });
       if (state.cancelled) throw new JobError('cancelled', 'Đã huỷ.');
       if (failure) throw failure;
-      await sink.end();
+      if (dualSink) await dualSink.end();
+      else if (sink) await sink.end();
       const file = await writer.close();
       writer = null;
       const url = URL.createObjectURL(file);
       jobs.set(job.id, { ...state, url, name: fileName });
       send({ type: 'HLS_DONE', id: job.id, url, bytes: file.size, ext: 'mp4' });
     } catch (e) {
-      if (writer) await writer.abort();
+      const reason = (e && e.reason) || 'error';
+      let checkpoint = null;
+      let partialBytes = 0;
+      if (writer) {
+        const canCheckpoint = !isLive && written > 0 && total > written
+          && reason !== 'cancelled' && reason !== 'drm' && media && media.url;
+        if (canCheckpoint) {
+          try {
+            const partialFile = await writer.sealPartial();
+            writer = null;
+            partialBytes = partialFile ? partialFile.size : 0;
+            if (partialBytes > 0) {
+              checkpoint = {
+                mediaUrl: media.url,
+                audioMediaUrl: media.audioMedia ? media.audioMedia.url : null,
+                height: media.height || job.height || null,
+                written,
+                total,
+                bytes: partialBytes,
+                fmp4Mode,
+              };
+            }
+          } catch { /* fall back to abort */ }
+        }
+        if (writer) await writer.abort();
+      }
       jobs.delete(job.id);
       send({
         type: 'HLS_FAILED',
         id: job.id,
-        reason: e.reason || 'error',
+        reason,
         drmSystem: e.drmSystem || null,
         encryptionReason: e.encryptionReason || null,
+        resumable: Boolean(checkpoint),
+        checkpoint,
+        done: checkpoint ? written : undefined,
+        total: checkpoint ? total : undefined,
+        bytes: checkpoint ? partialBytes : undefined,
         message: e instanceof JobError ? e.message : String((e && e.message) || e).slice(0, 120),
       });
     }
@@ -1029,17 +1426,17 @@
   async function release(id) {
     const j = jobs.get(id);
     jobs.delete(id);
-    if (!j) return;
-    if (j.url) URL.revokeObjectURL(j.url);
-    if (j.name && typeof navigator !== 'undefined' && navigator.storage && navigator.storage.getDirectory) {
-      try { await (await navigator.storage.getDirectory()).removeEntry(j.name); } catch { /* gone */ }
+    if (j && j.url) URL.revokeObjectURL(j.url);
+    const name = (j && j.name) || (id ? `hls-${id}.mp4` : '');
+    if (name && typeof navigator !== 'undefined' && navigator.storage && navigator.storage.getDirectory) {
+      try { await (await navigator.storage.getDirectory()).removeEntry(name); } catch { /* gone */ }
     }
   }
 
   const exported = {
     mediaPlan, byterange, seqToIv, parseHexIv, parseKeyAttr,
     decryptSegment, decryptAesCbcRaw, decryptSampleAesTs, mpeg2Crc32,
-    stripDisguisedTsPrefix, isIsoBmffSegment,
+    stripDisguisedTsPrefix, isIsoBmffSegment, mergeMp4InitSegments, rewriteMoofTrackId,
   };
   root.__vgHls = exported;
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;
@@ -1063,10 +1460,20 @@
   }
 
   if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.getDirectory === 'function') {
-    // leftovers of a run the browser closed mid-way
+    // Clean up orphaned OPFS files not retained by a resumable checkpoint in the service worker.
     navigator.storage.getDirectory().then(async (dir) => {
+      let keepSet = null;
+      if (hasChrome && typeof chrome.runtime.sendMessage === 'function') {
+        try {
+          const resp = await chrome.runtime.sendMessage({ type: 'VG_HLS_KEEP_FILES' });
+          if (resp && Array.isArray(resp.keep)) keepSet = new Set(resp.keep);
+        } catch { /* SW asleep or unavailable */ }
+      }
+      if (!keepSet) return;
       for await (const [name] of dir.entries()) {
-        if (/^hls-.*\.mp4$/.test(name) && !jobs.size) { try { await dir.removeEntry(name); } catch { /* busy */ } }
+        if (/^hls-.*\.mp4$/.test(name) && !jobs.size && !keepSet.has(name)) {
+          try { await dir.removeEntry(name); } catch { /* busy */ }
+        }
       }
     }).catch(() => {});
   }

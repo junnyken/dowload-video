@@ -257,6 +257,22 @@ pub fn from_netscape(text: &str) -> Vec<RawCookie> {
     out
 }
 
+/// Validates and re-serializes an ephemeral Netscape cookie jar handed off by the
+/// browser extension for a stream download (capped at 24 KiB and 80 cookies).
+/// Malformed lines or control characters are dropped; returns `None` when zero valid cookies remain.
+pub fn sanitize_netscape(raw: &str) -> Option<String> {
+    if raw.is_empty() || raw.len() > 24 * 1024 {
+        return None;
+    }
+    let mut parsed = from_netscape(raw);
+    if parsed.is_empty() {
+        return None;
+    }
+    parsed.truncate(80);
+    let (text, kept, _) = to_netscape(&parsed);
+    (kept > 0).then_some(text)
+}
+
 // ---------------------------------------------------------------- store
 
 /// What the UI may know about a saved blob. Never a cookie name or value.
@@ -791,5 +807,15 @@ mod tests {
         assert!(dir.join("keep.txt").exists());
         assert_eq!(sweep_temp(&dir.join("missing")), 0);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sanitize_netscape_validates_and_caps_ephemeral_jar() {
+        let raw = "# Netscape HTTP Cookie File\n.cdn.example.com\tTRUE\t/\tTRUE\t0\tcf_clearance\tabc123\nbad line\n";
+        let clean = sanitize_netscape(raw).expect("valid cookie");
+        assert!(clean.contains(".cdn.example.com\tTRUE\t/\tTRUE\t0\tcf_clearance\tabc123"));
+        assert!(!clean.contains("bad line"));
+        assert!(sanitize_netscape("# Netscape HTTP Cookie File\nnot-a-cookie").is_none());
+        assert!(sanitize_netscape(&"x".repeat(25 * 1024)).is_none());
     }
 }

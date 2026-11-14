@@ -7,6 +7,7 @@
 // off  → Rust stops reading the clipboard.
 import { decide, normalize } from './clipboard-core';
 import { planExtJob } from './ext-handoff-core';
+import { joinPath } from './watch-core';
 import { api, onClipboardLink, onExtDownload, type ExtJob } from './tauri';
 import { ensureOutDir, settings } from './settings';
 import { createStore } from './store';
@@ -123,13 +124,14 @@ async function handleExtDownload(job: ExtJob) {
     go('queue');
     return;
   }
+  const targetDir = plan.seriesFolder ? joinPath(outDir, plan.seriesFolder) : outDir;
   enqueue({
     url: plan.url,
     title: plan.title,
     thumbnail: null,
     platform: plan.platform,
     uploader: null,
-    outDir,
+    outDir: targetDir,
     formatId: plan.formatId,
     audioOnly: plan.audioOnly,
     formatLabel: plan.formatLabel,
@@ -139,6 +141,8 @@ async function handleExtDownload(job: ExtJob) {
     fileTitle: plan.fileTitle,
     fileId: plan.fileId,
     localOnly: true,
+    extCookieJar: job.cookieJar || undefined,
+    extSubtitles: plan.subtitles.length ? plan.subtitles : undefined,
   });
   if (document.hidden) void api.notify('VidGrab', `Đang tải "${plan.title.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
   else toast('success', `Đã thêm "${plan.title.slice(0, 60)}" từ tiện ích vào hàng đợi tải.`);

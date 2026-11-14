@@ -190,5 +190,94 @@ if (typeof S.cleanMediaTitle === 'function') {
   );
 }
 
+console.log('Upgrades #1, #3, #4: parseSeriesEpisode, classifySubtitle, vttToSrt, detectVideoCodec, parseM3U8 audio+subs');
+assert(typeof S.parseSeriesEpisode === 'function', 'parseSeriesEpisode exported');
+const ep1 = S.parseSeriesEpisode('Hành Trình Biển Đông - Tập 05');
+assert(ep1 && ep1.seriesTitle === 'Hành Trình Biển Đông' && ep1.episodeLabel === 'Tập 05', 'parseSeriesEpisode Vietnamese Tập', ep1);
+const ep2 = S.parseSeriesEpisode('Dungeon Meshi S01E08');
+assert(ep2 && ep2.seriesTitle === 'Dungeon Meshi' && ep2.episodeLabel === 'S01E08', 'parseSeriesEpisode S01E08', ep2);
+const ep3 = S.parseSeriesEpisode('葬送のフリーレン 第03話');
+assert(ep3 && ep3.seriesTitle === '葬送のフリーレン' && ep3.episodeLabel === '第03話', 'parseSeriesEpisode Japanese 第03話', ep3);
+assert(S.parseSeriesEpisode('[DOC-451] Midnight Harbor Story') === null, 'standalone movie returns null');
+
+const subOk = S.classifySubtitle({
+  url: 'https://subs.cdn.example/tracks/movie.vi.vtt?token=1',
+  tabId: 5,
+  statusCode: 200,
+  responseHeaders: [{ name: 'content-type', value: 'text/vtt; charset=utf-8' }],
+});
+assert(subOk && subOk.lang === 'vi' && subOk.format === 'vtt', 'classifySubtitle detects .vi.vtt standalone track', subOk);
+const subAss = S.classifySubtitle({
+  url: 'https://subs.cdn.example/anime/ep01.en.ass',
+  tabId: 5,
+  statusCode: 200,
+  responseHeaders: [{ name: 'content-type', value: 'text/x-ass' }],
+});
+assert(subAss && subAss.lang === 'en' && subAss.format === 'ass', 'classifySubtitle detects .en.ass track', subAss);
+assert(
+  S.classifySubtitle({
+    url: 'https://subs.cdn.example/hls/seg-12.vtt',
+    tabId: 5,
+    statusCode: 200,
+    responseHeaders: [{ name: 'content-type', value: 'text/vtt' }],
+  }) === null,
+  'classifySubtitle ignores segmented HLS WebVTT chunks (seg-12.vtt)',
+);
+
+const sampleVtt = `WEBVTT
+
+STYLE
+::cue { color: yellow; }
+
+1
+00:01.250 --> 00:04.500 align:middle
+<c.yellow>Xin chào</c> <b>thế giới</b>!
+
+WEBVTT
+X-TIMESTAMP-MAP=MPEGTS:90000,LOCAL:00:00:00.000
+
+00:01.250 --> 00:04.500
+Xin chào thế giới!
+
+00:05:10.000 --> 00:05:12.800
+Tập tiếp theo
+`;
+const convertedSrt = S.vttToSrt(sampleVtt);
+assert(
+  convertedSrt.includes('00:00:01,250 --> 00:00:04,500\nXin chào thế giới!')
+    && convertedSrt.includes('00:05:10,000 --> 00:05:12,800\nTập tiếp theo')
+    && !convertedSrt.includes('WEBVTT')
+    && !convertedSrt.includes('<c.yellow>')
+    && convertedSrt.split('Xin chào thế giới!').length === 2,
+  'vttToSrt strips WEBVTT/STYLE/tags, normalizes timestamps, and deduplicates multi-segment boundary cues',
+  convertedSrt,
+);
+
+assert(
+  S.detectVideoCodec('hvc1.1.6.L120.90,mp4a.40.2') === 'hevc'
+    && S.detectVideoCodec('av01.0.08M.08') === 'av1'
+    && S.detectVideoCodec('avc1.640028,mp4a.40.2') === 'avc',
+  'detectVideoCodec classifies HEVC, AV1, and AVC',
+);
+
+const multiTrackMaster = S.parseM3U8(`#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-main",NAME="Japanese",LANGUAGE="ja",DEFAULT=YES,URI="audio/ja/prog.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Tiếng Việt",LANGUAGE="vi",DEFAULT=YES,URI="subs/vi/prog.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=4200000,RESOLUTION=1920x1080,CODECS="hvc1.1.6.L120.90,mp4a.40.2",AUDIO="aud-main",SUBTITLES="subs"
+video/1080p.m3u8
+`, 'https://cdn.cinema.example/anime/ep01/master.m3u8');
+assert(
+  multiTrackMaster.valid === true
+    && multiTrackMaster.videoCodec === 'hevc'
+    && multiTrackMaster.hasSeparateAudio === true
+    && Array.isArray(multiTrackMaster.subtitles)
+    && multiTrackMaster.subtitles.length === 1
+    && multiTrackMaster.subtitles[0].lang === 'vi'
+    && multiTrackMaster.subtitles[0].format === 'hls'
+    && multiTrackMaster.subtitles[0].url === 'https://cdn.cinema.example/anime/ep01/subs/vi/prog.m3u8',
+  'parseM3U8 detects HEVC codec, separate #EXT-X-MEDIA:TYPE=AUDIO, and HLS subtitle rendition URL',
+  multiTrackMaster,
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

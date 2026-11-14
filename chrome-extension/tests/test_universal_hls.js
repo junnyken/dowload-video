@@ -624,6 +624,255 @@ https://live.cdn.example/seg100.ts
     liveDrmFail,
   );
 
+  console.log('[8] Upgrade #3: Separate #EXT-X-MEDIA:TYPE=AUDIO + Video dualTrackMuxer (ISO-BMFF track 1 + track 2)');
+  function mp4Box(type, payloadList) {
+    const parts = Array.isArray(payloadList) ? payloadList : [payloadList];
+    const bodyLen = parts.reduce((s, p) => s + p.byteLength, 0);
+    const out = new Uint8Array(8 + bodyLen);
+    const total = out.byteLength;
+    out[0] = (total >>> 24) & 0xff;
+    out[1] = (total >>> 16) & 0xff;
+    out[2] = (total >>> 8) & 0xff;
+    out[3] = total & 0xff;
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    let off = 8;
+    for (const p of parts) { out.set(p, off); off += p.byteLength; }
+    return out;
+  }
+  function buildInitSegment(trackId) {
+    const ftyp = mp4Box('ftyp', new Uint8Array([0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0]));
+    // version 0 mvhd: 4(ver/flags) + 16(times+scale+dur) + 76(rate..matrix..predefined) + 4(next_track_ID) = 100 bytes
+    const mvhdBody = new Uint8Array(100);
+    mvhdBody[99] = 2;
+    const mvhd = mp4Box('mvhd', mvhdBody);
+    // version 0 tkhd: 4(ver/flags) + 8(ctime/mtime) + 4(track_ID) + 76(rest) = 92 bytes
+    const tkhdBody = new Uint8Array(92);
+    tkhdBody[15] = trackId;
+    const trak = mp4Box('trak', [mp4Box('tkhd', tkhdBody)]);
+    const trexBody = new Uint8Array(20);
+    trexBody[7] = trackId;
+    trexBody[11] = 1;
+    const mvex = mp4Box('mvex', [mp4Box('trex', trexBody)]);
+    const moov = mp4Box('moov', [mvhd, trak, mvex]);
+    const res = new Uint8Array(ftyp.byteLength + moov.byteLength);
+    res.set(ftyp, 0);
+    res.set(moov, ftyp.byteLength);
+    return res;
+  }
+  function buildMoofMdat(trackId, payloadByte) {
+    const tfhdBody = new Uint8Array(8);
+    tfhdBody[7] = trackId;
+    const traf = mp4Box('traf', [mp4Box('tfhd', tfhdBody)]);
+    const moof = mp4Box('moof', [traf]);
+    const mdat = mp4Box('mdat', new Uint8Array([payloadByte, payloadByte ^ 0x55]));
+    const out = new Uint8Array(moof.byteLength + mdat.byteLength);
+    out.set(moof, 0);
+    out.set(mdat, moof.byteLength);
+    return out;
+  }
+  function readTrackIdsFromMp4(buf) {
+    const tkhdIds = [];
+    const tfhdIds = [];
+    const readBoxes = (u8, start, end) => {
+      const list = [];
+      let p = start;
+      while (p + 8 <= end) {
+        const sz = ((u8[p] << 24) >>> 0) + (u8[p + 1] << 16) + (u8[p + 2] << 8) + u8[p + 3];
+        if (sz < 8 || p + sz > end) break;
+        const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+        list.push({ type, start: p, end: p + sz });
+        p += sz;
+      }
+      return list;
+    };
+    for (const top of readBoxes(buf, 0, buf.byteLength)) {
+      if (top.type === 'moov') {
+        for (const c of readBoxes(buf, top.start + 8, top.end)) {
+          if (c.type === 'trak') {
+            for (const l of readBoxes(buf, c.start + 8, c.end)) {
+              if (l.type === 'tkhd') {
+                const idOff = l.start + 8 + 12;
+                tkhdIds.push(((buf[idOff] << 24) >>> 0) + (buf[idOff + 1] << 16) + (buf[idOff + 2] << 8) + buf[idOff + 3]);
+              }
+            }
+          }
+        }
+      } else if (top.type === 'moof') {
+        for (const c of readBoxes(buf, top.start + 8, top.end)) {
+          if (c.type === 'traf') {
+            for (const l of readBoxes(buf, c.start + 8, c.end)) {
+              if (l.type === 'tfhd') {
+                const idOff = l.start + 8 + 4;
+                tfhdIds.push(((buf[idOff] << 24) >>> 0) + (buf[idOff + 1] << 16) + (buf[idOff + 2] << 8) + buf[idOff + 3]);
+              }
+            }
+          }
+        }
+      }
+    }
+    return { tkhdIds, tfhdIds };
+  }
+
+  // Real byte-addressable OPFS mock for Upgrades #3 & #5
+  const opfsFiles = new Map();
+  let lastWritableOpts = null;
+  let lastSeekPos = null;
+  sandbox.navigator.storage.getDirectory = async () => ({
+    async *entries() {
+      for (const [k, v] of opfsFiles.entries()) yield [k, v];
+    },
+    removeEntry: async (name) => { opfsFiles.delete(name); },
+    getFileHandle: async (name) => ({
+      createWritable: async (opts) => {
+        lastWritableOpts = opts || null;
+        let data = (opts && opts.keepExistingData && opfsFiles.has(name))
+          ? Buffer.from(opfsFiles.get(name))
+          : Buffer.alloc(0);
+        let pos = 0;
+        return {
+          seek: async (p) => { pos = p; lastSeekPos = p; },
+          write: async (u8) => {
+            const chunk = Buffer.from(u8);
+            const end = pos + chunk.length;
+            if (end > data.length) {
+              const grown = Buffer.alloc(end);
+              data.copy(grown, 0);
+              data = grown;
+            }
+            chunk.copy(data, pos);
+            pos = end;
+          },
+          close: async () => { opfsFiles.set(name, new Uint8Array(data)); },
+          abort: async () => {},
+        };
+      },
+      getFile: async () => {
+        const b = opfsFiles.get(name) || new Uint8Array(0);
+        return { size: b.byteLength, bytes: b };
+      },
+    }),
+  });
+
+  const vInit = buildInitSegment(1);
+  const aInit = buildInitSegment(1); // audio rendition originally also had track_ID=1 before remapping!
+  const vFrag0 = buildMoofMdat(1, 0x11);
+  const aFrag0 = buildMoofMdat(1, 0x22);
+
+  routes.set('https://dual.cdn.example/master.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-hi",NAME="Main Audio",DEFAULT=YES,URI="https://dual.cdn.example/audio/prog.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=3500000,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2",AUDIO="aud-hi"
+https://dual.cdn.example/video/prog.m3u8
+`));
+  routes.set('https://dual.cdn.example/video/prog.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MAP:URI="https://dual.cdn.example/video/init.mp4"
+#EXTINF:4.0,
+https://dual.cdn.example/video/seg0.m4s
+#EXT-X-ENDLIST
+`));
+  routes.set('https://dual.cdn.example/audio/prog.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MAP:URI="https://dual.cdn.example/audio/init.mp4"
+#EXTINF:4.0,
+https://dual.cdn.example/audio/seg0.m4s
+#EXT-X-ENDLIST
+`));
+  routes.set('https://dual.cdn.example/video/init.mp4', vInit);
+  routes.set('https://dual.cdn.example/audio/init.mp4', aInit);
+  routes.set('https://dual.cdn.example/video/seg0.m4s', vFrag0);
+  routes.set('https://dual.cdn.example/audio/seg0.m4s', aFrag0);
+
+  swMessages.length = 0;
+  listener({ target: 'offscreen', type: 'HLS_START', job: { id: 'dual-av', url: 'https://dual.cdn.example/master.m3u8', height: 1080, title: 'Dual Track Movie' } }, {}, () => {});
+  for (let i = 0; i < 40 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const dualDone = swMessages.find((m) => m.type === 'HLS_DONE');
+  const dualBytes = opfsFiles.get('hls-dual-av.mp4');
+  const parsedIds = dualBytes ? readTrackIdsFromMp4(dualBytes) : { tkhdIds: [], tfhdIds: [] };
+  assert(
+    !!dualDone && parsedIds.tkhdIds.join(',') === '1,2' && parsedIds.tfhdIds.join(',') === '1,2',
+    'separate #EXT-X-MEDIA:TYPE=AUDIO + video muxed into valid dual-track fMP4 (tkhd=[1,2], tfhd=[1,2])',
+    { dualDone, parsedIds, err: swMessages.find((m) => m.type === 'HLS_FAILED') },
+  );
+
+  console.log('[9] Upgrade #5: OPFS Resume Checkpoint after transient VOD segment failure');
+  const resSeg0 = new Uint8Array([0x00, 0x00, 0x00, 0x10, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0]);
+  const resSeg1 = buildMoofMdat(1, 0xa1);
+  const resSeg2 = buildMoofMdat(1, 0xa2);
+  const resSeg3 = buildMoofMdat(1, 0xa3);
+  routes.set('https://resume.cdn.example/vod.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4.0,
+https://resume.cdn.example/r0.m4s
+#EXTINF:4.0,
+https://resume.cdn.example/r1.m4s
+#EXTINF:4.0,
+https://resume.cdn.example/r2.m4s
+#EXTINF:4.0,
+https://resume.cdn.example/r3.m4s
+#EXT-X-ENDLIST
+`));
+  routes.set('https://resume.cdn.example/r0.m4s', resSeg0);
+  routes.set('https://resume.cdn.example/r1.m4s', resSeg1);
+  routes.set('https://resume.cdn.example/r3.m4s', resSeg3);
+  // Deliberately omit r2.m4s on first run so segment index 2 fails with 404 after r0 & r1 succeed!
+  routes.delete('https://resume.cdn.example/r2.m4s');
+
+  const fetchedUrls = [];
+  sandbox.fetch = async (url) => {
+    const u = String(url);
+    fetchedUrls.push(u);
+    return origFetch(url);
+  };
+  swMessages.length = 0;
+  listener({
+    target: 'offscreen',
+    type: 'HLS_START',
+    job: { id: 'res-1', url: 'https://resume.cdn.example/vod.m3u8', title: 'Long Movie', retryBaseMs: 5 },
+  }, {}, () => {});
+  for (let i = 0; i < 60 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const resFail = swMessages.find((m) => m.type === 'HLS_FAILED');
+  const partialSaved = opfsFiles.get('hls-res-1.mp4');
+  assert(
+    !!resFail && resFail.resumable === true && resFail.checkpoint && resFail.checkpoint.written === 2
+      && partialSaved && partialSaved.byteLength === resSeg0.byteLength + resSeg1.byteLength,
+    'mid-movie failure seals partial OPFS file and emits HLS_FAILED with resumable=true & checkpoint (written=2)',
+    resFail,
+  );
+
+  // Restore r2.m4s and resume from checkpoint
+  routes.set('https://resume.cdn.example/r2.m4s', resSeg2);
+  fetchedUrls.length = 0;
+  swMessages.length = 0;
+  lastWritableOpts = null;
+  lastSeekPos = null;
+  listener({
+    target: 'offscreen',
+    type: 'HLS_START',
+    job: { id: 'res-1', url: 'https://resume.cdn.example/vod.m3u8', title: 'Long Movie', resume: resFail.checkpoint, retryBaseMs: 5 },
+  }, {}, () => {});
+  for (let i = 0; i < 60 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const resDone = swMessages.find((m) => m.type === 'HLS_DONE');
+  const fullSaved = opfsFiles.get('hls-res-1.mp4');
+  const expectedFull = Buffer.concat([Buffer.from(resSeg0), Buffer.from(resSeg1), Buffer.from(resSeg2), Buffer.from(resSeg3)]);
+  assert(
+    !!resDone
+      && lastWritableOpts && lastWritableOpts.keepExistingData === true
+      && lastSeekPos === resSeg0.byteLength + resSeg1.byteLength
+      && !fetchedUrls.includes('https://resume.cdn.example/r0.m4s')
+      && !fetchedUrls.includes('https://resume.cdn.example/r1.m4s')
+      && fetchedUrls.includes('https://resume.cdn.example/r2.m4s')
+      && fetchedUrls.includes('https://resume.cdn.example/r3.m4s')
+      && fullSaved && Buffer.compare(Buffer.from(fullSaved), expectedFull) === 0,
+    'resumed HLS job seeks OPFS to checkpoint bytes, skips completed segments 0..1, fetches 2..3, and produces exact full MP4',
+    { resDone, lastWritableOpts, lastSeekPos, fetchedUrls },
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

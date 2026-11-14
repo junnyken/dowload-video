@@ -328,6 +328,14 @@ pub fn apply_extras(args: &mut Vec<OsString>, extras: &Extras, audio_only: bool)
     args.splice(end..end, add.iter().map(OsString::from));
 }
 
+/// Inserts `--cookies <path>` before `--` for an ephemeral extension-bridged stream
+/// cookie jar WITHOUT adding social-account `--sleep-interval` pacing, so multi-segment
+/// HLS/DASH downloads retain `--concurrent-fragments 4`.
+pub fn add_unpaced_cookies(args: &mut Vec<OsString>, cookies: &Path) {
+    let end = args.iter().rposition(|a| a == "--").unwrap_or(args.len());
+    args.splice(end..end, [OsString::from("--cookies"), cookies.as_os_str().to_owned()]);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,5 +584,27 @@ mod tests {
         let before = strs(&a);
         apply_extras(&mut a, &Extras::default(), false);
         assert_eq!(strs(&a), before);
+    }
+
+    #[test]
+    fn unpaced_cookies_keep_concurrent_fragments_and_no_sleep_interval() {
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let h = [("Referer".to_string(), "https://cinema.example/watch/1".to_string())];
+        let mut a = download_args(
+            &t,
+            "https://cdn.example/hls/master.m3u8",
+            Path::new("/out"),
+            Some("bv*[height<=1080]+ba/b"),
+            false,
+            &h,
+            Some(&OutName { title: "Series Ep 01", id: "hls-12345678" }),
+            None,
+        );
+        add_unpaced_cookies(&mut a, Path::new("/tmp/ck-ephemeral.txt"));
+        let s = strs(&a);
+        assert!(s.windows(2).any(|w| w[0] == "--cookies" && w[1] == "/tmp/ck-ephemeral.txt"));
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "4"));
+        assert!(!s.iter().any(|x| x == "--sleep-interval" || x == "--max-sleep-interval"));
+        assert_eq!(after_dashdash(&s), vec!["--", "https://cdn.example/hls/master.m3u8"]);
     }
 }

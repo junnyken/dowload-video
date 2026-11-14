@@ -2375,6 +2375,7 @@ const VG_SNIFF_TEXT = {
   tierLockedBtn: t('sniff_tierLockedBtn'),
   signinLockedBtn: t('sniff_signinLockedBtn'),
   tierLockedHint: t('sniff_tierLockedHint'),
+  sepAudio: t('sniff_sep_audio'),
 };
 
 function vgFmtBytes(b) {
@@ -2522,27 +2523,34 @@ async function renderHlsJobs() {
       : j.state === 'saving' ? VG_SNIFF_TEXT.jobSaving
       : j.state === 'done' ? `${VG_SNIFF_TEXT.jobDone} · ${vgFmtBytes(j.bytes)}`
       : j.state === 'cancelled' ? VG_SNIFF_TEXT.jobCancelled
-      : (j.message || VG_SNIFF_TEXT.failed);
+      : (j.resumable ? `${t('sniff_jobCheckpoint', pct, vgFmtBytes(j.bytes) || '0 KB')} — ${j.message || VG_SNIFF_TEXT.failed}` : (j.message || VG_SNIFF_TEXT.failed));
     const title = document.createElement('div');
     title.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0;';
     title.textContent = `${j.title}${j.height ? ` · ${vgQ(j.height)}` : ''}`;
     const line = document.createElement('div');
     line.className = 'vg-hls-label';
-    line.style.cssText = `margin-top:3px;color:${j.state === 'failed' ? '#fca5a5' : j.state === 'done' ? '#86efac' : (j.live && j.state === 'running' ? '#fda4af' : '#94a3b8')};`;
+    line.style.cssText = `margin-top:3px;color:${j.state === 'failed' ? (j.resumable ? '#fcd34d' : '#fca5a5') : j.state === 'done' ? '#86efac' : (j.live && j.state === 'running' ? '#fda4af' : '#94a3b8')};`;
     line.textContent = label;
     row.append(title, line);
-    if (j.state === 'running') {
+    if (j.state === 'running' || (j.state === 'failed' && j.resumable)) {
       if (!j.live) {
         const bar = document.createElement('div');
         bar.style.cssText = 'height:4px;background:#1e2333;border-radius:4px;margin-top:5px;overflow:hidden;';
         const fill = document.createElement('div');
-        fill.style.cssText = `height:100%;width:${pct}%;background:#6366f1;`;
+        fill.style.cssText = `height:100%;width:${pct}%;background:${j.state === 'failed' ? '#f59e0b' : '#6366f1'};`;
         bar.appendChild(fill);
         row.appendChild(bar);
       }
       const btnWrap = document.createElement('div');
       btnWrap.style.cssText = 'display:flex;gap:6px;margin-top:5px;align-items:center;';
-      if (j.live) {
+      if (j.state === 'failed' && j.resumable) {
+        const resumeBtn = document.createElement('button');
+        resumeBtn.className = 'vg-hls-resume';
+        resumeBtn.textContent = t('sniff_jobResume', pct);
+        resumeBtn.style.cssText = 'background:#6366f1;border:none;border-radius:6px;color:#fff;font-size:9px;font-weight:700;padding:3px 9px;cursor:pointer;';
+        resumeBtn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_HLS_RESUME', id: j.id }, () => renderHlsJobs());
+        btnWrap.appendChild(resumeBtn);
+      } else if (j.live) {
         const stopBtn = document.createElement('button');
         stopBtn.className = 'vg-hls-stop';
         stopBtn.textContent = VG_SNIFF_TEXT.stopAndSave;
@@ -2589,6 +2597,29 @@ async function renderSniff(tab) {
   box.style.display = 'block';
   empty.style.display = 'none';
   document.getElementById('vg-sniff-count').textContent = `(${items.length})`;
+  const autoWrap = document.getElementById('vg-sniff-auto-wrap');
+  const autoBox = document.getElementById('vg-sniff-auto-ep');
+  if (autoWrap && autoBox) {
+    if (_vgUniversalGate.allowed) {
+      autoWrap.style.display = 'flex';
+      chrome.runtime.sendMessage({ type: 'VG_SNIFF_AUTO_EP_GET', tabId: tab.id }, (ar) => {
+        autoBox.checked = Boolean(ar && ar.enabled);
+      });
+      autoBox.onchange = () => {
+        chrome.runtime.sendMessage({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: tab.id, enabled: autoBox.checked }, (ar) => {
+          const msgEl = document.getElementById('vg-sniff-msg');
+          if (!ar || !ar.ok) {
+            autoBox.checked = false;
+            if (msgEl) msgEl.textContent = vgSniffReplyText(ar, '', VG_SNIFF_TEXT.failed);
+          } else if (autoBox.checked && msgEl) {
+            msgEl.textContent = t('sniff_auto_ep_on');
+          }
+        });
+      };
+    } else {
+      autoWrap.style.display = 'none';
+    }
+  }
   list.textContent = '';
   // 5.18.1 + 5.25.0: active <video> across all frames (from VG_SNIFF_PROBE or content.js)
   const cur = (resp && resp.playing) || await vgAskCurrentVideo(tab.id);
@@ -2628,7 +2659,11 @@ function vgSniffRow(tab, it) {
   const encBadge = it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes
     : it.encryption === 'sample_aes' ? VG_SNIFF_TEXT.sampleAes
     : it.encryption === 'drm' ? (it.drmSystem || VG_SNIFF_TEXT.drm) : '';
-  const meta = [quality, encBadge, vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
+  const codecBadge = it.videoCodec === 'hevc' ? 'HEVC' : it.videoCodec === 'av1' ? 'AV1' : '';
+  const audioBadge = it.hasSeparateAudio ? VG_SNIFF_TEXT.sepAudio : '';
+  const subCount = Array.isArray(it.subtitles) ? it.subtitles.length : 0;
+  const subBadge = subCount > 0 ? t('sniff_sub_badge', subCount) : '';
+  const meta = [quality, codecBadge, audioBadge, subBadge, encBadge, vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
 
   const top = document.createElement('div');
   top.style.cssText = 'display:flex;align-items:center;gap:6px;';
@@ -2698,7 +2733,6 @@ function vgSniffRow(tab, it) {
         msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started, VG_SNIFF_TEXT.failed);
       });
     } else if (it.kind === 'hls') {
-      // in this browser first; VidGrab's server only when that cannot work
       let pick = null;
       const heights = (it.variants || []).map((v) => v.height).filter(Boolean);
       if (heights.length > 1) {
@@ -2708,11 +2742,28 @@ function vgSniffRow(tab, it) {
         [...new Set(heights)].forEach((h) => { const o = document.createElement('option'); o.value = h; o.textContent = vgQ(h); pick.appendChild(o); });
         actions.appendChild(pick);
       }
-      btn.textContent = it.live ? VG_SNIFF_TEXT.recordLive : VG_SNIFF_TEXT.local;
-      btn.onclick = () => chrome.runtime.sendMessage(
-        { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
-        (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
-      actions.appendChild(btn);
+      const preferDesktopApp = Boolean(_vgAppFound && !it.live
+        && (it.videoCodec === 'hevc' || it.videoCodec === 'av1' || it.hasSeparateAudio));
+      if (preferDesktopApp) {
+        btn.textContent = VG_SNIFF_TEXT.viaApp;
+        btn.classList.add('vg-sniff-app');
+        btn.onclick = () => vgSendToApp(tab, it, msg, pick ? Number(pick.value) : null);
+        actions.appendChild(btn);
+        const browserBtn = document.createElement('button');
+        browserBtn.className = 'vg-sniff-browser';
+        browserBtn.textContent = VG_SNIFF_TEXT.local;
+        browserBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+        browserBtn.onclick = () => chrome.runtime.sendMessage(
+          { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
+          (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
+        actions.appendChild(browserBtn);
+      } else {
+        btn.textContent = it.live ? VG_SNIFF_TEXT.recordLive : VG_SNIFF_TEXT.local;
+        btn.onclick = () => chrome.runtime.sendMessage(
+          { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
+          (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
+        actions.appendChild(btn);
+      }
       if (!it.live) {
         const srv = document.createElement('button');
         srv.className = 'vg-sniff-server';
@@ -2722,7 +2773,7 @@ function vgSniffRow(tab, it) {
         srv.onclick = () => vgSendToServer(it.url);
         actions.appendChild(srv);
       }
-      if (_vgAppFound) {
+      if (_vgAppFound && !preferDesktopApp) {
         const appBtn = document.createElement('button');
         appBtn.className = 'vg-sniff-app';
         appBtn.textContent = 'App';

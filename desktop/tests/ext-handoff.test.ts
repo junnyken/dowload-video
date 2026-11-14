@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanMediaTitle, planExtJob, streamFileId } from '../src/lib/ext-handoff-core.ts';
+import { cleanMediaTitle, parseSeriesEpisode, planExtJob, streamFileId } from '../src/lib/ext-handoff-core.ts';
 import { GUEST_FORMAT } from '../src/lib/quality.ts';
 
 test('streamFileId: deterministic, <= 64 chars, validate::file_id alphabet only', () => {
@@ -99,4 +99,56 @@ test('cleanMediaTitle & planExtJob: strips SEO spam/domain noise while keeping m
   if (plan.mode !== 'direct_queue') return;
   assert.equal(plan.title, 'Hành Trình Biển Đông Tập 05');
   assert.equal(plan.fileTitle, 'Hành Trình Biển Đông Tập 05');
+  assert.equal(plan.seriesFolder, 'Hành Trình Biển Đông');
+});
+
+test('parseSeriesEpisode & planExtJob: detects anime/series subfolder and sanitizes companion subtitles', () => {
+  assert.deepEqual(parseSeriesEpisode('Lên Đường Nhậm Chức - Tập 01'), {
+    seriesTitle: 'Lên Đường Nhậm Chức',
+    episodeLabel: 'Tập 01',
+  });
+  assert.deepEqual(parseSeriesEpisode('Frieren Beyond Journey End S01E12'), {
+    seriesTitle: 'Frieren Beyond Journey End',
+    episodeLabel: 'S01E12',
+  });
+  assert.deepEqual(parseSeriesEpisode('葬送のフリーレン 第03話'), {
+    seriesTitle: '葬送のフリーレン',
+    episodeLabel: '第03話',
+  });
+  assert.equal(parseSeriesEpisode('[DOC-451] Midnight Harbor Story'), null);
+
+  const moviePlan = planExtJob(
+    {
+      url: 'https://cdn.example/vod/movie/master.m3u8',
+      title: '[DOC-451] Midnight Harbor Story',
+      referer: 'https://cinema.example/v/doc-451',
+      stream: true,
+      subtitles: [
+        { url: 'https://cdn.example/subs/vi.vtt', lang: 'vi', format: 'vtt' },
+        { url: 'https://cdn.example/subs/vi.vtt', lang: 'vi', format: 'vtt' }, // duplicate URL dropped
+        { url: 'https://cdn.example/subs/en.ass', lang: 'en', format: 'ass' },
+        { url: 'javascript:alert(1)', lang: 'fr', format: 'srt' }, // non-http dropped
+      ],
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(moviePlan.mode, 'direct_queue');
+  if (moviePlan.mode !== 'direct_queue') return;
+  assert.equal(moviePlan.seriesFolder, null);
+  assert.deepEqual(moviePlan.subtitles, [
+    { url: 'https://cdn.example/subs/vi.vtt', lang: 'vi', format: 'vtt' },
+    { url: 'https://cdn.example/subs/en.ass', lang: 'en', format: 'ass' },
+  ]);
+
+  const reservedSeries = planExtJob(
+    {
+      url: 'https://cdn.example/vod/con/ep1.m3u8',
+      title: 'CON - Episode 01',
+      stream: true,
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(reservedSeries.mode, 'direct_queue');
+  if (reservedSeries.mode !== 'direct_queue') return;
+  assert.equal(reservedSeries.seriesFolder, '_CON');
 });

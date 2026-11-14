@@ -37,7 +37,7 @@ use std::time::Duration;
 
 pub const PORTS: [u16; 3] = [17325, 17326, 17327];
 const MAX_HEAD: usize = 8 * 1024;
-const MAX_BODY: usize = 16 * 1024;
+const MAX_BODY: usize = 32 * 1024;
 pub const MAX_URL: usize = 4096;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -58,6 +58,14 @@ pub fn set_device(hash: &str) {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExtSub {
+    pub url: String,
+    pub lang: String,
+    pub format: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Job {
     pub url: String,
     pub title: Option<String>,
@@ -68,6 +76,30 @@ pub struct Job {
     pub height: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cookie_jar: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitles: Option<Vec<ExtSub>>,
+}
+
+fn parse_subtitles(v: Option<&serde_json::Value>) -> Option<Vec<ExtSub>> {
+    let arr = v?.as_array()?;
+    let mut out = Vec::new();
+    for item in arr.iter().take(6) {
+        let url = item.get("url").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+        if !valid_http_url(&url) || out.iter().any(|s: &ExtSub| s.url == url) {
+            continue;
+        }
+        let raw_lang = item.get("lang").and_then(|x| x.as_str()).unwrap_or("sub").trim();
+        let lang = if crate::subs::valid_lang(raw_lang) { raw_lang.to_string() } else { "sub".to_string() };
+        let raw_fmt = item.get("format").and_then(|x| x.as_str()).unwrap_or("vtt").trim().to_ascii_lowercase();
+        let format = match raw_fmt.as_str() {
+            "vtt" | "srt" | "ass" | "hls" => raw_fmt,
+            _ => "vtt".to_string(),
+        };
+        out.push(ExtSub { url, lang, format });
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// Parses and validates a download payload sent by the extension over either
@@ -85,6 +117,11 @@ pub fn parse_job(v: &serde_json::Value) -> Option<Job> {
         .and_then(|h| u32::try_from(h).ok())
         .filter(|h| (144..=4320).contains(h));
     let stream = v.get("stream").and_then(|x| x.as_bool()).filter(|&b| b);
+    let cookie_jar = v
+        .get("cookieJar")
+        .and_then(|x| x.as_str())
+        .and_then(crate::cookies::sanitize_netscape);
+    let subtitles = parse_subtitles(v.get("subtitles"));
     Some(Job {
         url,
         title: clean_text(v.get("title"), 200),
@@ -92,6 +129,8 @@ pub fn parse_job(v: &serde_json::Value) -> Option<Job> {
         user_agent,
         height,
         stream,
+        cookie_jar,
+        subtitles,
     })
 }
 
@@ -379,28 +418,36 @@ mod tests {
                 user_agent: None,
                 height: None,
                 stream: None,
+                cookie_jar: None,
+                subtitles: None,
             })
         );
 
-        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true}"#;
+        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true,"cookieJar":"# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz","subtitles":[{"url":"https://cdn.x/subs/vi.vtt","lang":"vi","format":"vtt"},{"url":"javascript:x","lang":"en","format":"vtt"}]}"#;
         let (s, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, rich), 17325, "x");
         assert_eq!(s, 200);
         let j = job.expect("rich job");
+        assert_eq!(j.url, "https://cdn.x/hls/master.m3u8");
+        assert_eq!(j.title.as_deref(), Some("Tap 01"));
+        assert_eq!(j.referer.as_deref(), Some("https://embed.x/e/1"));
+        assert_eq!(j.user_agent.as_deref(), Some("Mozilla/5.0 Chrome/135"));
+        assert_eq!(j.height, Some(1080));
+        assert_eq!(j.stream, Some(true));
+        assert!(j.cookie_jar.as_deref().unwrap_or("").contains(".cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz"));
         assert_eq!(
-            j,
-            Job {
-                url: "https://cdn.x/hls/master.m3u8".into(),
-                title: Some("Tap 01".into()),
-                referer: Some("https://embed.x/e/1".into()),
-                user_agent: Some("Mozilla/5.0 Chrome/135".into()),
-                height: Some(1080),
-                stream: Some(true),
-            }
+            j.subtitles,
+            Some(vec![ExtSub {
+                url: "https://cdn.x/subs/vi.vtt".into(),
+                lang: "vi".into(),
+                format: "vtt".into(),
+            }])
         );
         let wire = serde_json::to_value(&j).unwrap();
         assert_eq!(wire["userAgent"], "Mozilla/5.0 Chrome/135");
         assert_eq!(wire["height"], 1080);
         assert_eq!(wire["stream"], true);
+        assert!(wire["cookieJar"].as_str().unwrap().contains("sid"));
+        assert_eq!(wire["subtitles"][0]["lang"], "vi");
 
         let odd = r#"{"url":"https://cdn.x/hls/master.m3u8","height":99999,"stream":false}"#;
         let (_, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, odd), 17325, "x");

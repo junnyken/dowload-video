@@ -2011,5 +2011,41 @@
   },
   "backend_down": {
     "message": "Không phản hồi"
+  },
+  "sniff_auto_ep": {
+    "message": "⚡ Tự động tải khi chuyển tập ở tab này"
+  },
+  "sniff_auto_ep_on": {
+    "message": "Đã bật tự động tải tập mới trên tab này."
+  },
+  "sniff_sep_audio": {
+    "message": "Đa kênh tiếng"
+  },
+  "sniff_sub_badge": {
+    "message": "CC ($p1$)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_jobResume": {
+    "message": "▶ Tiếp tục tải ($p1$%)",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sniff_jobCheckpoint": {
+    "message": "Đã lưu tạm $p1$% · $p2$",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
   }
 }

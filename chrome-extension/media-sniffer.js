@@ -31,7 +31,10 @@
     if (/^(www\.|m\.)?y[o]ut/i.test(h) || /(^|\.)y[t]img\./i.test(h)) return true;
     return false;
   }
-  const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init)$/i;
+  const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|ass|ssa|key|init)$/i;
+  const SUBTITLE_EXT = /\.(vtt|webvtt|srt|ass|ssa)$/i;
+  const SUBTITLE_MIMES = new Set(['text/vtt', 'application/x-subrip', 'text/srt', 'text/x-ssa', 'text/x-ass']);
+  const MAX_SUBS_PER_TAB = 12;
   const SEGMENT_PATH_HINT = /(?:^|[/_.-])(seg|frag|chunk|part|piece)[-_]?\d+(?:[-_][va]\d+)*(?:\.[a-z0-9]+)?$/i;
   const FILE_EXT = /\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i;
   const NON_MANIFEST_EXT = /\.(js|mjs|cjs|css|png|jpe?g|gif|webp|avif|bmp|svg|ico|woff2?|ttf|otf|wasm|map|mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav|ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init|pdf|zip)$/i;
@@ -154,6 +157,142 @@
       return h1;
     }
     return primary;
+  }
+
+  /**
+   * Splits a multi-episode anime/series title into `{ seriesTitle, episodeLabel }`,
+   * e.g. `"Lên Đường Nhậm Chức - Tập 01"` -> `{ seriesTitle: "Lên Đường Nhậm Chức", episodeLabel: "Tập 01" }`.
+   * Returns `null` when the title is a standalone movie or lacks a series name.
+   */
+  function parseSeriesEpisode(rawTitle) {
+    const t = String(rawTitle || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length < 5) return null;
+    const patterns = [
+      /^(.+?)(?:\s*[-–—:|•]\s*|\s+)((?:(?:phần|phan|mùa|mua|season)\s*\d+\s*[-–—:|•]?\s*)?(?:tập|tap|episode|ep\.?)\s*\d+(?:\.\d+)?(?:\s*(?:end|cuối|cuoi|final))?)\b/i,
+      /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(s\d{1,2}\s*e\d{1,4})\b/i,
+      /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(第\s*\d+(?:\.\d+)?\s*[話话集])/u,
+    ];
+    for (const re of patterns) {
+      const m = re.exec(t);
+      if (!m) continue;
+      const series = m[1].replace(/[\s\-–—:|•([{\/]+$/g, '').replace(/[<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const ep = m[2].replace(/\s+/g, ' ').trim();
+      if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+        return { seriesTitle: series, episodeLabel: ep };
+      }
+    }
+    return null;
+  }
+
+  function sanitizeSubLang(raw) {
+    const s = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!s || s.length > 16) return '';
+    const map = { vietnamese: 'vi', vietsub: 'vi', vie: 'vi', vn: 'vi', english: 'en', eng: 'en', japanese: 'ja', jpn: 'ja', korean: 'ko', kor: 'ko', chinese: 'zh', chi: 'zh', zho: 'zh', chs: 'zh-Hans', cht: 'zh-Hant', thai: 'th', tha: 'th', spanish: 'es', spa: 'es', french: 'fr', fre: 'fr', fra: 'fr', german: 'de', ger: 'de', deu: 'de', russian: 'ru', rus: 'ru', indonesian: 'id', ind: 'id' };
+    return map[s] || s;
+  }
+
+  function inferSubtitleLang(url, explicitLang, explicitLabel) {
+    const direct = sanitizeSubLang(explicitLang);
+    if (direct) return direct;
+    const lbl = String(explicitLabel || '').toLowerCase();
+    if (/việt|viet|tiếng việt|vietsub/.test(lbl)) return 'vi';
+    if (/english|tiếng anh/.test(lbl)) return 'en';
+    if (/japan|nhật|nhat/.test(lbl)) return 'ja';
+    if (/korea|hàn|han/.test(lbl)) return 'ko';
+    if (/trung|chinese/.test(lbl)) return 'zh';
+    try {
+      const u = new URL(url);
+      for (const k of ['lang', 'hl', 'srclang', 'locale', 'sub', 'ln']) {
+        const q = sanitizeSubLang(u.searchParams.get(k));
+        if (q) return q;
+      }
+      const base = (u.pathname.split('/').pop() || '').replace(/\.(vtt|webvtt|srt|ass|ssa|m3u8)$/i, '');
+      const tokMatch = /(?:^|[._-])(vietsub|vietnamese|english|vi|vie|vn|en|eng|ja|jpn|ko|kor|zh(?:-[a-z]+)?|chs|cht|th|es|fr|de|ru|id)$/i.exec(base);
+      if (tokMatch) return sanitizeSubLang(tokMatch[1]) || 'sub';
+    } catch { /* ignore */ }
+    return 'sub';
+  }
+
+  function subtitleFormatOf(url, mime) {
+    const p = pathOf(url);
+    if (/\.(ass|ssa)$/i.test(p) || /x-(?:ass|ssa)/.test(mime || '')) return 'ass';
+    if (/\.srt$/i.test(p) || /subrip|text\/srt/.test(mime || '')) return 'srt';
+    if (/\.m3u8$/i.test(p) || /mpegurl/.test(mime || '')) return 'hls';
+    return 'vtt';
+  }
+
+  /**
+   * Classifies standalone external subtitle responses (`.vtt`, `.webvtt`, `.srt`, `.ass`, `.ssa`),
+   * ignoring segmented HLS WebVTT chunks (`seg-1.vtt`) so subtitles attach cleanly to the tab's video.
+   */
+  function classifySubtitle(details) {
+    const url = details && details.url;
+    if (!url || !/^https?:/i.test(url)) return null;
+    if (details.tabId === undefined || details.tabId < 0) return null;
+    if (details.statusCode && (details.statusCode < 200 || details.statusCode >= 300)) return null;
+    if (isBlockedStream(url)) return null;
+    if (details.initiator && /^chrome-extension:/i.test(details.initiator)) return null;
+    const path = pathOf(url);
+    const mime = header(details.responseHeaders, 'content-type').split(';')[0].trim().toLowerCase();
+    const byExt = SUBTITLE_EXT.test(path);
+    const byMime = SUBTITLE_MIMES.has(mime);
+    if (!byExt && !byMime) return null;
+    if (SEGMENT_PATH_HINT.test(path)) return null;
+    const size = totalSize(details.responseHeaders, details.statusCode);
+    if (size !== null && size > MAX_MANIFEST_BYTES) return null;
+    const format = subtitleFormatOf(url, mime);
+    const lang = inferSubtitleLang(url, '', '');
+    return { url, format, lang, label: lang.toUpperCase() };
+  }
+
+  function toSrtTimestamp(h, m, s, ms) {
+    const hh = String(Number(h || 0)).padStart(2, '0');
+    const mm = String(Number(m || 0)).padStart(2, '0');
+    const ss = String(Number(s || 0)).padStart(2, '0');
+    const mmm = String(ms || '000').padEnd(3, '0').slice(0, 3);
+    return `${hh}:${mm}:${ss},${mmm}`;
+  }
+
+  /**
+   * Converts WebVTT text (including concatenated HLS WebVTT segments) into clean UTF-8 SubRip (`.srt`),
+   * stripping `WEBVTT` / `STYLE` / `NOTE` / `REGION` metadata and deduplicating repeated boundary cues.
+   */
+  function vttToSrt(vttText) {
+    const clean = String(vttText || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+    if (!clean.trim()) return '';
+    // If input is already valid SRT (no WEBVTT header and uses comma timestamps), return normalized text.
+    if (!/^\s*WEBVTT\b/i.test(clean) && /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}/.test(clean)) {
+      return clean.trim() + '\n';
+    }
+    const blocks = clean.split(/\n{2,}/);
+    const cues = [];
+    const seen = new Set();
+    const timeRe = /^(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{1,3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{1,3})(?:[ \t].*)?$/;
+    for (const rawBlock of blocks) {
+      const lines = rawBlock.split('\n').map((l) => l.trimEnd());
+      while (lines.length && !lines[0].trim()) lines.shift();
+      if (!lines.length) continue;
+      if (/^(?:WEBVTT\b|STYLE\b|NOTE\b|REGION\b|X-TIMESTAMP-MAP=)/i.test(lines[0].trim())) continue;
+      let timeIdx = lines.findIndex((l) => timeRe.test(l.trim()));
+      if (timeIdx < 0) continue;
+      const m = timeRe.exec(lines[timeIdx].trim());
+      if (!m) continue;
+      const timing = `${toSrtTimestamp(m[1], m[2], m[3], m[4])} --> ${toSrtTimestamp(m[5], m[6], m[7], m[8])}`;
+      const bodyLines = lines
+        .slice(timeIdx + 1)
+        .map((l) => l
+          .replace(/<\d{2}:\d{2}(?::\d{2})?[.,]\d{3}>/g, '')
+          .replace(/<\/?(?:c|v|lang|ruby|rt)(?:\.[^>\s]+)?(?:\s+[^>]*)?>/gi, '')
+          .trim())
+        .filter(Boolean);
+      if (!bodyLines.length) continue;
+      const body = bodyLines.join('\n');
+      const dedupeKey = `${timing}|${body}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      cues.push(`${cues.length + 1}\n${timing}\n${body}`);
+    }
+    return cues.length ? cues.join('\n\n') + '\n' : '';
   }
 
   function isDisguisedHls(url, path, mime, size) {
@@ -355,12 +494,23 @@
     return (rank[b] || 0) > (rank[a] || 0) ? b : a;
   }
 
+  function detectVideoCodec(codecs) {
+    const c = String(codecs || '').toLowerCase();
+    if (!c) return '';
+    if (/\b(?:hvc1|hev1)\b/.test(c)) return 'hevc';
+    if (/\bav01\b/.test(c)) return 'av1';
+    if (/\bavc1\b/.test(c)) return 'avc';
+    if (/\bvp0?9\b/.test(c)) return 'vp9';
+    return '';
+  }
+
   function parseM3U8(text, baseUrl) {
     const lines = String(text || '').split(/\r?\n/).map((l) => l.trim());
     if (!lines.length || !lines[0].startsWith('#EXTM3U')) return { valid: false };
     const out = {
       valid: true, master: false, variants: [], renditions: [], encryption: 'none',
       drmSystem: null, encryptionReason: 'unencrypted',
+      videoCodec: '', hasSeparateAudio: false, audioTracks: 0, subtitles: [],
       targetDuration: 0, mediaSequence: 0, duration: 0, segments: 0, live: true,
     };
     for (let i = 0; i < lines.length; i++) {
@@ -372,13 +522,31 @@
         while (j < lines.length && (!lines[j] || lines[j].startsWith('#'))) j++;
         if (j < lines.length) {
           const [w, h] = (a.RESOLUTION || '').split('x').map(Number);
-          out.variants.push({ url: resolve(baseUrl, lines[j]), width: w || null, height: h || null,
-                              bandwidth: Number(a.BANDWIDTH) || null, codecs: a.CODECS || '' });
+          const codecs = a.CODECS || '';
+          out.variants.push({
+            url: resolve(baseUrl, lines[j]),
+            width: w || null,
+            height: h || null,
+            bandwidth: Number(a.BANDWIDTH) || null,
+            codecs,
+            videoCodec: detectVideoCodec(codecs),
+            audio: a.AUDIO || '',
+            subtitles: a.SUBTITLES || '',
+          });
         }
       } else if (line.startsWith('#EXT-X-MEDIA:')) {
         const a = attrs(line);
-        if (a.URI) out.renditions.push({ url: resolve(baseUrl, a.URI), type: a.TYPE || '', name: a.NAME || '',
-                                         language: a.LANGUAGE || '' });
+        if (a.URI) {
+          out.renditions.push({
+            url: resolve(baseUrl, a.URI),
+            type: (a.TYPE || '').toUpperCase(),
+            groupId: a['GROUP-ID'] || '',
+            name: a.NAME || '',
+            language: a.LANGUAGE || '',
+            default: a.DEFAULT === 'YES',
+            autoselect: a.AUTOSELECT === 'YES',
+          });
+        }
       } else if (line.startsWith('#EXT-X-TARGETDURATION:')) {
         out.targetDuration = Number(line.slice(22).trim()) || out.targetDuration;
       } else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
@@ -401,6 +569,23 @@
     }
     if (out.master) out.live = false;   // decided by the media playlists
     out.variants.sort((a, b) => (b.height || 0) - (a.height || 0) || (b.bandwidth || 0) - (a.bandwidth || 0));
+    const firstWithCodec = out.variants.find((v) => v.videoCodec);
+    out.videoCodec = firstWithCodec ? firstWithCodec.videoCodec : '';
+    const extAudios = out.renditions.filter((r) => r.type === 'AUDIO' && r.url);
+    out.audioTracks = extAudios.length;
+    out.hasSeparateAudio = extAudios.some((r) => !out.variants.length
+      || out.variants.some((v) => !v.audio || v.audio === r.groupId));
+    out.subtitles = out.renditions
+      .filter((r) => r.type === 'SUBTITLES' && r.url)
+      .map((r) => {
+        const lang = inferSubtitleLang(r.url, r.language, r.name);
+        return {
+          url: r.url,
+          lang,
+          label: r.name || (r.language || lang || 'SUB').toUpperCase(),
+          format: subtitleFormatOf(r.url, ''),
+        };
+      });
     out.duration = Math.round(out.duration);
     return out;
   }
@@ -452,22 +637,26 @@
       valid: true, drm: hasDrm, drmSystem, drmSystems: systems, encryptionReason,
       live: /<MPD[^>]*\btype="dynamic"/.test(t),
       duration: isoDuration((/mediaPresentationDuration="([^"]+)"/.exec(t) || [])[1]),
-      videos: [], audios: 0,
+      videos: [], audios: 0, videoCodec: '',
     };
     const sets = t.split(/<(?:\w+:)?AdaptationSet\b/).slice(1);
     for (const set of sets) {
       const head = set.slice(0, set.indexOf('>') + 1);
       const isAudio = /contentType="audio"|mimeType="audio\//.test(head) || /mimeType="audio\//.test(set);
+      const headCodec = ((/\bcodecs="([^"]+)"/.exec(head) || [])[1]) || '';
       const reps = set.split(/<(?:\w+:)?Representation\b/).slice(1);
       for (const rep of reps) {
         const tag = rep.slice(0, rep.indexOf('>') + 1);
         if (isAudio || /mimeType="audio\//.test(tag)) { out.audios += 1; continue; }
         const h = Number((/\bheight="(\d+)"/.exec(tag) || /\bheight="(\d+)"/.exec(head) || [])[1]) || null;
         const bw = Number((/\bbandwidth="(\d+)"/.exec(tag) || [])[1]) || null;
-        if (h || bw) out.videos.push({ height: h, bandwidth: bw });
+        const repCodec = ((/\bcodecs="([^"]+)"/.exec(tag) || [])[1]) || headCodec;
+        if (h || bw) out.videos.push({ height: h, bandwidth: bw, videoCodec: detectVideoCodec(repCodec) });
       }
     }
     out.videos.sort((a, b) => (b.height || 0) - (a.height || 0) || (b.bandwidth || 0) - (a.bandwidth || 0));
+    const firstWithCodec = out.videos.find((v) => v.videoCodec);
+    out.videoCodec = firstWithCodec ? firstWithCodec.videoCodec : '';
     return out;
   }
 
@@ -478,9 +667,12 @@
     return `${height}p`;
   }
 
-  const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, classifyKey, detectDrmSystem,
-                    classifyEmeKeySystem, qualityLabel, isoDuration, pickReferer, cleanMediaTitle,
-                    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
+  const VGSniff = {
+    classify, canonicalUrl, totalSize, parseM3U8, parseMPD, classifyKey, detectDrmSystem,
+    classifyEmeKeySystem, qualityLabel, isoDuration, pickReferer, cleanMediaTitle,
+    parseSeriesEpisode, classifySubtitle, vttToSrt, inferSubtitleLang, detectVideoCodec,
+    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream,
+  };
   root.VGSniff = VGSniff;
   if (typeof module !== 'undefined' && module.exports) module.exports = VGSniff;
 
@@ -490,8 +682,55 @@
   const KEY = (tabId) => `vg_sniff_${tabId}`;
   const lists = new Map();          // tabId -> items (memory copy of storage.session)
   const children = new Map();       // tabId -> Set of manifest URLs a master already stands for
+  const subs = new Map();           // tabId -> Array<{ url, lang, label, format, at }>
   const frames = new Map();         // tabId -> Map(frameId -> frame URL)
   const saveTimers = new Map();
+
+  function recordSubtitle(tabId, sub, at = Date.now()) {
+    if (!sub || !sub.url || !/^https?:/i.test(sub.url)) return false;
+    let list = subs.get(tabId);
+    if (!list) { list = []; subs.set(tabId, list); }
+    const existing = list.find((s) => s.url === sub.url);
+    if (existing) {
+      if (sub.lang && sub.lang !== 'sub' && existing.lang === 'sub') existing.lang = sub.lang;
+      if (sub.label && (!existing.label || existing.label === 'SUB')) existing.label = sub.label;
+      return false;
+    }
+    if (list.length >= MAX_SUBS_PER_TAB) return false;
+    list.push({
+      url: sub.url,
+      lang: sanitizeSubLang(sub.lang) || inferSubtitleLang(sub.url, sub.lang, sub.label),
+      label: String(sub.label || sub.lang || 'SUB').slice(0, 32),
+      format: sub.format || subtitleFormatOf(sub.url, ''),
+      at,
+    });
+    return true;
+  }
+
+  function attachSubtitles(tabId, items) {
+    const tabSubs = subs.get(tabId) || [];
+    let changed = false;
+    for (const it of items || []) {
+      const merged = [];
+      const seen = new Set();
+      const add = (s) => {
+        if (!s || !s.url || seen.has(s.url) || merged.length >= 8) return;
+        seen.add(s.url);
+        merged.push({
+          url: s.url,
+          lang: sanitizeSubLang(s.lang) || 'sub',
+          label: String(s.label || s.lang || 'SUB').slice(0, 32),
+          format: s.format || 'vtt',
+        });
+      };
+      (it.hlsSubtitles || []).forEach(add);
+      tabSubs.forEach(add);
+      const prevLen = Array.isArray(it.subtitles) ? it.subtitles.length : 0;
+      if (merged.length !== prevLen) changed = true;
+      it.subtitles = merged;
+    }
+    return changed;
+  }
 
   // One load per tab, shared: responses arrive together, and two loads racing
   // would each make their own array and the later one would drop the earlier
@@ -528,6 +767,7 @@
   async function clearTab(tabId) {
     lists.delete(tabId);
     children.delete(tabId);
+    subs.delete(tabId);
     frames.delete(tabId);
     navAt.delete(tabId);
     try { await chrome.storage.session.remove(KEY(tabId)); } catch { /* gone */ }
@@ -543,6 +783,8 @@
     navAt.set(tabId, ts);
     frames.delete(tabId);
     if (url && /^https?:/i.test(url)) frames.set(tabId, new Map([[0, url]]));
+    const tabSubs = subs.get(tabId);
+    if (tabSubs) subs.set(tabId, tabSubs.filter((s) => s.at >= ts));
     const items = await load(tabId);
     const keep = items.filter((x) => x.at >= ts);
     items.length = 0;
@@ -577,12 +819,20 @@
         item.encryption = p.encryption;
         item.drmSystem = p.drmSystem || null;
         item.encryptionReason = p.encryptionReason || '';
+        item.videoCodec = p.videoCodec || '';
+        item.hasSeparateAudio = Boolean(p.hasSeparateAudio);
+        item.audioTracks = p.audioTracks || 0;
+        item.hlsSubtitles = p.subtitles || [];
         item.targetDuration = p.targetDuration || 0;
         item.live = p.live;
         item.duration = p.duration || null;
         if (p.master) {
           item.master = true;
-          item.variants = p.variants.slice(0, 8).map((v) => ({ height: v.height, bandwidth: v.bandwidth }));
+          item.variants = p.variants.slice(0, 8).map((v) => ({
+            height: v.height,
+            bandwidth: v.bandwidth,
+            videoCodec: v.videoCodec || '',
+          }));
           item.height = (p.variants[0] && p.variants[0].height) || null;
           const kids = children.get(tabId) || new Set();
           p.variants.forEach((v) => kids.add(v.url));
@@ -613,6 +863,8 @@
         item.encryption = d.drm ? 'drm' : 'none';
         item.drmSystem = d.drmSystem || null;
         item.encryptionReason = d.encryptionReason || '';
+        item.videoCodec = d.videoCodec || '';
+        item.hasSeparateAudio = d.audios > 0;
         item.live = d.live;
         item.duration = d.duration || null;
         item.variants = d.videos.slice(0, 8);
@@ -624,6 +876,7 @@
         item.drmSystem = item.drmSystem || 'EME DRM';
         item.encryptionReason = item.encryptionReason || 'EME MediaKeys active on video element';
       }
+      attachSubtitles(tabId, [item]);
       if (typeof console !== 'undefined' && typeof console.info === 'function') {
         console.info('[VidGrab][Sniffer] Classified stream:', {
           url: item.url,
@@ -631,6 +884,9 @@
           encryption: item.encryption,
           drmSystem: item.drmSystem || null,
           reason: item.encryptionReason || 'unencrypted',
+          videoCodec: item.videoCodec || 'default',
+          hasSeparateAudio: !!item.hasSeparateAudio,
+          subtitles: (item.subtitles && item.subtitles.length) || 0,
           live: !!item.live,
         });
       }
@@ -639,14 +895,27 @@
     } finally {
       item.pending = false;
       save(tabId);
+      if (!item.hidden && !item.error && item.encryption !== 'drm' && !item.live
+          && typeof root.vgOnSniffStreamReady === 'function') {
+        Promise.resolve(root.vgOnSniffStreamReady(tabId, item)).catch(() => {});
+      }
     }
   }
 
   async function onResponse(details) {
-    const c = classify(details);
-    if (!c) return;
     const tabId = details.tabId;
     const ts = details.timeStamp || Date.now();
+    const sub = classifySubtitle(details);
+    if (sub) {
+      if (ts < (navAt.get(tabId) || 0)) return;
+      if (recordSubtitle(tabId, sub, ts)) {
+        const items = await load(tabId);
+        if (attachSubtitles(tabId, items)) save(tabId);
+      }
+      return;
+    }
+    const c = classify(details);
+    if (!c) return;
     if (ts < (navAt.get(tabId) || 0)) return;          // the previous page's media
     const items = await load(tabId);
     const url = c.kind === 'file' ? canonicalUrl(details.url) : details.url;
@@ -654,8 +923,12 @@
     if (c.kind === 'hls' && children.get(tabId) && children.get(tabId).has(url)) return;
     if (items.length >= MAX_ITEMS) return;
     // pushed before any await, so the same URL arriving twice is listed once
-    const item = { id: Math.random().toString(36).slice(2, 10), url, kind: c.kind, mime: c.mime, size: c.size,
-                   title: '', pageUrl: '', refererUrl: '', at: ts, pending: c.kind !== 'file', encryption: 'none' };
+    const item = {
+      id: Math.random().toString(36).slice(2, 10),
+      url, kind: c.kind, mime: c.mime, size: c.size,
+      title: '', pageUrl: '', refererUrl: '', at: ts,
+      pending: c.kind !== 'file', encryption: 'none', subtitles: [],
+    };
     items.push(item);
     try {
       const t = await chrome.tabs.get(tabId);
@@ -670,23 +943,38 @@
       initiator: details.initiator || '',
       pageUrl: item.pageUrl,
     });
+    attachSubtitles(tabId, [item]);
     save(tabId);
-    if (item.pending) enrich(tabId, item);
+    if (item.pending) {
+      enrich(tabId, item);
+    } else if (c.kind === 'file' && (c.size || 0) >= 5 * 1024 * 1024
+               && typeof root.vgOnSniffStreamReady === 'function') {
+      setTimeout(async () => {
+        try {
+          const cur = await load(tabId);
+          if (!cur.includes(item) || item.hidden) return;
+          if (cur.some((x) => !x.hidden && (x.kind === 'hls' || x.kind === 'dash'))) return;
+          await root.vgOnSniffStreamReady(tabId, item);
+        } catch { /* ignore */ }
+      }, 900);
+    }
   }
 
   /**
    * Probes all frames (including nested cross-origin player iframes) for active
-   * <video> sources, PerformanceResourceTiming manifest/media entries missed by a
-   * cold-started service worker, and clean og:title / <h1> movie titles.
+   * <video> sources, <track> subtitles, PerformanceResourceTiming manifest/media entries
+   * missed by a cold-started service worker, and clean og:title / <h1> movie titles.
    */
   async function probeTab(tabId) {
     const items = await load(tabId);
     if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') {
+      attachSubtitles(tabId, items);
       return { items: visible(items), playing: null };
     }
     let tabMeta = null;
     try { tabMeta = await chrome.tabs.get(tabId); } catch { return { items: visible(items), playing: null }; }
     if (!tabMeta || !tabMeta.url || !/^https?:\/\//i.test(tabMeta.url)) {
+      attachSubtitles(tabId, items);
       return { items: visible(items), playing: null };
     }
 
@@ -702,6 +990,7 @@
             ogTitle: '',
             h1Title: '',
             videos: [],
+            tracks: [],
             resources: [],
           };
           if (out.isTop) {
@@ -721,10 +1010,24 @@
               height: v.videoHeight || 0,
               duration: Number.isFinite(v.duration) && v.duration > 0 ? Math.round(v.duration) : 0,
             });
+            const trs = v.querySelectorAll('track');
+            for (let j = 0; j < trs.length && out.tracks.length < 12; j++) {
+              const tr = trs[j];
+              const kind = String(tr.kind || 'subtitles').toLowerCase();
+              if (kind !== 'subtitles' && kind !== 'captions' && kind !== '') continue;
+              const tSrc = String(tr.src || '');
+              if (/^https?:\/\//i.test(tSrc)) {
+                out.tracks.push({
+                  url: tSrc,
+                  srclang: String(tr.srclang || '').slice(0, 16),
+                  label: String(tr.label || '').slice(0, 32),
+                });
+              }
+            }
           }
           try {
             const entries = performance.getEntriesByType('resource') || [];
-            for (let i = entries.length - 1; i >= 0 && out.resources.length < 30; i--) {
+            for (let i = entries.length - 1; i >= 0 && out.resources.length < 35; i--) {
               const e = entries[i];
               const name = String((e && e.name) || '');
               if (!/^https?:\/\//i.test(name)) continue;
@@ -733,7 +1036,8 @@
               if (/\.(m3u8|mpd)(\?|$)/i.test(name)
                   || /(?:^|[/?&=_.-])(m3u8|hls\d*|playlist|master|manifest|chunklist|urlset|index[-_]v\d)(?:$|[/?&=_.-])/i.test(name)
                   || initType === 'video'
-                  || /\.(mp4|m4v|webm|mov|mkv)(\?|$)/i.test(name)) {
+                  || initType === 'track'
+                  || /\.(mp4|m4v|webm|mov|mkv|vtt|webvtt|srt|ass|ssa)(\?|$)/i.test(name)) {
                 out.resources.push({ url: name, initiatorType: initType, size });
               }
             }
@@ -742,6 +1046,7 @@
         },
       });
     } catch {
+      attachSubtitles(tabId, items);
       return { items: visible(items), playing: null };
     }
 
@@ -756,6 +1061,17 @@
         let m = frames.get(tabId);
         if (!m) { m = new Map(); frames.set(tabId, m); }
         if (m.size < 64) m.set(entry.frameId, r.frameUrl);
+      }
+      for (const tr of r.tracks || []) {
+        if (!isBlockedStream(tr.url)) {
+          const lang = inferSubtitleLang(tr.url, tr.srclang, tr.label);
+          recordSubtitle(tabId, {
+            url: tr.url,
+            lang,
+            label: tr.label || lang.toUpperCase(),
+            format: subtitleFormatOf(tr.url, ''),
+          });
+        }
       }
       for (const v of r.videos || []) {
         if (v.hasMediaKeys && r.frameUrl) emeFrameUrls.add(r.frameUrl);
@@ -793,6 +1109,11 @@
     const ingestUrl = (rawUrl, kindHint, sizeHint, frameId, frameUrl) => {
       if (!rawUrl || isBlockedStream(rawUrl) || items.length >= MAX_ITEMS) return;
       const p = pathOf(rawUrl);
+      if (SUBTITLE_EXT.test(p) && !SEGMENT_PATH_HINT.test(p)) {
+        const lang = inferSubtitleLang(rawUrl, '', '');
+        recordSubtitle(tabId, { url: rawUrl, lang, label: lang.toUpperCase(), format: subtitleFormatOf(rawUrl, '') });
+        return;
+      }
       if (SEGMENT_EXT.test(p)) return;
       let kind = kindHint;
       if (!kind) {
@@ -821,6 +1142,7 @@
         encryption: emeDrm ? 'drm' : 'none',
         drmSystem: emeDrm ? 'EME DRM' : null,
         encryptionReason: emeDrm ? 'EME MediaKeys active on video element' : '',
+        subtitles: [],
       };
       items.push(item);
       changed = true;
@@ -835,11 +1157,19 @@
         if (v.src) ingestUrl(v.src, /\.(m3u8)(\?|$)/i.test(v.src) ? 'hls' : /\.(mpd)(\?|$)/i.test(v.src) ? 'dash' : 'file', null, fid, r.frameUrl);
       }
       for (const res of r.resources || []) {
+        if (res.initiatorType === 'track') {
+          if (!isBlockedStream(res.url)) {
+            const lang = inferSubtitleLang(res.url, '', '');
+            recordSubtitle(tabId, { url: res.url, lang, label: lang.toUpperCase(), format: subtitleFormatOf(res.url, '') });
+          }
+          continue;
+        }
         const k = res.initiatorType === 'video' && !/\.(m3u8|mpd)(\?|$)/i.test(res.url) ? 'file' : '';
         ingestUrl(res.url, k, res.size || null, fid, r.frameUrl);
       }
     }
 
+    if (attachSubtitles(tabId, items)) changed = true;
     if (changed) save(tabId);
     for (const item of toEnrich) enrich(tabId, item);
     return { items: visible(items), playing };
@@ -867,7 +1197,11 @@
   );
   chrome.tabs.onRemoved.addListener((tabId) => { clearTab(tabId); });
 
-  root.vgSniffList = async (tabId) => visible(await load(tabId));
+  root.vgSniffList = async (tabId) => {
+    const items = await load(tabId);
+    attachSubtitles(tabId, items);
+    return visible(items);
+  };
   root.vgSniffProbe = probeTab;
   root.vgSniffClear = clearTab;
 })(typeof self !== 'undefined' ? self : globalThis);

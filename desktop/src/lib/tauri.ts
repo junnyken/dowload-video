@@ -38,6 +38,9 @@ async function on<T>(event: string, cb: (p: T) => void): Promise<UnlistenFn> {
   return () => {};
 }
 
+/** Companion subtitle track discovered by the browser extension. */
+export type ExtSubtitle = { url: string; lang: string; format: string };
+
 export const api = {
   // useCookies: Rust picks the platform from the URL host and uses its saved blob, if any.
   probe: (url: string, useCookies?: boolean) => call<ProbeResult>('probe', { url, useCookies }),
@@ -54,6 +57,8 @@ export const api = {
     folderStyle?: string; nameStyle?: string;
     // 0.21.0 Settings keys (engine.rs Extras); omitted = MP3 VBR, no subtitles.
     audioKbps?: string; subtitles?: string;
+    // 0.22.4: ephemeral browser-session cookie jar & companion external subtitles from extension handoff.
+    extCookieJar?: string; extSubtitles?: ExtSubtitle[];
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),
@@ -141,6 +146,8 @@ export type ExtJob = {
   userAgent?: string | null;
   height?: number | null;
   stream?: boolean | null;
+  cookieJar?: string | null;
+  subtitles?: ExtSubtitle[] | null;
 };
 export const onExtDownload = (cb: (job: ExtJob) => void) => on<ExtJob>('ext-download', cb);
 // In-app update download progress (task #6205).

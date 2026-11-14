@@ -1,6 +1,8 @@
 // Pure logic for browser-extension -> desktop-app stream handoff.
 // Zero runtime imports so `node --test --experimental-strip-types` runs it directly.
 
+export type ExtSubtitlePlan = { url: string; lang: string; format: string };
+
 export type ExtHandoffInput = {
   url: string;
   title?: string | null;
@@ -8,6 +10,8 @@ export type ExtHandoffInput = {
   userAgent?: string | null;
   height?: number | null;
   stream?: boolean | null;
+  cookieJar?: string | null;
+  subtitles?: ExtSubtitlePlan[] | null;
 };
 
 export type HeaderPair = { name: string; value: string };
@@ -26,6 +30,8 @@ export type ExtHandoffPlan =
       audioOnly: boolean;
       formatLabel: string;
       quality: string;
+      seriesFolder: string | null;
+      subtitles: ExtSubtitlePlan[];
     };
 
 const GUEST_MAX_HEIGHT = 1080;
@@ -136,6 +142,62 @@ export function cleanMediaTitle(raw: string | null | undefined, pageUrl?: string
   return s.length > 140 ? s.slice(0, 140).trim().replace(/[.\-\s]+$/, '') : s;
 }
 
+const WIN_RESERVED_STEM = /^(CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])$/i;
+const SUB_LANG_RE = /^[a-z0-9_-]{1,16}$/i;
+
+/** Splits a multi-episode anime/series title into `{ seriesTitle, episodeLabel }` (`null` for standalone movies). */
+export function parseSeriesEpisode(rawTitle: string | null | undefined): { seriesTitle: string; episodeLabel: string } | null {
+  const t = String(rawTitle || '').replace(/\s+/g, ' ').trim();
+  if (!t || t.length < 5) return null;
+  const patterns = [
+    /^(.+?)(?:\s*[-–—:|•]\s*|\s+)((?:(?:phần|phan|mùa|mua|season)\s*\d+\s*[-–—:|•]?\s*)?(?:tập|tap|episode|ep\.?)\s*\d+(?:\.\d+)?(?:\s*(?:end|cuối|cuoi|final))?)\b/i,
+    /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(s\d{1,2}\s*e\d{1,4})\b/i,
+    /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(第\s*\d+(?:\.\d+)?\s*[話话集])/u,
+  ];
+  for (const re of patterns) {
+    const m = re.exec(t);
+    if (!m) continue;
+    const series = m[1]
+      .replace(/[\s\-–—:|•([{/]+$/g, '')
+      .replace(/[<>:"/\\|?*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const ep = m[2].replace(/\s+/g, ' ').trim();
+    if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+      return { seriesTitle: series, episodeLabel: ep };
+    }
+  }
+  return null;
+}
+
+function sanitizeSeriesFolder(raw: string): string | null {
+  // eslint-disable-next-line no-control-regex
+  const normalized = String(raw || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  let clean = Array.from(normalized).slice(0, 60).join('').replace(/[. ]+$/, '').trim();
+  if (!clean) return null;
+  const stem = clean.split('.')[0] ?? clean;
+  if (WIN_RESERVED_STEM.test(stem)) {
+    clean = Array.from(`_${clean}`).slice(0, 60).join('').replace(/[. ]+$/, '');
+  }
+  return clean || null;
+}
+
+function normalizeSubtitles(subs: ExtSubtitlePlan[] | null | undefined): ExtSubtitlePlan[] {
+  if (!Array.isArray(subs) || subs.length === 0) return [];
+  const out: ExtSubtitlePlan[] = [];
+  for (const raw of subs.slice(0, 6)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const u = parseHttpUrl(raw.url);
+    if (!u || out.some((x) => x.url === u.toString())) continue;
+    const rawLang = typeof raw.lang === 'string' ? raw.lang.trim() : '';
+    const lang = SUB_LANG_RE.test(rawLang) ? rawLang : 'sub';
+    const rawFmt = typeof raw.format === 'string' ? raw.format.trim().toLowerCase() : 'vtt';
+    const format = rawFmt === 'srt' || rawFmt === 'ass' || rawFmt === 'hls' ? rawFmt : 'vtt';
+    out.push({ url: u.toString(), lang, format });
+  }
+  return out;
+}
+
 function parseHttpUrl(raw: string | null | undefined): URL | null {
   if (!raw) return null;
   const s = String(raw).trim();
@@ -223,6 +285,9 @@ export function planExtJob(
   }
 
   const fmt = resolveStreamFormat(job.height, opts.defaultQuality, opts.guest);
+  const parsedEp = parseSeriesEpisode(title);
+  const seriesFolder = parsedEp ? sanitizeSeriesFolder(parsedEp.seriesTitle) : null;
+  const subtitles = normalizeSubtitles(job.subtitles);
   return {
     mode: 'direct_queue',
     url: target.toString(),
@@ -235,5 +300,7 @@ export function planExtJob(
     audioOnly: fmt.audioOnly,
     formatLabel: fmt.formatLabel,
     quality: fmt.quality,
+    seriesFolder,
+    subtitles,
   };
 }
