@@ -1648,8 +1648,41 @@
     "description": "wording: BA review"
   },
   "sniff_live": {
-    "message": "Đang phát trực tiếp — chưa hỗ trợ",
+    "message": "TRỰC TIẾP",
     "description": "wording: BA review"
+  },
+  "sniff_sampleAes": {
+    "message": "SAMPLE-AES",
+    "description": "wording: BA review"
+  },
+  "sniff_recordLive": {
+    "message": "🔴 Ghi trực tiếp",
+    "description": "wording: BA review"
+  },
+  "sniff_stopAndSave": {
+    "message": "⏹ Dừng & lưu",
+    "description": "wording: BA review"
+  },
+  "sniff_jobLiveRecording": {
+    "message": "Đang ghi • $p1$ • $p2$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sniff_drm_friendly": {
+    "message": "🔒 Được bảo vệ bằng $p1$: không thể tải về. Bạn vui lòng dùng tính năng tải ngoại tuyến (offline) chính thức của dịch vụ hoặc liên hệ chủ nội dung.",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   },
   "sniff_local": {
     "message": "Tải về máy",

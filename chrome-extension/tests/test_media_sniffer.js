@@ -77,14 +77,39 @@ s2.ts
 s3.ts
 #EXT-X-ENDLIST`;
 const p = S.parseM3U8(media, 'https://cdn.x/720/index.m3u8');
-assert(!p.master && p.segments === 3 && p.duration === 16 && p.live === false, 'media playlist: 3 segments, 16 s, ended', p);
-const live = S.parseM3U8('#EXTM3U\n#EXTINF:2,\na.ts\n#EXTINF:2,\nb.ts\n', 'https://x/l.m3u8');
-assert(live.live === true, 'no ENDLIST = live');
-assert(S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k.key"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/').encryption === 'aes128', 'AES-128 flagged');
-assert(S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://x",KEYFORMAT="com.apple.streamingkeydelivery"\n#EXTINF:4,\na.ts', 'https://x/').encryption === 'drm', 'FairPlay = DRM');
-assert(S.parseM3U8('#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES-CTR,KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8', 'https://x/').encryption === 'drm', 'Widevine session key = DRM');
+assert(!p.master && p.segments === 3 && p.duration === 16 && p.live === false && p.targetDuration === 6, 'media playlist: 3 segments, 16 s, targetDuration 6, ended', p);
+const live = S.parseM3U8('#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:120\n#EXTINF:2,\na.ts\n#EXTINF:2,\nb.ts\n', 'https://x/l.m3u8');
+assert(live.live === true && live.encryption === 'none' && live.mediaSequence === 120 && live.targetDuration === 4, 'live non-DRM HLS: no ENDLIST, clear encryption, mediaSequence=120', live);
+
+const aesStd = S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k.key"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/');
+assert(aesStd.encryption === 'aes128' && aesStd.drmSystem === null && /AES-128/i.test(aesStd.encryptionReason), 'standard AES-128 (implicit identity + https) = aes128 (not DRM)', aesStd);
+
+const sampleAesId = S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="https://keys.x/s.key",KEYFORMAT="identity"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/');
+assert(sampleAesId.encryption === 'sample_aes' && sampleAesId.drmSystem === null && /SAMPLE-AES.*KEYFORMAT=identity/i.test(sampleAesId.encryptionReason), 'SAMPLE-AES with KEYFORMAT="identity" + https URI = sample_aes (NOT DRM)', sampleAesId);
+
+const sampleAesOmitted = S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="s.key"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/');
+assert(sampleAesOmitted.encryption === 'sample_aes' && sampleAesOmitted.drmSystem === null, 'SAMPLE-AES with omitted KEYFORMAT + https URI = sample_aes (NOT DRM)', sampleAesOmitted);
+
+const fpKeyformat = S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://asset-1",KEYFORMAT="com.apple.streamingkeydelivery"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/');
+assert(fpKeyformat.encryption === 'drm' && fpKeyformat.drmSystem === 'FairPlay' && /FairPlay/i.test(fpKeyformat.encryptionReason), 'FairPlay (com.apple.streamingkeydelivery + skd://) = DRM FairPlay', fpKeyformat);
+
+const fpSkdOnly = S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://license.example/k"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST', 'https://x/');
+assert(fpSkdOnly.encryption === 'drm' && fpSkdOnly.drmSystem === 'FairPlay' && /skd:\/\//i.test(fpSkdOnly.encryptionReason), 'FairPlay skd:// URI even without KEYFORMAT = DRM FairPlay', fpSkdOnly);
+
+const wvHls = S.parseM3U8('#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES-CTR,URI="data:text/plain;base64,AAA=",KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8', 'https://x/');
+assert(wvHls.encryption === 'drm' && wvHls.drmSystem === 'Widevine', 'Widevine session key = DRM Widevine', wvHls);
+
+const liveDrmHls = S.parseM3U8('#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://live-ch1",KEYFORMAT="com.apple.streamingkeydelivery"\n#EXTINF:4,\nseg1.ts\n', 'https://x/live.m3u8');
+assert(liveDrmHls.live === true && liveDrmHls.encryption === 'drm' && liveDrmHls.drmSystem === 'FairPlay', 'live HLS WITH DRM = live:true + encryption:drm (blocked)', liveDrmHls);
+
 assert(S.parseM3U8('#EXTM3U\n#EXT-X-KEY:METHOD=NONE\n#EXTINF:4,\na.ts', 'https://x/').encryption === 'none', 'METHOD=NONE is clear');
 assert(S.parseM3U8('<html>nope</html>', 'https://x/').valid === false, 'not a playlist');
+if (typeof S.classifyEmeKeySystem === 'function') {
+  const emeWv = S.classifyEmeKeySystem('com.widevine.alpha');
+  const emePr = S.classifyEmeKeySystem('com.microsoft.playready');
+  assert(emeWv.encryption === 'drm' && emeWv.drmSystem === 'Widevine', 'EME requestMediaKeySystemAccess Widevine classified', emeWv);
+  assert(emePr.encryption === 'drm' && emePr.drmSystem === 'PlayReady', 'EME requestMediaKeySystemAccess PlayReady classified', emePr);
+}
 
 console.log('DASH');
 const mpd = `<?xml version="1.0"?>
@@ -98,10 +123,25 @@ const mpd = `<?xml version="1.0"?>
  </Period>
 </MPD>`;
 const dd = S.parseMPD(mpd);
-assert(dd.valid && !dd.drm && !dd.live, 'static clear MPD');
+assert(dd.valid && !dd.drm && !dd.live && dd.drmSystem === null, 'static clear MPD');
 assert(dd.duration === 66, 'duration from PT1M5.5S', dd.duration);
 assert(dd.videos.map((v) => v.height).join(',') === '1080,360' && dd.audios === 1, 'video heights best first + 1 audio', dd);
-assert(S.parseMPD(mpd.replace('<Representation id="1"', '<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation id="1"')).drm === true, 'ContentProtection = DRM');
+const wvMpd = S.parseMPD(mpd.replace('<Representation id="1"', '<ContentProtection value="cenc" schemeIdUri="urn:mpeg:dash:mp4protection:2011"/><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation id="1"'));
+assert(wvMpd.drm === true && wvMpd.drmSystem === 'Widevine' && /Widevine/i.test(wvMpd.encryptionReason), 'MPD Widevine ContentProtection = DRM Widevine', wvMpd);
+
+// Build a synthetic 32-byte ISO BMFF PSSH box with PlayReady SystemID (9a04f079-9840-4286-ab92-e65be0885f95)
+const prPsshBuf = Buffer.concat([
+  Buffer.from([0, 0, 0, 32]),
+  Buffer.from('pssh'),
+  Buffer.from([0, 0, 0, 0]),
+  Buffer.from('9a04f07998404286ab92e65be0885f95', 'hex'),
+  Buffer.from([0, 0, 0, 0]),
+]);
+const psshOnlyMpd = S.parseMPD(mpd.replace('<Representation id="1"', `<cenc:pssh>${prPsshBuf.toString('base64')}</cenc:pssh><Representation id="1"`));
+assert(psshOnlyMpd.drm === true && psshOnlyMpd.drmSystem === 'PlayReady', 'MPD PSSH box SystemID = DRM PlayReady', psshOnlyMpd);
+
+const liveDrmMpd = S.parseMPD(mpd.replace('type="static"', 'type="dynamic"').replace('<Representation id="1"', '<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation id="1"'));
+assert(liveDrmMpd.live === true && liveDrmMpd.drm === true && liveDrmMpd.drmSystem === 'Widevine', 'live MPD WITH Widevine DRM = live:true + drm:true', liveDrmMpd);
 assert(S.parseMPD(mpd.replace('type="static"', 'type="dynamic"')).live === true, 'dynamic = live');
 assert(S.parseMPD('{"not":"xml"}').valid === false, 'not an MPD');
 assert(S.isoDuration('PT2H') === 7200 && S.isoDuration('P1DT1S') === 86401, 'ISO durations');

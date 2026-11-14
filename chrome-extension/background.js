@@ -560,15 +560,37 @@ async function hlsStart(item, height) {
   await hlsLoad();
   const referer = item.refererUrl || item.pageUrl || '';
   if (referer) await vgEnsureStreamReferer(item.url, referer);
+  let maxEmptyPolls = 3;
+  try {
+    const cfg = await chrome.storage.sync.get('vg_live_max_idle_polls');
+    const n = Number(cfg && cfg.vg_live_max_idle_polls);
+    if (Number.isInteger(n) && n >= 1 && n <= 20) maxEmptyPolls = n;
+  } catch { /* default 3 */ }
   const id = `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const cleanTitle = vgCleanStreamTitle(item);
-  const job = { id, title: cleanTitle, url: item.url, height: height || null, state: 'running',
-                done: 0, total: 0, bytes: 0, at: Date.now(), message: '' };
+  const now = Date.now();
+  const isLive = !!item.live;
+  const job = {
+    id, title: cleanTitle, url: item.url, height: height || null, state: 'running',
+    live: isLive, stopping: false, startedAt: now, elapsedSec: 0,
+    done: 0, total: 0, bytes: 0, at: now, message: '',
+  };
+  console.info('[VidGrab][HLS] Starting job:', {
+    id,
+    url: item.url,
+    live: isLive,
+    encryption: item.encryption || 'none',
+    reason: item.encryptionReason || 'unencrypted',
+    maxEmptyPolls,
+  });
   hlsJobs.set(id, job);
   hlsSave();
   await ensureOffscreen();
-  await chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_START',
-                                     job: { id, url: item.url, height: job.height, title: job.title, referer } });
+  await chrome.runtime.sendMessage({
+    target: 'offscreen',
+    type: 'HLS_START',
+    job: { id, url: item.url, height: job.height, title: job.title, referer, live: isLive, allowLive: true, maxEmptyPolls },
+  });
   return job;
 }
 
@@ -945,7 +967,7 @@ function vgBulkCounts(b) {
 // The offscreen page cannot use chrome.i18n: it sends a reason code, the text is made here.
 const VG_HLS_REASONS = ['not_hls', 'encrypted', 'live', 'empty', 'too_long', 'separate_audio', 'remux_failed', 'cancelled'];
 function vgHlsMessage(msg) {
-  if (msg.reason === 'drm') return t('sniff_drm');
+  if (msg.reason === 'drm') return t('sniff_drm_friendly', msg.drmSystem || 'DRM');
   if (VG_HLS_REASONS.includes(msg.reason)) return t('hls_' + msg.reason);
   if (msg.reason === 'error') return t('hls_error', msg.message || '');
   return msg.message || '';
@@ -1029,12 +1051,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!job) return;
     if (msg.type === 'HLS_PROGRESS') {
       Object.assign(job, { done: msg.done, total: msg.total, bytes: msg.bytes });
+      if (typeof msg.live === 'boolean') job.live = msg.live;
+      if (typeof msg.elapsedSec === 'number') job.elapsedSec = msg.elapsedSec;
       if (msg.height) job.height = msg.height;
     } else if (msg.type === 'HLS_FAILED') {
-      Object.assign(job, { state: msg.reason === 'cancelled' ? 'cancelled' : 'failed', message: vgHlsMessage(msg) });
+      if (msg.reason === 'drm') {
+        console.warn('[VidGrab][DRM] Blocked HLS job:', {
+          id: msg.id,
+          drmSystem: msg.drmSystem || 'DRM',
+          reason: msg.encryptionReason || 'DRM protected',
+        });
+      }
+      Object.assign(job, {
+        state: msg.reason === 'cancelled' ? 'cancelled' : 'failed',
+        stopping: false,
+        drmSystem: msg.drmSystem || null,
+        encryptionReason: msg.encryptionReason || null,
+        message: vgHlsMessage(msg),
+      });
       closeOffscreenIfIdle();
     } else if (msg.type === 'HLS_DONE') {
-      Object.assign(job, { state: 'saving', bytes: msg.bytes, done: job.total });
+      Object.assign(job, { state: 'saving', stopping: false, bytes: msg.bytes, done: job.total || job.done });
+      if (typeof msg.elapsedSec === 'number') job.elapsedSec = msg.elapsedSec;
       const filename = `VidGrab/${hlsSafeName(job.title)}${job.height ? ` (${job.height}p)` : ''}.${msg.ext || 'mp4'}`;
       chrome.downloads.download({ url: msg.url, filename, saveAs: false }, (downloadId) => {
         const finish = (state, message) => {
@@ -1653,7 +1691,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.kind !== 'hls') { sendResponse({ ok: false, error: 'not_hls' }); return; }
-      if (item.encryption === 'drm' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      if (item.encryption === 'drm') {
+        console.warn('[VidGrab][DRM] Blocked VG_HLS_START:', {
+          url: item.url,
+          drmSystem: item.drmSystem || 'DRM',
+          reason: item.encryptionReason || 'DRM protected',
+          live: !!item.live,
+        });
+        sendResponse({ ok: false, error: 'drm_protected', drmSystem: item.drmSystem || 'DRM', reason: item.encryptionReason || '' });
+        return;
+      }
       const job = await hlsStart(item, msg.height);
       sendResponse({ ok: true, job });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
@@ -1674,13 +1721,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
-      if (!item || item.encryption === 'drm' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      if (!item) { sendResponse({ ok: false, error: 'not_found' }); return; }
+      if (item.encryption === 'drm') {
+        console.warn('[VidGrab][DRM] Blocked VG_APP_SEND:', {
+          url: item.url,
+          drmSystem: item.drmSystem || 'DRM',
+          reason: item.encryptionReason || 'DRM protected',
+          live: !!item.live,
+        });
+        sendResponse({ ok: false, error: 'drm_protected', drmSystem: item.drmSystem || 'DRM' });
+        return;
+      }
       sendResponse(await vgSendToApp(item, msg.height));
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
   if (msg.type === 'VG_HLS_JOBS') {
     hlsLoad().then(() => sendResponse({ jobs: [...hlsJobs.values()].sort((a, b) => b.at - a.at) }));
+    return true;
+  }
+  if (msg.type === 'VG_HLS_STOP') {
+    hlsLoad().then(() => {
+      const j = hlsJobs.get(msg.id);
+      if (j && j.state === 'running') {
+        j.stopping = true;
+        hlsSave();
+      }
+      chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_STOP', id: msg.id }).catch(() => {});
+      sendResponse({ ok: true });
+    });
     return true;
   }
   if (msg.type === 'VG_HLS_CANCEL') {

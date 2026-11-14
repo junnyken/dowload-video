@@ -242,25 +242,127 @@
     try { return new URL(ref, base).toString(); } catch { return ref; }
   }
 
-  /** Encryption of a key line: 'none' | 'aes128' | 'drm'. */
-  function keyKind(a) {
-    const method = (a.METHOD || 'NONE').toUpperCase();
-    const fmt = (a.KEYFORMAT || 'identity').toLowerCase();
-    if (method === 'NONE') return 'none';
-    if (method.startsWith('SAMPLE-AES') || fmt !== 'identity') return 'drm';
-    return 'aes128';
+  /** Identifies a known DRM system from KEYFORMAT / schemeIdUri / URI / EME keySystem. */
+  function detectDrmSystem(fmtOrScheme, uri) {
+    const f = String(fmtOrScheme || '').toLowerCase();
+    const u = String(uri || '').toLowerCase();
+    if (f === 'com.apple.streamingkeydelivery' || /^skd:/.test(u) || f.includes('94ce86fb-07ff-4f43-adb8-93d2fa968ca2') || f.startsWith('com.apple.fps')) {
+      return 'FairPlay';
+    }
+    if (f.includes('edef8ba9-79d6-4ace-a3c8-27dcd51d21ed') || f.includes('widevine') || u.includes('widevine')) {
+      return 'Widevine';
+    }
+    if (f.includes('9a04f079-9840-4286-ab92-e65be0885f95') || f.includes('playready') || f.includes('com.microsoft')) {
+      return 'PlayReady';
+    }
+    if (f.includes('e2719d58-a985-b3c9-781a-b030af78d30e') || f.includes('1077efec-c0b2-4d02-ace3-3c1e52e2fb4b') || f.includes('clearkey')) {
+      return 'ClearKey DRM';
+    }
+    return null;
+  }
+
+  /** Classifies an EME `navigator.requestMediaKeySystemAccess(keySystem)` identifier as DRM. */
+  function classifyEmeKeySystem(keySystem) {
+    const ks = String(keySystem || '').trim();
+    if (!ks) return { encryption: 'none', drmSystem: null, encryptionReason: 'no EME keySystem' };
+    const sys = detectDrmSystem(ks, '') || 'EME DRM';
+    return {
+      encryption: 'drm',
+      drmSystem: sys,
+      encryptionReason: `${sys} (EME requestMediaKeySystemAccess: ${ks})`,
+    };
+  }
+
+  /**
+   * Classifies an `#EXT-X-KEY` / `#EXT-X-SESSION-KEY` attribute map:
+   *  - METHOD=NONE -> 'none'
+   *  - AES-128 or SAMPLE-AES with KEYFORMAT="identity" (or omitted) and http(s) URI -> 'aes128' | 'sample_aes' (NOT DRM)
+   *  - FairPlay (skd:// or com.apple.streamingkeydelivery), Widevine/PlayReady UUIDs,
+   *    SAMPLE-AES-CTR / SAMPLE-AES-CENC, or any KEYFORMAT !== "identity" / non-http(s) URI -> 'drm'
+   */
+  function classifyKey(a, baseUrl) {
+    const method = String((a && a.METHOD) || 'NONE').trim().toUpperCase();
+    if (method === 'NONE') {
+      return { encryption: 'none', drmSystem: null, encryptionReason: 'unencrypted (METHOD=NONE)' };
+    }
+    const rawFmt = String((a && a.KEYFORMAT) || '').trim();
+    const fmt = (rawFmt || 'identity').toLowerCase();
+    const rawUri = String((a && a.URI) || '').trim();
+    const resolvedUri = rawUri ? resolve(baseUrl || 'https://example.invalid/', rawUri) : '';
+
+    if (fmt === 'com.apple.streamingkeydelivery' || /^skd:/i.test(rawUri)) {
+      return {
+        encryption: 'drm',
+        drmSystem: 'FairPlay',
+        encryptionReason: /^skd:/i.test(rawUri)
+          ? 'FairPlay (URI skd://)'
+          : 'FairPlay (KEYFORMAT=com.apple.streamingkeydelivery)',
+      };
+    }
+    if (fmt !== 'identity') {
+      const sys = detectDrmSystem(fmt, rawUri) || 'DRM';
+      return {
+        encryption: 'drm',
+        drmSystem: sys,
+        encryptionReason: `${sys} (KEYFORMAT=${rawFmt})`,
+      };
+    }
+    if (method === 'SAMPLE-AES-CTR' || method === 'SAMPLE-AES-CENC') {
+      const sys = detectDrmSystem(fmt, rawUri) || 'CENC DRM';
+      return {
+        encryption: 'drm',
+        drmSystem: sys,
+        encryptionReason: `${sys} (METHOD=${method})`,
+      };
+    }
+    if (!rawUri || !/^https?:\/\//i.test(resolvedUri)) {
+      const sys = detectDrmSystem(fmt, rawUri) || 'DRM';
+      const scheme = (rawUri.match(/^([a-z0-9+.-]+):/i) || [])[1];
+      return {
+        encryption: 'drm',
+        drmSystem: sys,
+        encryptionReason: scheme ? `${sys} (non-HTTP key URI ${scheme}://)` : `${sys} (missing HTTP key URI for ${method})`,
+      };
+    }
+    if (method === 'AES-128') {
+      return {
+        encryption: 'aes128',
+        drmSystem: null,
+        encryptionReason: `AES-128 (${rawFmt ? 'KEYFORMAT=identity' : 'default identity'}, HTTP/S key)`,
+      };
+    }
+    if (method === 'SAMPLE-AES') {
+      return {
+        encryption: 'sample_aes',
+        drmSystem: null,
+        encryptionReason: `SAMPLE-AES (${rawFmt ? 'KEYFORMAT=identity' : 'default identity'}, HTTP/S key)`,
+      };
+    }
+    return {
+      encryption: 'drm',
+      drmSystem: 'DRM',
+      encryptionReason: `DRM (unsupported METHOD=${method})`,
+    };
+  }
+
+  /** Encryption of a key line: 'none' | 'aes128' | 'sample_aes' | 'drm'. */
+  function keyKind(a, baseUrl) {
+    return classifyKey(a, baseUrl).encryption;
   }
 
   function worse(a, b) {
-    const rank = { none: 0, aes128: 1, drm: 2 };
-    return rank[b] > rank[a] ? b : a;
+    const rank = { none: 0, aes128: 1, sample_aes: 2, drm: 3 };
+    return (rank[b] || 0) > (rank[a] || 0) ? b : a;
   }
 
   function parseM3U8(text, baseUrl) {
     const lines = String(text || '').split(/\r?\n/).map((l) => l.trim());
     if (!lines.length || !lines[0].startsWith('#EXTM3U')) return { valid: false };
-    const out = { valid: true, master: false, variants: [], renditions: [], encryption: 'none',
-                  duration: 0, segments: 0, live: true };
+    const out = {
+      valid: true, master: false, variants: [], renditions: [], encryption: 'none',
+      drmSystem: null, encryptionReason: 'unencrypted',
+      targetDuration: 0, mediaSequence: 0, duration: 0, segments: 0, live: true,
+    };
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line.startsWith('#EXT-X-STREAM-INF')) {
@@ -273,12 +375,23 @@
           out.variants.push({ url: resolve(baseUrl, lines[j]), width: w || null, height: h || null,
                               bandwidth: Number(a.BANDWIDTH) || null, codecs: a.CODECS || '' });
         }
-      } else if (line.startsWith('#EXT-X-MEDIA')) {
+      } else if (line.startsWith('#EXT-X-MEDIA:')) {
         const a = attrs(line);
         if (a.URI) out.renditions.push({ url: resolve(baseUrl, a.URI), type: a.TYPE || '', name: a.NAME || '',
                                          language: a.LANGUAGE || '' });
+      } else if (line.startsWith('#EXT-X-TARGETDURATION:')) {
+        out.targetDuration = Number(line.slice(22).trim()) || out.targetDuration;
+      } else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
+        const seq = parseInt(line.slice(22).trim(), 10);
+        if (Number.isFinite(seq) && seq >= 0) out.mediaSequence = seq;
       } else if (line.startsWith('#EXT-X-KEY') || line.startsWith('#EXT-X-SESSION-KEY')) {
-        out.encryption = worse(out.encryption, keyKind(attrs(line)));
+        const ck = classifyKey(attrs(line), baseUrl);
+        const nextEnc = worse(out.encryption, ck.encryption);
+        if (nextEnc !== out.encryption || (ck.encryption === 'drm' && !out.drmSystem && ck.drmSystem)) {
+          out.encryption = nextEnc;
+          out.encryptionReason = ck.encryptionReason;
+          if (ck.drmSystem) out.drmSystem = ck.drmSystem;
+        }
       } else if (line.startsWith('#EXTINF')) {
         out.segments += 1;
         out.duration += parseFloat(line.slice(8)) || 0;
@@ -299,13 +412,48 @@
     return Math.round((+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0));
   }
 
+  function detectPsshSystem(b64) {
+    try {
+      const clean = String(b64 || '').replace(/\s+/g, '');
+      const bin = typeof atob === 'function' ? atob(clean) : Buffer.from(clean, 'base64').toString('binary');
+      if (bin.length < 28 || bin.slice(4, 8) !== 'pssh') return 'PSSH DRM';
+      let hex = '';
+      for (let i = 12; i < 28; i++) hex += bin.charCodeAt(i).toString(16).padStart(2, '0');
+      if (hex === 'edef8ba979d64acea3c827dcd51d21ed') return 'Widevine';
+      if (hex === '9a04f07998404286ab92e65be0885f95') return 'PlayReady';
+      if (hex === '94ce86fb07ff4f43adb893d2fa968ca2') return 'FairPlay';
+      return 'PSSH DRM';
+    } catch {
+      return 'PSSH DRM';
+    }
+  }
+
   function parseMPD(text) {
     const t = String(text || '');
     if (!/<MPD[\s>]/.test(t)) return { valid: false };
-    const out = { valid: true, drm: /<(?:\w+:)?ContentProtection[\s>]/.test(t),
-                  live: /<MPD[^>]*\btype="dynamic"/.test(t),
-                  duration: isoDuration((/mediaPresentationDuration="([^"]+)"/.exec(t) || [])[1]),
-                  videos: [], audios: 0 };
+    const cpTags = t.match(/<(?:\w+:)?ContentProtection\b[^>]*>/gi) || [];
+    const psshMatches = [...t.matchAll(/<(?:\w+:)?pssh\b[^>]*>([\s\S]*?)<\/(?:\w+:)?pssh>/gi)];
+    const systems = [];
+    const addSys = (s) => { if (s && !systems.includes(s)) systems.push(s); };
+    for (const tag of cpTags) {
+      const scheme = ((/\bschemeIdUri="([^"]+)"/i.exec(tag) || [])[1]) || tag;
+      addSys(detectDrmSystem(scheme, ''));
+    }
+    for (const pm of psshMatches) {
+      const sys = detectPsshSystem(pm[1]);
+      if (sys && sys !== 'PSSH DRM') addSys(sys);
+    }
+    const hasDrm = cpTags.length > 0 || psshMatches.length > 0;
+    const drmSystem = hasDrm ? (systems.length ? systems.join(', ') : (psshMatches.length ? 'PSSH DRM' : 'DASH DRM')) : null;
+    const encryptionReason = hasDrm
+      ? `${drmSystem} (${cpTags.length ? 'MPD ContentProtection' : ''}${cpTags.length && psshMatches.length ? ' + ' : ''}${psshMatches.length ? 'PSSH' : ''})`
+      : 'unencrypted MPD';
+    const out = {
+      valid: true, drm: hasDrm, drmSystem, drmSystems: systems, encryptionReason,
+      live: /<MPD[^>]*\btype="dynamic"/.test(t),
+      duration: isoDuration((/mediaPresentationDuration="([^"]+)"/.exec(t) || [])[1]),
+      videos: [], audios: 0,
+    };
     const sets = t.split(/<(?:\w+:)?AdaptationSet\b/).slice(1);
     for (const set of sets) {
       const head = set.slice(0, set.indexOf('>') + 1);
@@ -330,8 +478,9 @@
     return `${height}p`;
   }
 
-  const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, qualityLabel, isoDuration,
-                    pickReferer, cleanMediaTitle, MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
+  const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, classifyKey, detectDrmSystem,
+                    classifyEmeKeySystem, qualityLabel, isoDuration, pickReferer, cleanMediaTitle,
+                    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
   root.VGSniff = VGSniff;
   if (typeof module !== 'undefined' && module.exports) module.exports = VGSniff;
 
@@ -426,6 +575,9 @@
         const p = parseM3U8(text, item.url);
         if (!p.valid) { item.hidden = true; return; }
         item.encryption = p.encryption;
+        item.drmSystem = p.drmSystem || null;
+        item.encryptionReason = p.encryptionReason || '';
+        item.targetDuration = p.targetDuration || 0;
         item.live = p.live;
         item.duration = p.duration || null;
         if (p.master) {
@@ -437,12 +589,18 @@
           p.renditions.forEach((r) => kids.add(r.url));
           children.set(tabId, kids);
           // the best variant tells the duration and whether its segments are encrypted
-          if (p.variants[0] && item.encryption === 'none') {
+          if (p.variants[0] && item.encryption !== 'drm') {
             try {
               const v = parseM3U8(await fetchText(p.variants[0].url, ref), p.variants[0].url);
               if (v.valid) {
-                item.encryption = worse(item.encryption, v.encryption);
+                const merged = worse(item.encryption, v.encryption);
+                if (merged !== item.encryption || (v.encryption === 'drm' && v.drmSystem)) {
+                  item.encryption = merged;
+                  item.encryptionReason = v.encryptionReason || item.encryptionReason;
+                  if (v.drmSystem) item.drmSystem = v.drmSystem;
+                }
                 item.duration = v.duration || item.duration;
+                item.targetDuration = v.targetDuration || item.targetDuration;
                 item.live = v.live;
               }
             } catch { /* keep what the master said */ }
@@ -453,11 +611,28 @@
         const d = parseMPD(text);
         if (!d.valid) { item.hidden = true; return; }
         item.encryption = d.drm ? 'drm' : 'none';
+        item.drmSystem = d.drmSystem || null;
+        item.encryptionReason = d.encryptionReason || '';
         item.live = d.live;
         item.duration = d.duration || null;
         item.variants = d.videos.slice(0, 8);
         item.height = (d.videos[0] && d.videos[0].height) || null;
         item.audios = d.audios;
+      }
+      if (item.emeDrm && item.encryption !== 'drm') {
+        item.encryption = 'drm';
+        item.drmSystem = item.drmSystem || 'EME DRM';
+        item.encryptionReason = item.encryptionReason || 'EME MediaKeys active on video element';
+      }
+      if (typeof console !== 'undefined' && typeof console.info === 'function') {
+        console.info('[VidGrab][Sniffer] Classified stream:', {
+          url: item.url,
+          kind: item.kind,
+          encryption: item.encryption,
+          drmSystem: item.drmSystem || null,
+          reason: item.encryptionReason || 'unencrypted',
+          live: !!item.live,
+        });
       }
     } catch (e) {
       item.error = String(e && e.message || e).slice(0, 80);
@@ -542,6 +717,7 @@
             out.videos.push({
               src: /^https?:\/\//i.test(src) ? src : '',
               playing: !v.paused && !v.ended,
+              hasMediaKeys: Boolean(v.mediaKeys),
               height: v.videoHeight || 0,
               duration: Number.isFinite(v.duration) && v.duration > 0 ? Math.round(v.duration) : 0,
             });
@@ -571,6 +747,7 @@
 
     let topFrame = null;
     let playing = null;
+    const emeFrameUrls = new Set();
     for (const entry of results || []) {
       const r = entry && entry.result;
       if (!r) continue;
@@ -581,8 +758,9 @@
         if (m.size < 64) m.set(entry.frameId, r.frameUrl);
       }
       for (const v of r.videos || []) {
+        if (v.hasMediaKeys && r.frameUrl) emeFrameUrls.add(r.frameUrl);
         if (v.playing || !playing) {
-          playing = { src: v.src || '', title: '', frameUrl: r.frameUrl };
+          playing = { src: v.src || '', title: '', frameUrl: r.frameUrl, emeDrm: !!v.hasMediaKeys };
           if (v.playing) break;
         }
       }
@@ -600,6 +778,13 @@
     for (const it of items) {
       if (bestTitle && (!it.title || it.title !== bestTitle)) {
         it.title = bestTitle;
+        changed = true;
+      }
+      if (emeFrameUrls.size && (emeFrameUrls.has(it.refererUrl) || emeFrameUrls.has(it.pageUrl)) && it.encryption !== 'drm') {
+        it.emeDrm = true;
+        it.encryption = 'drm';
+        it.drmSystem = it.drmSystem || 'EME DRM';
+        it.encryptionReason = 'EME MediaKeys active on video element';
         changed = true;
       }
     }
@@ -620,6 +805,7 @@
       const url = kind === 'file' ? canonicalUrl(rawUrl) : rawUrl;
       if (items.some((x) => x.url === url)) return;
       if (kind === 'hls' && children.get(tabId) && children.get(tabId).has(url)) return;
+      const emeDrm = Boolean(frameUrl && emeFrameUrls.has(frameUrl));
       const item = {
         id: Math.random().toString(36).slice(2, 10),
         url,
@@ -631,7 +817,10 @@
         refererUrl: pickReferer({ frameId, frameUrl, pageUrl: tabMeta.url || '' }),
         at: Date.now(),
         pending: kind !== 'file',
-        encryption: 'none',
+        emeDrm,
+        encryption: emeDrm ? 'drm' : 'none',
+        drmSystem: emeDrm ? 'EME DRM' : null,
+        encryptionReason: emeDrm ? 'EME MediaKeys active on video element' : '',
       };
       items.push(item);
       changed = true;

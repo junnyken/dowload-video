@@ -227,14 +227,17 @@ const send = (msg) => new Promise((resolve) => {
   p3.deliver({ t: 'app', up: true, version: '0.22.3' });
   sandbox.vgSniffList = async () => [
     { id: 'aes1', kind: 'hls', encryption: 'aes128', live: false, url: 'https://cdn.x/hls/index.txt', title: '(2) Xem phim Hành Trình Tập 01 Full HD Vietsub - cinema.example', pageUrl: 'https://cinema.example/watch/1', refererUrl: 'https://player.embed.x/v/1' },
-    { id: 'drm1', kind: 'hls', encryption: 'drm', live: false, url: 'https://cdn.x/drm.m3u8', title: 'DRM', pageUrl: 'https://cinema.example/watch/2' },
+    { id: 'sa1', kind: 'hls', encryption: 'sample_aes', live: false, url: 'https://cdn.x/hls/sa.m3u8', title: 'Episode 02', pageUrl: 'https://cinema.example/watch/2', refererUrl: 'https://player.embed.x/v/2' },
+    { id: 'live1', kind: 'hls', encryption: 'none', live: true, url: 'https://cdn.x/live/ch1.m3u8', title: 'Live Channel 1', pageUrl: 'https://cinema.example/live/1' },
+    { id: 'drm1', kind: 'dash', encryption: 'drm', drmSystem: 'Widevine', live: false, url: 'https://cdn.x/drm.mpd', title: 'DRM', pageUrl: 'https://cinema.example/watch/3' },
+    { id: 'livedrm1', kind: 'hls', encryption: 'drm', drmSystem: 'FairPlay', live: true, url: 'https://cdn.x/livedrm.m3u8', title: 'Live DRM', pageUrl: 'https://cinema.example/live/2' },
   ];
   sandbox.VGSniff = require(path.join(dir, 'media-sniffer.js'));
 
   // 9a: Guest (no auth token) -> refused before touching native port
   env.posted.length = 0;
   delete env.local.vg_auth_token;
-  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const rGuest = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
   assert(rGuest && rGuest.ok === false && rGuest.error === 'signin_required' && !env.posted.some((x) => x.t === 'download'),
     '[9a] VG_APP_SEND refuses unauthenticated guest with signin_required');
@@ -242,15 +245,15 @@ const send = (msg) => new Promise((resolve) => {
   // 9b: Pro user (not highest tier) -> refused with tier_required
   env.local.vg_auth_token = 'tok-pro-user';
   env.setUsagePayload({ tier: 'pro', universal_stream: false });
-  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const rPro = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
   assert(rPro && rPro.ok === false && rPro.error === 'tier_required' && rPro.tier === 'pro' && !env.posted.some((x) => x.t === 'download'),
     '[9b] VG_APP_SEND refuses Pro tier with tier_required');
 
-  // 9c: Team user (highest purchasable tier) -> allowed, forwards clean title + iframe refererUrl + height + userAgent + stream
+  // 9c: Team user (highest purchasable tier) -> allowed for AES-128, SAMPLE-AES identity, and non-DRM Live
   env.local.vg_auth_token = 'tok-team-user';
   env.setUsagePayload({ tier: 'team', universal_stream: true });
-  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
   env.posted.length = 0;
   const rAes = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
   const dlMsg = env.posted.find((x) => x.t === 'download');
@@ -258,8 +261,36 @@ const send = (msg) => new Promise((resolve) => {
     && dlMsg.title === 'Hành Trình Tập 01'
     && dlMsg.height === 720 && dlMsg.stream === true && typeof dlMsg.userAgent === 'string' && dlMsg.userAgent.includes('Chrome'),
     '[9c] VG_APP_SEND allows Team tier, cleans movie title, and forwards iframe refererUrl + height + userAgent + stream');
+
+  env.posted.length = 0;
+  const rSa = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'sa1', height: 1080 });
+  const rLive = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'live1' });
+  assert(rSa && rSa.ok === true && rLive && rLive.ok === true && env.posted.filter((x) => x.t === 'download').length === 2,
+    '[9d] VG_APP_SEND allows SAMPLE-AES (identity) and non-DRM live streams for Team tier');
+
+  env.posted.length = 0;
   const rDrm = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'drm1' });
-  assert(rDrm && rDrm.ok === false && rDrm.error === 'unsupported', '[9d] VG_APP_SEND still refuses DRM streams even for Team tier');
+  const rLiveDrm = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'livedrm1' });
+  assert(
+    rDrm && rDrm.ok === false && rDrm.error === 'drm_protected' && rDrm.drmSystem === 'Widevine'
+      && rLiveDrm && rLiveDrm.ok === false && rLiveDrm.error === 'drm_protected' && rLiveDrm.drmSystem === 'FairPlay'
+      && env.posted.length === 0,
+    '[9e] VG_APP_SEND strictly refuses VOD DRM (Widevine) and Live DRM (FairPlay) even for Team tier',
+  );
+
+  // 9f: VG_HLS_START allows SAMPLE-AES (identity) and non-DRM Live, blocks Live DRM, and VG_HLS_STOP marks stopping
+  const hSa = await send({ type: 'VG_HLS_START', tabId: 3, id: 'sa1', height: 720 });
+  const hLive = await send({ type: 'VG_HLS_START', tabId: 3, id: 'live1' });
+  const hLiveDrm = await send({ type: 'VG_HLS_START', tabId: 3, id: 'livedrm1' });
+  const hStop = hLive && hLive.job ? await send({ type: 'VG_HLS_STOP', id: hLive.job.id }) : null;
+  const hJobs = await send({ type: 'VG_HLS_JOBS' });
+  const stoppedJob = hJobs && hJobs.jobs && hJobs.jobs.find((j) => hLive && hLive.job && j.id === hLive.job.id);
+  assert(
+    hSa && hSa.ok === true && hLive && hLive.ok === true && hLive.job.live === true
+      && hLiveDrm && hLiveDrm.ok === false && hLiveDrm.error === 'drm_protected' && hLiveDrm.drmSystem === 'FairPlay'
+      && hStop && hStop.ok === true && stoppedJob && stoppedJob.stopping === true,
+    '[9f] VG_HLS_START allows SAMPLE-AES & non-DRM live, blocks live DRM, and VG_HLS_STOP sets stopping=true',
+  );
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

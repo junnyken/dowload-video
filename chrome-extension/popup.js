@@ -2350,7 +2350,10 @@ const VG_SNIFF_TEXT = {
   reading: t('sniff_reading'),
   drm: t('sniff_drm'),
   aes: t('sniff_aes'),
+  sampleAes: t('sniff_sampleAes'),
   live: t('sniff_live'),
+  recordLive: t('sniff_recordLive'),
+  stopAndSave: t('sniff_stopAndSave'),
   download: t('sniff_download'),
   viaServer: t('sniff_viaServer'),
   local: t('sniff_local'),
@@ -2467,8 +2470,19 @@ async function initSniff(tab) {
   renderHlsJobs();
 }
 
+function vgFmtMmSs(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const x = s % 60;
+  return h
+    ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`;
+}
+
 function vgSniffReplyText(r, okText, failText) {
   if (r && r.ok) return okText;
+  if (r && r.error === 'drm_protected') return t('sniff_drm_friendly', r.drmSystem || 'DRM');
   if (r && (r.error === 'tier_required' || r.error === 'signin_required')) return VG_SNIFF_TEXT.tierLockedHint;
   return failText;
 }
@@ -2500,7 +2514,11 @@ async function renderHlsJobs() {
     row.dataset.state = j.state;
     row.style.cssText = 'background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:7px 8px;font-size:10px;color:#cbd5e1;';
     const pct = j.total ? Math.floor((j.done / j.total) * 100) : 0;
-    const label = j.state === 'running' ? `${VG_SNIFF_TEXT.jobRunning} ${pct}% · ${vgFmtBytes(j.bytes) || '0 KB'}`
+    const liveSec = j.live ? Math.max(Number(j.elapsedSec) || 0, Math.floor((Date.now() - (j.startedAt || j.at || Date.now())) / 1000)) : 0;
+    const label = j.state === 'running'
+      ? (j.live
+        ? (j.stopping ? VG_SNIFF_TEXT.jobSaving : t('sniff_jobLiveRecording', vgFmtMmSs(liveSec), vgFmtBytes(j.bytes) || '0 KB'))
+        : `${VG_SNIFF_TEXT.jobRunning} ${pct}% · ${vgFmtBytes(j.bytes) || '0 KB'}`)
       : j.state === 'saving' ? VG_SNIFF_TEXT.jobSaving
       : j.state === 'done' ? `${VG_SNIFF_TEXT.jobDone} · ${vgFmtBytes(j.bytes)}`
       : j.state === 'cancelled' ? VG_SNIFF_TEXT.jobCancelled
@@ -2510,21 +2528,36 @@ async function renderHlsJobs() {
     title.textContent = `${j.title}${j.height ? ` · ${vgQ(j.height)}` : ''}`;
     const line = document.createElement('div');
     line.className = 'vg-hls-label';
-    line.style.cssText = `margin-top:3px;color:${j.state === 'failed' ? '#fca5a5' : j.state === 'done' ? '#86efac' : '#94a3b8'};`;
+    line.style.cssText = `margin-top:3px;color:${j.state === 'failed' ? '#fca5a5' : j.state === 'done' ? '#86efac' : (j.live && j.state === 'running' ? '#fda4af' : '#94a3b8')};`;
     line.textContent = label;
     row.append(title, line);
     if (j.state === 'running') {
-      const bar = document.createElement('div');
-      bar.style.cssText = 'height:4px;background:#1e2333;border-radius:4px;margin-top:5px;overflow:hidden;';
-      const fill = document.createElement('div');
-      fill.style.cssText = `height:100%;width:${pct}%;background:#6366f1;`;
-      bar.appendChild(fill);
+      if (!j.live) {
+        const bar = document.createElement('div');
+        bar.style.cssText = 'height:4px;background:#1e2333;border-radius:4px;margin-top:5px;overflow:hidden;';
+        const fill = document.createElement('div');
+        fill.style.cssText = `height:100%;width:${pct}%;background:#6366f1;`;
+        bar.appendChild(fill);
+        row.appendChild(bar);
+      }
+      const btnWrap = document.createElement('div');
+      btnWrap.style.cssText = 'display:flex;gap:6px;margin-top:5px;align-items:center;';
+      if (j.live) {
+        const stopBtn = document.createElement('button');
+        stopBtn.className = 'vg-hls-stop';
+        stopBtn.textContent = VG_SNIFF_TEXT.stopAndSave;
+        stopBtn.disabled = !!j.stopping;
+        stopBtn.style.cssText = 'background:#dc2626;border:none;border-radius:6px;color:#fff;font-size:9px;font-weight:700;padding:3px 9px;cursor:pointer;';
+        stopBtn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_HLS_STOP', id: j.id }, () => renderHlsJobs());
+        btnWrap.appendChild(stopBtn);
+      }
       const cancel = document.createElement('button');
       cancel.className = 'vg-hls-cancel';
       cancel.textContent = VG_SNIFF_TEXT.cancel;
-      cancel.style.cssText = 'margin-top:5px;background:none;border:1px solid #2d3348;border-radius:6px;color:#94a3b8;font-size:9px;padding:2px 8px;cursor:pointer;';
-      cancel.onclick = () => chrome.runtime.sendMessage({ type: 'VG_HLS_CANCEL', id: j.id });
-      row.append(bar, cancel);
+      cancel.style.cssText = 'background:none;border:1px solid #2d3348;border-radius:6px;color:#94a3b8;font-size:9px;padding:2px 8px;cursor:pointer;';
+      cancel.onclick = () => chrome.runtime.sendMessage({ type: 'VG_HLS_CANCEL', id: j.id }, () => renderHlsJobs());
+      btnWrap.appendChild(cancel);
+      row.appendChild(btnWrap);
     }
     box.appendChild(row);
   });
@@ -2592,7 +2625,10 @@ function vgSniffRow(tab, it) {
   const quality = it.variants && it.variants.length
     ? it.variants.map((v) => vgQ(v.height)).filter(Boolean).filter((q, i, a) => a.indexOf(q) === i).slice(0, 4).join(' · ')
     : vgQ(it.height);
-  const meta = [quality, it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes : '', vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
+  const encBadge = it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes
+    : it.encryption === 'sample_aes' ? VG_SNIFF_TEXT.sampleAes
+    : it.encryption === 'drm' ? (it.drmSystem || VG_SNIFF_TEXT.drm) : '';
+  const meta = [quality, encBadge, vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
 
   const top = document.createElement('div');
   top.style.cssText = 'display:flex;align-items:center;gap:6px;';
@@ -2600,26 +2636,45 @@ function vgSniffRow(tab, it) {
   tag.className = 'vg-sniff-kind';
   tag.textContent = kind;
   tag.style.cssText = `flex-shrink:0;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;background:${it.kind === 'file' ? '#14532d' : '#312e81'};color:${it.kind === 'file' ? '#86efac' : '#c7d2fe'};`;
+  top.appendChild(tag);
+  if (it.live) {
+    const livePill = document.createElement('span');
+    livePill.className = 'vg-sniff-live-pill';
+    livePill.textContent = VG_SNIFF_TEXT.live;
+    livePill.style.cssText = 'flex-shrink:0;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;background:#7f1d1d;color:#fecaca;';
+    top.appendChild(livePill);
+  }
   const info = document.createElement('span');
   info.className = 'vg-sniff-meta';
   info.style.cssText = 'flex:1;min-width:0;font-size:10px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
   info.textContent = meta || (it.title || '').slice(0, 60);
-  if (_vgUniversalGate.allowed) info.title = it.url;
-  top.append(tag, info);
+  if (_vgUniversalGate.allowed && it.encryption !== 'drm') info.title = it.encryptionReason ? `${it.encryptionReason}\n${it.url}` : it.url;
+  else if (it.encryptionReason) info.title = it.encryptionReason;
+  top.appendChild(info);
   row.appendChild(top);
+
+  if (it.encryption && it.encryption !== 'none' && it.encryptionReason) {
+    const reasonEl = document.createElement('div');
+    reasonEl.className = 'vg-sniff-reason';
+    reasonEl.style.cssText = `margin-top:3px;font-size:9px;color:${it.encryption === 'drm' ? '#fda4af' : '#94a3b8'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    reasonEl.textContent = it.encryptionReason;
+    row.appendChild(reasonEl);
+  }
 
   const actions = document.createElement('div');
   actions.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
   const msg = document.getElementById('vg-sniff-msg');
-  const blocked = it.encryption === 'drm' ? VG_SNIFF_TEXT.drm
-    : it.live ? VG_SNIFF_TEXT.live : '';
-  if (blocked) {
-    const note = document.createElement('span');
+  if (it.encryption === 'drm') {
+    // Item C: friendly DRM explanation naming the DRM system; never render download, copy, or bypass buttons.
+    const note = document.createElement('div');
     note.className = 'vg-sniff-blocked';
-    note.style.cssText = 'font-size:10px;color:#fca5a5;flex:1;';
-    note.textContent = blocked;
+    note.style.cssText = 'font-size:10px;line-height:1.4;color:#fca5a5;background:#2a1215;border:1px solid #5c1d24;border-radius:8px;padding:6px 8px;flex:1;';
+    note.textContent = t('sniff_drm_friendly', it.drmSystem || 'DRM');
     actions.appendChild(note);
-  } else if (!_vgUniversalGate.allowed) {
+    row.appendChild(actions);
+    return row;
+  }
+  if (!_vgUniversalGate.allowed) {
     const upBtn = document.createElement('button');
     upBtn.className = 'vg-sniff-upgrade';
     upBtn.style.cssText = 'flex:1;background:linear-gradient(135deg,#d97706,#6366f1);border:none;border-radius:8px;padding:6px 8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;';
@@ -2632,10 +2687,11 @@ function vgSniffRow(tab, it) {
     actions.appendChild(upBtn);
     row.appendChild(actions);
     return row;
-  } else if (!it.pending) {
+  }
+  if (!it.pending) {
     const btn = document.createElement('button');
     btn.className = 'vg-sniff-dl';
-    btn.style.cssText = 'flex:1;background:#6366f1;border:none;border-radius:8px;padding:5px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;';
+    btn.style.cssText = `flex:1;background:${it.live && it.kind === 'hls' ? '#dc2626' : '#6366f1'};border:none;border-radius:8px;padding:5px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;`;
     if (it.kind === 'file') {
       btn.textContent = VG_SNIFF_TEXT.download;
       btn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_SNIFF_DOWNLOAD', tabId: tab.id, id: it.id }, (r) => {
@@ -2652,24 +2708,26 @@ function vgSniffRow(tab, it) {
         [...new Set(heights)].forEach((h) => { const o = document.createElement('option'); o.value = h; o.textContent = vgQ(h); pick.appendChild(o); });
         actions.appendChild(pick);
       }
-      btn.textContent = VG_SNIFF_TEXT.local;
+      btn.textContent = it.live ? VG_SNIFF_TEXT.recordLive : VG_SNIFF_TEXT.local;
       btn.onclick = () => chrome.runtime.sendMessage(
         { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
         (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
       actions.appendChild(btn);
-      const srv = document.createElement('button');
-      srv.className = 'vg-sniff-server';
-      srv.textContent = VG_SNIFF_TEXT.viaServerShort;
-      srv.title = VG_SNIFF_TEXT.viaServer;
-      srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
-      srv.onclick = () => vgSendToServer(it.url);
-      actions.appendChild(srv);
+      if (!it.live) {
+        const srv = document.createElement('button');
+        srv.className = 'vg-sniff-server';
+        srv.textContent = VG_SNIFF_TEXT.viaServerShort;
+        srv.title = VG_SNIFF_TEXT.viaServer;
+        srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+        srv.onclick = () => vgSendToServer(it.url);
+        actions.appendChild(srv);
+      }
       if (_vgAppFound) {
         const appBtn = document.createElement('button');
         appBtn.className = 'vg-sniff-app';
         appBtn.textContent = 'App';
         appBtn.title = VG_SNIFF_TEXT.viaApp;
-        appBtn.style.cssText = srv.style.cssText;
+        appBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
         appBtn.onclick = () => vgSendToApp(tab, it, msg, pick ? Number(pick.value) : null);
         actions.appendChild(appBtn);
       }

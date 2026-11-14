@@ -1648,8 +1648,41 @@
     "description": "wording: BA review"
   },
   "sniff_live": {
-    "message": "Live stream — not supported yet",
+    "message": "LIVE",
     "description": "wording: BA review"
+  },
+  "sniff_sampleAes": {
+    "message": "SAMPLE-AES",
+    "description": "wording: BA review"
+  },
+  "sniff_recordLive": {
+    "message": "🔴 Record live",
+    "description": "wording: BA review"
+  },
+  "sniff_stopAndSave": {
+    "message": "⏹ Stop & save",
+    "description": "wording: BA review"
+  },
+  "sniff_jobLiveRecording": {
+    "message": "Recording • $p1$ • $p2$",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      },
+      "p2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sniff_drm_friendly": {
+    "message": "🔒 Protected by $p1$: cannot be downloaded. Please use the service's official offline download feature or contact the content owner.",
+    "description": "wording: BA review",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   },
   "sniff_local": {
     "message": "Download to this computer",
