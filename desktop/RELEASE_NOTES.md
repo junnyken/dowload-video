@@ -1,4 +1,4 @@
-- Hỗ trợ đồng bộ luồng phát HLS (.m3u8, bao gồm AES-128) và DASH từ tiện ích trình duyệt sang ứng dụng Windows kèm đầy đủ tiêu đề, độ phân giải và thông tin phiên phát nhúng, tăng tốc tải phân đoạn song song.
-- Khắc phục kết nối Native Messaging trực tiếp cho bản tiện ích cài từ Chrome Web Store.
-- Nâng cấp lõi tải yt-dlp lên bản 2026.10.26 giúp tải ổn định YouTube, TikTok, Facebook Reels và Instagram.
-- Theo dõi kênh: hỗ trợ chế độ Tự động tải về thư mục riêng từng kênh, tải bù khi mở lại ứng dụng và quét nhanh kênh YouTube qua RSS.
+- Tự động bắt và lưu tệp phụ đề rời (.srt, .ass) đi kèm khi chuyển luồng phát từ tiện ích trình duyệt sang ứng dụng Windows, hỗ trợ chuyển đổi phụ đề WebVTT và HLS sang định dạng .srt chuẩn UTF-8.
+- Hỗ trợ chuyển tiếp phiên xác thực tạm thời (cookie phiên phát) trong RAM từ tiện ích sang trình tải cục bộ cho các luồng HLS/DASH yêu cầu phiên trình duyệt, tự xóa ngay sau khi tải xong và giữ nguyên tốc độ tải phân đoạn song song.
+- Tự động gom các tập phim dài kỳ / anime vào thư mục riêng theo tên bộ phim và hỗ trợ chế độ tự động tải tiếp khi chuyển tập trên tiện ích (gói Team).
+- Cải thiện nhận diện luồng HEVC, AV1, đa luồng âm thanh và bảo vệ an toàn các nội dung khóa bản quyền DRM.
