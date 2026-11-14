@@ -753,10 +753,10 @@ https://live.cdn.example/seg100.ts
     }),
   });
 
-  const vInit = buildInitSegment(1);
-  const aInit = buildInitSegment(1); // audio rendition originally also had track_ID=1 before remapping!
-  const vFrag0 = buildMoofMdat(1, 0x11);
-  const aFrag0 = buildMoofMdat(1, 0x22);
+  const vInit = buildInitSegment(256); // MPEG-TS PID 0x100 (exact mux.js remux:false video trackId)
+  const aInit = buildInitSegment(257); // MPEG-TS PID 0x101 / ADTS trackId before remapping
+  const vFrag0 = buildMoofMdat(256, 0x11);
+  const aFrag0 = buildMoofMdat(257, 0x22);
 
   routes.set('https://dual.cdn.example/master.m3u8', new TextEncoder().encode(`#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-hi",NAME="Main Audio",DEFAULT=YES,URI="https://dual.cdn.example/audio/prog.m3u8"

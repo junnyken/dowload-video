@@ -798,17 +798,22 @@
   }
 
   /**
-   * Rewrites `tfhd.track_ID` (and `sidx.reference_ID` if present) in-place on a copy
-   * of an fMP4 media fragment (`moof` + `mdat`), keeping box lengths and `trun.data_offset` intact.
+   * Rewrites `tfhd.track_ID` (plus `mfhd.sequence_number` and `sidx.reference_ID` if present)
+   * in-place on a copy of an fMP4 media fragment (`moof` + `mdat`), keeping box lengths and
+   * `trun.data_offset` intact. Needed for both track 1 and track 2 because `mux.js` (`remux: false`)
+   * emits the MPEG-TS PID (e.g. `0x100 = 256`) as `tfhd.track_ID` while `mergeMp4InitSegments`
+   * normalizes `moov/trak` IDs to `1` and `2`.
    */
-  function rewriteMoofTrackId(fragmentU8, newTrackId) {
+  function rewriteMoofTrackId(fragmentU8, newTrackId, seqCounter) {
     const out = new Uint8Array(fragmentU8);
     for (const top of iterMp4Boxes(out)) {
       if (top.type === 'sidx' && top.size >= top.hdr + 8) {
         writeUint32BE(out, top.start + top.hdr + 4, newTrackId);
       } else if (top.type === 'moof') {
         for (const child of iterMp4Boxes(out, top.start + top.hdr, top.end)) {
-          if (child.type === 'traf') {
+          if (child.type === 'mfhd' && seqCounter && child.size >= child.hdr + 8) {
+            writeUint32BE(out, child.start + child.hdr + 4, seqCounter.next++);
+          } else if (child.type === 'traf') {
             for (const leaf of iterMp4Boxes(out, child.start + child.hdr, child.end)) {
               if (leaf.type === 'tfhd' && leaf.size >= leaf.hdr + 8) {
                 writeUint32BE(out, leaf.start + leaf.hdr + 4, newTrackId);
@@ -1049,6 +1054,7 @@
 
     let vTrans = null;
     let aTrans = null;
+    const seqCounter = { next: (Number(opts.startSeq) || 0) + 1 };
 
     const flushReady = async () => {
       if (!initWritten) {
@@ -1059,7 +1065,7 @@
       }
       while (pendingFrags.length) {
         const f = pendingFrags.shift();
-        const bytes = f.track === 2 ? rewriteMoofTrackId(f.data, 2) : f.data;
+        const bytes = rewriteMoofTrackId(f.data, f.track === 2 ? 2 : 1, seqCounter);
         await writer.write(bytes);
         produced += 1;
       }
