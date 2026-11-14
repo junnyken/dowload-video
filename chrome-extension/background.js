@@ -577,7 +577,9 @@ async function vgSaveCompanionSubtitles(subtitles, relBase, refererUrl) {
         langTag = `${baseLang}-${idx++}`;
       }
       usedTags.add(`${langTag}.${got.ext}`);
-      const dataUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(got.content)}`;
+      // Use application/octet-stream (never text/plain), otherwise Chrome's MIME-to-extension
+      // enforcer on Windows silently rewrites .srt / .ass filenames to .txt!
+      const dataUrl = `data:application/octet-stream;charset=utf-8,${encodeURIComponent(got.content)}`;
       chrome.downloads.download({
         url: dataUrl,
         filename: `${relBase}.${langTag}.${got.ext}`,

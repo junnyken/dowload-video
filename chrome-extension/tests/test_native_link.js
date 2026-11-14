@@ -378,11 +378,13 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   const rFileDl = await send({ type: 'VG_SNIFF_DOWNLOAD', tabId: 3, id: 'ep-mp4-2' });
   await tick(); await tick();
   const dlFilenames = env.downloads.map((d) => d.filename);
+  const subDl = env.downloads.find((d) => d.filename.endsWith('.vi.srt'));
   assert(
     rFileDl && rFileDl.ok === true
       && dlFilenames.includes('VidGrab/Hành Trình Biển Đông/Hành Trình Biển Đông - Tập 02.mp4')
-      && dlFilenames.includes('VidGrab/Hành Trình Biển Đông/Hành Trình Biển Đông - Tập 02.vi.srt'),
-    `[10b] VG_SNIFF_DOWNLOAD groups series into VidGrab/<Series>/ and saves companion .vi.srt (${JSON.stringify(dlFilenames)})`,
+      && dlFilenames.includes('VidGrab/Hành Trình Biển Đông/Hành Trình Biển Đông - Tập 02.vi.srt')
+      && subDl && String(subDl.url).startsWith('data:application/octet-stream;charset=utf-8,'),
+    `[10b] VG_SNIFF_DOWNLOAD groups series into VidGrab/<Series>/ and saves companion .vi.srt as octet-stream so Chrome keeps .srt (${JSON.stringify(dlFilenames)})`,
   );
   sandbox.fetch = origSandboxFetch;
 
