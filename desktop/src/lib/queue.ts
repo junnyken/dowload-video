@@ -272,8 +272,8 @@ async function start(item: QueueItem) {
       // A resumed item whose signed token ran out (2 h) claims again: Rust would refuse the old one,
       // and the server counts the same URL only once a day (PLAN-32E P3).
       if (!item.claimId || tokenStale(item.claimToken, Date.now())) {
-        const v = await claimForStart(item.url, claimRoute(step)); // daily allowance (PLAN-32D §5); resumed items keep their claim
-        if (!v.ok) { refusedByQuota(item.id); return; }
+        const v = await claimForStart(item.url, claimRoute(step), Boolean(item.localOnly)); // daily allowance (PLAN-32D §5); resumed items keep their claim
+        if (!v.ok) { refusedByQuota(item.id, v.errorText); return; }
         patch(item.id, { claimId: v.claimId, claimToken: v.token ?? null });
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
@@ -335,9 +335,17 @@ function toHistory(i: QueueItem, state: 'completed' | 'failed', extra: Partial<H
   };
 }
 
-/** The daily limit refused this item: it fails with the server's own text. No history row, no toast per item (quota.ts shows one). */
-function refusedByQuota(id: string) {
-  patch(id, { state: 'failed', errorCode: 'api:quota_exceeded_daily', speedBps: null, etaSec: null, pausing: false, stage: null });
+/** The daily limit or tier gate refused this item: it fails with the server's own text. No history row, no toast per item (quota.ts shows one). */
+function refusedByQuota(id: string, errorText?: string) {
+  patch(id, {
+    state: 'failed',
+    errorCode: 'api:quota_exceeded_daily',
+    ...(errorText ? { errorText } : {}),
+    speedBps: null,
+    etaSec: null,
+    pausing: false,
+    stage: null,
+  });
   pump();
 }
 

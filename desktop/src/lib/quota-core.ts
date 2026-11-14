@@ -13,6 +13,8 @@ export type QuotaSnapshot = {
   enforced: boolean;
   offlineGrace: number;
   refundDailyMax: number;
+  tier?: string | null;
+  universalStream?: boolean;
 };
 
 export const DEFAULT_OFFLINE_GRACE = 3;
@@ -83,6 +85,20 @@ export function decideClaim(status: number, data: unknown): ClaimDecision {
       refusal: {
         detail: str(o.detail) ?? '', upsell: up, reason: str(o.reason),
         resetTimeVn: str(o.resetTimeVn), limit: num(o.limit), usedToday: num(o.usedToday),
+      },
+    };
+  }
+  if ((status === 401 || status === 402 || status === 403) && o.error_code === 'tier_required_feature') {
+    const up = o.upsell === 'signin' || o.upsell === 'upgrade' ? o.upsell : 'upgrade';
+    return {
+      kind: 'refused',
+      refusal: {
+        detail: str(o.detail) ?? 'Tính năng này chỉ dành cho tài khoản gói cao nhất (Team).',
+        upsell: up,
+        reason: 'tier_required_feature',
+        resetTimeVn: str(o.resetTimeVn),
+        limit: num(o.limit),
+        usedToday: num(o.usedToday),
       },
     };
   }
@@ -170,6 +186,8 @@ export function parseSnapshot(d: unknown): QuotaSnapshot | null {
     deviceCode: str(o.deviceCode), mode: o.mode === 'enforce' ? 'enforce' : 'shadow', enforced: o.enforced === true,
     offlineGrace: Math.max(0, Math.floor(num(o.offlineGrace) ?? DEFAULT_OFFLINE_GRACE)),
     refundDailyMax: Math.max(0, Math.floor(num(o.refundDailyMax) ?? 0)),
+    ...(str(o.tier) ? { tier: str(o.tier) } : {}),
+    ...(typeof o.universalStream === 'boolean' ? { universalStream: o.universalStream } : {}),
   };
 }
 
@@ -185,6 +203,8 @@ export function mergeCounters(prev: QuotaSnapshot | null, d: unknown): QuotaSnap
   return {
     ...base, limit, usedToday: used, remaining, resetTimeVn: str(o.resetTimeVn) ?? base.resetTimeVn,
     requester: str(o.requester) ?? base.requester, mode: o.mode === 'enforce' ? 'enforce' : o.mode === 'shadow' ? 'shadow' : base.mode,
+    ...(str(o.tier) ? { tier: str(o.tier) } : {}),
+    ...(typeof o.universalStream === 'boolean' ? { universalStream: o.universalStream } : {}),
   };
 }
 

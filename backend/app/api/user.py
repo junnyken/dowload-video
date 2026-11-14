@@ -203,6 +203,7 @@ async def get_usage(request: Request, user: Dict[str, Any] = Depends(get_require
         "tier":                   tier,
         "daily_limit":            daily_limit,
         "plan":                   tier,
+        "universal_stream":       bool(_rq.kind == REQ_ADMIN or perms.get("universal_stream")),
         "downloads_today":        usage.get("downloads_today", 0),
         "downloads_this_month":   usage.get("downloads_this_month", 0),
         "bulk_jobs_count":        usage.get("bulk_jobs_count", 0),
@@ -210,7 +211,7 @@ async def get_usage(request: Request, user: Dict[str, Any] = Depends(get_require
         "permissions":            perms,
         "limits": {
             "daily":   daily_limit,
-            "monthly": -1 if tier == "pro" else daily_limit * 30,
+            "monthly": -1 if daily_limit == -1 or tier in ("pro", "team", "enterprise", "admin") else daily_limit * 30,
             "batch":   perms["batch_limit"],
         },
     }

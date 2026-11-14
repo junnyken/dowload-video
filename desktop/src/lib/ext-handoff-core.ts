@@ -44,8 +44,12 @@ const QUALITY_LABELS: Record<string, string> = {
 };
 
 const STREAM_EXT_RE = /\.(m3u8|mpd|mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)(\?|$)/i;
-const STREAM_HINT_RE = /(?:^|[/?&=_.-])(m3u8|hls|mpd|manifest|playlist)(?:$|[/?&=_.-])/i;
+const STREAM_HINT_RE = /(?:^|[/?&=_.-])(m3u8|hls\d*|mpd|manifest|playlist|master|chunklist|urlset)(?:$|[/?&=_.-])/i;
 const EPHEMERAL_PARAMS = new Set(['token', 'sig', 'signature', 'expires', 'exp', 'hdnts', 'Policy', 'Signature', 'Key-Pair-Id']);
+const JUNK_TITLE_RE = /^(?:just a moment\.{0,3}|attention required!?.*|(?:video\s*|jw\s*|html5\s*)?player|embed(?:\s+player)?|loading\.{0,3}|untitled|index|playlist|master|manifest)$/i;
+const FILE_LIKE_TITLE_RE = /^[a-z0-9_-]+\.(?:m3u8?|mpd|mp4|ts|txt|html?|php)$/i;
+const GENERIC_TRAIL_RE = /^(?:watch(?:\s+online)?(?:\s+free)?(?:\s+hd)?|free\s+(?:hd|videos?|movies?|streaming)|full\s+hd(?:\s+online)?|stream(?:ing)?\s+online|xem\s+phim(?:\s+online)?(?:\s+(?:hd|miễn\s+phí|mới(?:\s+nhất)?|nhanh|vietsub))?|phim\s+(?:hd|mới(?:\s+nhất)?|hay|lẻ|bộ)|trang\s+chủ|home)$/i;
+const DOMAIN_TOKEN_RE = /\b[a-z0-9-]{2,}\.(?:com|net|org|io|vn|ws|tv|to|me|cc|co|xyz|pro|vip|club|top|site|online|stream|watch|live|today|one|fun|info|biz|asia|gg|la|sh|bz|su|icu|cyou|click|shop|lol|cfd)\b/i;
 
 function fnv1aHex(input: string, seed: number): string {
   let h = seed >>> 0;
@@ -80,6 +84,56 @@ function cleanLine(raw: string | null | undefined, max: number): string {
     out += ch;
   }
   return out.trim();
+}
+
+function hostStems(pageUrl: string | null | undefined): string[] {
+  const u = parseHttpUrl(pageUrl);
+  if (!u) return [];
+  const h = u.hostname.toLowerCase().replace(/^(?:www\d*|m|web|v|play|player)\./, '');
+  const first = h.split('.')[0] || '';
+  const compact = first.replace(/[^a-z0-9]/g, '');
+  const alpha = compact.replace(/\d+$/, '');
+  return [h, first, compact, alpha.length >= 4 ? alpha : ''].filter((s) => s.length >= 3);
+}
+
+function isSiteSuffixSegment(seg: string, stems: string[]): boolean {
+  const s = seg.trim();
+  if (!s) return true;
+  if (GENERIC_TRAIL_RE.test(s) || DOMAIN_TOKEN_RE.test(s)) return true;
+  const low = s.toLowerCase();
+  const compact = low.replace(/[^a-z0-9]/g, '');
+  if (!compact) return true;
+  for (const st of stems) {
+    if (low === st || compact === st) return true;
+    if (st.length >= 5 && compact.length <= st.length + 4 && compact.startsWith(st)) return true;
+  }
+  return false;
+}
+
+/** Strips notification counters, domain suffixes, and generic watch-online spam while keeping movie codes & episodes. */
+export function cleanMediaTitle(raw: string | null | undefined, pageUrl?: string | null): string {
+  let s = cleanLine(raw, 240);
+  if (!s || /^https?:\/\//i.test(s)) return '';
+  s = s.replace(/^(?:\(\d+\)\s*|▶\s*)+/, '').trim();
+  if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
+
+  const stems = hostStems(pageUrl);
+  const parts = s.split(/\s+(?:\||::|—|–|•|»|-)\s+/).map((p) => p.trim()).filter(Boolean);
+  while (parts.length > 1 && isSiteSuffixSegment(parts[parts.length - 1], stems)) {
+    parts.pop();
+  }
+  while (parts.length > 1 && GENERIC_TRAIL_RE.test(parts[0])) {
+    parts.shift();
+  }
+  s = parts.join(' - ');
+  const strippedLead = s.replace(/^(?:xem\s+phim(?:\s+online)?|watch(?:\s+online)?(?:\s+free)?)\s*(?:[:\-–—]\s*|\s+)/i, '').trim();
+  if (strippedLead.length >= 3) s = strippedLead;
+  const strippedTail = s.replace(/(?:\s+(?:full\s*hd|fhd|hd|4k|vietsub|thuyết\s*minh|thuyet\s*minh|lồng\s*tiếng|long\s*tieng|online|miễn\s*phí|mien\s*phi|free))+\s*$/i, '').trim();
+  if (strippedTail.length >= 3) s = strippedTail;
+
+  s = s.replace(/[<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[.\-\s]+|[.\-\s]+$/g, '');
+  if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
+  return s.length > 140 ? s.slice(0, 140).trim().replace(/[.\-\s]+$/, '') : s;
 }
 
 function parseHttpUrl(raw: string | null | undefined): URL | null {
@@ -148,7 +202,7 @@ export function planExtJob(
     return { mode: 'probe', url: target.toString(), platform: 'từ trình duyệt' };
   }
 
-  const title = cleanLine(job.title, 200) || 'Video từ trình duyệt';
+  const title = cleanMediaTitle(job.title, job.referer) || cleanLine(job.title, 140) || 'Video từ trình duyệt';
   const headers: HeaderPair[] = [];
 
   if (ref) {

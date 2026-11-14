@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planExtJob, streamFileId } from '../src/lib/ext-handoff-core.ts';
+import { cleanMediaTitle, planExtJob, streamFileId } from '../src/lib/ext-handoff-core.ts';
 import { GUEST_FORMAT } from '../src/lib/quality.ts';
 
 test('streamFileId: deterministic, <= 64 chars, validate::file_id alphabet only', () => {
@@ -68,4 +68,35 @@ test('planExtJob: regular platform page link uses normal probe flow', () => {
     { defaultQuality: 'best', guest: false },
   );
   assert.equal(plan.mode, 'probe');
+});
+
+test('cleanMediaTitle & planExtJob: strips SEO spam/domain noise while keeping movie title, episode & catalog code', () => {
+  assert.equal(
+    cleanMediaTitle(
+      '(4) Xem phim Lên Đường Nhậm Chức Tập 01 Full HD Vietsub - cinema-portal.example',
+      'https://cinema-portal.example/phim/len-duong-nham-chuc/tap-01',
+    ),
+    'Lên Đường Nhậm Chức Tập 01',
+  );
+  assert.equal(
+    cleanMediaTitle(
+      '[DOC-451] Midnight Harbor Story | Watch Online Free | vodhub.example',
+      'https://www.vodhub.example/v/doc-451',
+    ),
+    '[DOC-451] Midnight Harbor Story',
+  );
+  assert.equal(cleanMediaTitle('Just a moment...', 'https://cinema.example/v/1'), '');
+
+  const plan = planExtJob(
+    {
+      url: 'https://cdn-uuid.example/v1/720p/chunklist?sig=abc',
+      title: '(1) Xem phim Hành Trình Biển Đông Tập 05 Vietsub Full HD - cinema.example',
+      referer: 'https://cinema.example/watch/ep-05',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(plan.mode, 'direct_queue');
+  if (plan.mode !== 'direct_queue') return;
+  assert.equal(plan.title, 'Hành Trình Biển Đông Tập 05');
+  assert.equal(plan.fileTitle, 'Hành Trình Biển Đông Tập 05');
 });

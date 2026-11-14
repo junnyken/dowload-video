@@ -58,6 +58,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        20,
         "history_days":         7,
         "api_key":              False,
+        "universal_stream":     False,
     },
     "starter": {
         "daily_limit":          STARTER_DAILY_LIMIT,
@@ -72,6 +73,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        100,
         "history_days":         30,
         "api_key":              False,
+        "universal_stream":     False,
     },
     "pro": {
         "daily_limit":          PRO_DAILY_LIMIT,
@@ -86,6 +88,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        None,      # unlimited
         "history_days":         90,
         "api_key":              True,
+        "universal_stream":     False,
     },
     "team": {
         "daily_limit":          TEAM_DAILY_LIMIT,
@@ -100,6 +103,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        None,
         "history_days":         90,
         "api_key":              True,
+        "universal_stream":     True,
     },
     "enterprise": {
         "daily_limit":          -1,        # unlimited
@@ -114,6 +118,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        None,
         "history_days":         -1,
         "api_key":              True,
+        "universal_stream":     True,
     },
     "admin": {
         "daily_limit":          -1,        # unlimited
@@ -128,6 +133,7 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         "history_limit":        None,
         "history_days":         -1,
         "api_key":              True,
+        "universal_stream":     True,
     },
 }
 

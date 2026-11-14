@@ -122,12 +122,23 @@ export async function flushOffline(): Promise<void> {
 }
 
 /** token: the server's signed claim (PLAN-32E P3), handed to Rust's start_download as-is. */
-export type StartVerdict = { ok: true; claimId: string; token?: string } | { ok: false };
+export type StartVerdict = { ok: true; claimId: string; token?: string } | { ok: false; errorText?: string };
+
+const STREAM_TIER_OFFLINE_MSG = 'Cần kết nối Internet để xác thực tài khoản gói cao nhất (Team) trước khi tải luồng video này.';
 
 /** Called by the queue before a local download starts. */
-export async function claimForStart(url: string, route: 'local' | 'local_cookie' = 'local'): Promise<StartVerdict> {
+export async function claimForStart(
+  url: string,
+  route: 'local' | 'local_cookie' = 'local',
+  streamCapture = false,
+): Promise<StartVerdict> {
   const v = (await appVersion()) ?? '';
-  const r = await call('/api/v1/client/quota/claim', 'POST', { url, route, clientVersion: v });
+  const r = await call('/api/v1/client/quota/claim', 'POST', {
+    url,
+    route,
+    clientVersion: v,
+    ...(streamCapture ? { streamCapture: true } : {}),
+  });
   const d = decideClaim(r.status, r.data);
   if (d.kind === 'proceed') {
     if (d.counted) setSnap(mergeCounters(quota.get().snap, d.data));
@@ -135,10 +146,19 @@ export async function claimForStart(url: string, route: 'local' | 'local_cookie'
     return { ok: true, claimId: d.claimId, ...(d.token ? { token: d.token } : {}) };
   }
   if (d.kind === 'refused') {
+    if (d.refusal.reason === 'tier_required_feature') {
+      const msg = d.refusal.detail || 'Tính năng này chỉ dành cho tài khoản gói cao nhất (Team).';
+      toast('error', msg);
+      return { ok: false, errorText: msg };
+    }
     refuse(d.refusal);
     return { ok: false };
   }
   if (d.kind === 'update_required') return { ok: false }; // the update screen says why; no offline grace
+  if (streamCapture && quota.get().snap?.universalStream !== true) {
+    toast('error', STREAM_TIER_OFFLINE_MSG);
+    return { ok: false, errorText: STREAM_TIER_OFFLINE_MSG };
+  }
   // Offline grace: unless the server last said the feature is off (hint, fail-closed).
   const hint = readHint();
   if (!hint.enabled) return { ok: true, claimId: NO_CLAIM };

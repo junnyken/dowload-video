@@ -495,12 +495,74 @@ function hlsSafeName(t) {
   return String(t || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
 }
 
+function vgCleanStreamTitle(item) {
+  const raw = (item && item.title) || '';
+  const cleaned = self.VGSniff && typeof self.VGSniff.cleanMediaTitle === 'function'
+    ? self.VGSniff.cleanMediaTitle(raw, item && item.pageUrl)
+    : '';
+  return cleaned || String(raw || 'video').trim() || 'video';
+}
+
+const UNIVERSAL_STREAM_TIERS = new Set(['team', 'enterprise', 'admin']);
+let _vgUniversalTierCache = { token: '', at: 0, res: null };
+
+function vgResetUniversalTierCache() {
+  _vgUniversalTierCache = { token: '', at: 0, res: null };
+}
+
+async function vgCheckUniversalStreamTier(force = false) {
+  const token = await getAuthToken();
+  if (!token) {
+    return { allowed: false, authenticated: false, tier: 'guest', error: 'signin_required' };
+  }
+  if (!force && _vgUniversalTierCache.res && _vgUniversalTierCache.token === token && Date.now() - _vgUniversalTierCache.at < 90_000) {
+    return _vgUniversalTierCache.res;
+  }
+  try {
+    const base = await getApiBase();
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 6000) : null;
+    const r = await fetch(`${base}/api/v1/user/usage`, {
+      headers: await authHeaders(),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+    }).finally(() => { if (timer) clearTimeout(timer); });
+    if (r.status === 401 || r.status === 403) {
+      const denied = { allowed: false, authenticated: false, tier: 'guest', error: 'signin_required' };
+      _vgUniversalTierCache = { token, at: Date.now(), res: denied };
+      return denied;
+    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const tier = String((d && d.tier) || 'free').toLowerCase();
+    const allowed = Boolean((d && d.universal_stream === true) || UNIVERSAL_STREAM_TIERS.has(tier));
+    const res = { allowed, authenticated: true, tier, error: allowed ? null : 'tier_required' };
+    _vgUniversalTierCache = { token, at: Date.now(), res };
+    chrome.storage.local.set({
+      vg_cached_tier: tier,
+      vg_cached_universal: allowed,
+      vg_cached_tier_tok: token.slice(0, 16),
+    }).catch(() => {});
+    return res;
+  } catch {
+    try {
+      const c = await chrome.storage.local.get(['vg_cached_tier', 'vg_cached_universal', 'vg_cached_tier_tok']);
+      if (c && c.vg_cached_tier_tok === token.slice(0, 16) && typeof c.vg_cached_universal === 'boolean') {
+        const tier = String(c.vg_cached_tier || 'free').toLowerCase();
+        const allowed = Boolean(c.vg_cached_universal && UNIVERSAL_STREAM_TIERS.has(tier));
+        return { allowed, authenticated: true, tier, error: allowed ? null : 'tier_required' };
+      }
+    } catch { /* ignore */ }
+    return { allowed: false, authenticated: true, tier: 'free', error: 'tier_required' };
+  }
+}
+
 async function hlsStart(item, height) {
   await hlsLoad();
   const referer = item.refererUrl || item.pageUrl || '';
   if (referer) await vgEnsureStreamReferer(item.url, referer);
   const id = `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const job = { id, title: item.title || 'video', url: item.url, height: height || null, state: 'running',
+  const cleanTitle = vgCleanStreamTitle(item);
+  const job = { id, title: cleanTitle, url: item.url, height: height || null, state: 'running',
                 done: 0, total: 0, bytes: 0, at: Date.now(), message: '' };
   hlsJobs.set(id, job);
   hlsSave();
@@ -1038,9 +1100,10 @@ async function vgSendToApp(item, height) {
   const referer = item.refererUrl || item.pageUrl || '';
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent).slice(0, 512) : '';
   const h = Number.isInteger(height) && height >= 144 && height <= 4320 ? height : undefined;
+  const cleanTitle = item.title ? vgCleanStreamTitle(item) : '';
   const payload = {
     url: item.url,
-    title: item.title || '',
+    title: cleanTitle,
     referer,
     ...(ua ? { userAgent: ua } : {}),
     ...(h ? { height: h } : {}),
@@ -1463,6 +1526,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const _write = sess ? { [AUTH_TOKEN_KEY]: sess.token, vg_auth_exp: sess.expiresAt } : { [AUTH_TOKEN_KEY]: msg.token };
       const email = (sess && sess.email) || (typeof msg.email === 'string' && msg.email) || '';
       if (email) _write.vg_auth_email = email;
+      vgResetUniversalTierCache();
       chrome.storage.local.set(_write, () => {
         // Refresh the popup's account row if it happens to be open.
         chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: true, email: msg.email }).catch(() => {});
@@ -1488,7 +1552,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (tok && tok.startsWith('vgx_')) {
         try { await fetch(`${await getApiBase()}/api/v1/extension/session`, { method: 'DELETE', headers: { ...(await vgDeviceHeader()), Authorization: `Bearer ${tok}` } }); } catch { /* offline */ }
       }
-      chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email', 'vg_auth_exp'], () => {
+      vgResetUniversalTierCache();
+      chrome.storage.local.remove([AUTH_TOKEN_KEY, 'vg_auth_email', 'vg_auth_exp', 'vg_cached_tier', 'vg_cached_universal', 'vg_cached_tier_tok'], () => {
         chrome.runtime.sendMessage({ type: 'VG_AUTH_CHANGED', authenticated: false }).catch(() => {});
         sendResponse({ ok: true });
       });
@@ -1542,6 +1607,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     self.vgSniffList(msg.tabId).then((items) => sendResponse({ items })).catch(() => sendResponse({ items: [] }));
     return true;
   }
+  if (msg.type === 'VG_SNIFF_PROBE') {
+    const runProbe = typeof self.vgSniffProbe === 'function'
+      ? self.vgSniffProbe(msg.tabId)
+      : self.vgSniffList(msg.tabId).then((items) => ({ items, playing: null }));
+    runProbe.then(sendResponse, () => sendResponse({ items: [], playing: null }));
+    return true;
+  }
+  if (msg.type === 'VG_UNIVERSAL_TIER_STATUS') {
+    vgCheckUniversalStreamTier(!!msg.force).then(sendResponse, () => sendResponse({ allowed: false, authenticated: false, tier: 'guest' }));
+    return true;
+  }
   if (msg.type === 'VG_SNIFF_CLEAR') {
     self.vgSniffClear(msg.tabId).then(() => sendResponse({ ok: true }));
     return true;
@@ -1553,6 +1629,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'VG_SNIFF_DOWNLOAD') {
     (async () => {
+      const gate = await vgCheckUniversalStreamTier();
+      if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.kind !== 'file') { sendResponse({ ok: false, error: 'not_a_file' }); return; }
@@ -1561,7 +1639,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const base = await getApiBase();
       const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
         || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-      const safeName = String(item.title || 'video').replace(/[/\\?%*:|"<>\n\r\t]/g, '-').trim().slice(0, 120) || 'video';
+      const safeName = hlsSafeName(vgCleanStreamTitle(item));
       smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false });
       sendResponse({ ok: true });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
@@ -1570,6 +1648,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'VG_HLS_START') {
     (async () => {
+      const gate = await vgCheckUniversalStreamTier();
+      if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.kind !== 'hls') { sendResponse({ ok: false, error: 'not_hls' }); return; }
@@ -1590,6 +1670,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'VG_APP_SEND') {
     (async () => {
+      const gate = await vgCheckUniversalStreamTier();
+      if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.encryption === 'drm' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }

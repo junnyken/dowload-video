@@ -17,6 +17,7 @@ import { addToQueue } from '../screens/DownloadScreen';
 import { enqueue } from './queue';
 import { findDuplicate } from './dedupe';
 import { auth } from './auth';
+import { quota, refreshQuota } from './quota';
 
 export type ClipOffer = { url: string; platform: string };
 export const clipOffer = createStore<ClipOffer | null>(null);
@@ -89,6 +90,24 @@ async function handleExtDownload(job: ExtJob) {
     downloadNow(plan.url, plan.platform);
     if (document.hidden) void api.notify('VidGrab', `Đang tải "${name.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
     else toast('info', `Tiện ích VidGrab đã gửi "${name.slice(0, 60)}" sang app — đang phân tích để tải.`);
+    return;
+  }
+
+  if (auth.get().status !== 'in') {
+    const msg = 'Tính năng tải phim & luồng phát từ các trang web ngoài chỉ dành cho tài khoản gói cao nhất (Team). Hãy đăng nhập để sử dụng.';
+    if (document.hidden) void api.notify('VidGrab', msg).catch(() => {});
+    toast('error', msg);
+    go('settings');
+    return;
+  }
+  if (!quota.get().snap) {
+    await refreshQuota().catch(() => {});
+  }
+  const snap = quota.get().snap;
+  if (snap && snap.universalStream === false) {
+    const msg = 'Tính năng tải phim & luồng phát từ các trang web ngoài chỉ dành cho gói tài khoản cao nhất (Team). Vui lòng nâng cấp tài khoản.';
+    if (document.hidden) void api.notify('VidGrab', msg).catch(() => {});
+    toast('error', msg);
     return;
   }
 

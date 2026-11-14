@@ -1702,6 +1702,18 @@
     "message": "Via VidGrab",
     "description": "wording: BA review"
   },
+  "sniff_tierLockedBtn": {
+    "message": "🔒 Upgrade to Team (Top Plan) to download",
+    "description": "wording: BA review"
+  },
+  "sniff_signinLockedBtn": {
+    "message": "🔒 Sign in with Team (Top Plan) to download",
+    "description": "wording: BA review"
+  },
+  "sniff_tierLockedHint": {
+    "message": "Universal web stream capture is exclusively available on the highest subscription plan (Team).",
+    "description": "wording: BA review"
+  },
   "sp_album_label": {
     "message": "ALBUM • SPOTIFY"
   },

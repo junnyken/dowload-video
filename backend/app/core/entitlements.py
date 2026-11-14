@@ -52,6 +52,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              False,
             "priority_queue":        False,
             "team_workspace":        False,
+            "universal_stream":      False,
             "partner_api":           False,
             "sso":                   False,
             "white_label":           False,
@@ -83,6 +84,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              False,
             "priority_queue":        False,
             "team_workspace":        False,
+            "universal_stream":      False,
             "partner_api":           False,
             "sso":                   False,
             "white_label":           False,
@@ -114,6 +116,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              True,
             "priority_queue":        True,
             "team_workspace":        False,
+            "universal_stream":      False,
             "partner_api":           False,
             "sso":                   False,
             "white_label":           False,
@@ -145,6 +148,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              True,
             "priority_queue":        True,
             "team_workspace":        True,
+            "universal_stream":      True,
             "partner_api":           False,
             "sso":                   False,
             "white_label":           False,
@@ -176,6 +180,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              True,
             "priority_queue":        True,
             "team_workspace":        False,
+            "universal_stream":      False,
             "partner_api":           True,
             "sso":                   False,
             "white_label":           False,
@@ -207,6 +212,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              True,
             "priority_queue":        True,
             "team_workspace":        True,
+            "universal_stream":      True,
             "partner_api":           True,
             "sso":                   True,
             "white_label":           True,
@@ -238,6 +244,7 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
             "ai_tools":              True,
             "priority_queue":        True,
             "team_workspace":        True,
+            "universal_stream":      True,
             "partner_api":           True,
             "sso":                   True,
             "white_label":           True,
@@ -271,6 +278,11 @@ def check_feature(tier: Optional[str], feature: str) -> bool:
     """True if the tier has this feature enabled."""
     plan = get_plan_def(tier)
     return plan["features"].get(feature, False)
+
+
+def is_universal_stream_tier(tier: Optional[str]) -> bool:
+    """True only for the highest customer/internal tiers (team, enterprise, admin)."""
+    return check_feature(tier, "universal_stream")
 
 
 def get_limit(tier: Optional[str], limit_key: str, default: Any = 0) -> Any:

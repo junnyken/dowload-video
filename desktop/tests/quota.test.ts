@@ -254,3 +254,44 @@ test('token expiry is read from the payload; stale one minute before', () => {
   assert.equal(tokenStale(null, T0), false);
   assert.equal(tokenStale('not.a.token', T0), false);
 });
+
+test('tier_required_feature: refused per-item (not offline grace) & snapshot preserves universalStream', () => {
+  const guestRefusal = decideClaim(403, {
+    allowed: false,
+    error_code: 'tier_required_feature',
+    reason: 'tier_required_feature',
+    upsell: 'signin',
+    detail: 'Vui lòng đăng nhập gói Team.',
+  });
+  assert.equal(guestRefusal.kind, 'refused');
+  if (guestRefusal.kind === 'refused') {
+    assert.equal(guestRefusal.refusal.reason, 'tier_required_feature');
+    assert.equal(guestRefusal.refusal.upsell, 'signin');
+    assert.equal(guestRefusal.refusal.detail, 'Vui lòng đăng nhập gói Team.');
+  }
+
+  const proRefusal = decideClaim(403, {
+    allowed: false,
+    error_code: 'tier_required_feature',
+    upsell: 'upgrade',
+    detail: 'Chỉ dành cho gói Team.',
+  });
+  assert.equal(proRefusal.kind, 'refused');
+  if (proRefusal.kind === 'refused') {
+    assert.equal(proRefusal.refusal.reason, 'tier_required_feature');
+    assert.equal(proRefusal.refusal.upsell, 'upgrade');
+  }
+
+  const snapTeam = parseSnapshot({
+    limit: -1, usedToday: 3, remaining: -1, resetTimeVn: '07:00',
+    requester: 'user', deviceCode: null, mode: 'enforce', enforced: true,
+    offlineGrace: 3, refundDailyMax: 10, tier: 'team', universalStream: true,
+  });
+  assert.ok(snapTeam);
+  assert.equal(snapTeam!.tier, 'team');
+  assert.equal(snapTeam!.universalStream, true);
+
+  const merged = mergeCounters(snapTeam, { limit: -1, usedToday: 4, remaining: -1, resetTimeVn: '07:00', requester: 'user' });
+  assert.equal(merged!.tier, 'team');
+  assert.equal(merged!.universalStream, true);
+});

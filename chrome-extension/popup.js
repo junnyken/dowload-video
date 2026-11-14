@@ -1782,6 +1782,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     updateAuthUI(!!msg.authenticated, msg.email);
     if (msg.reason === 'device_signed_out') vgShowSignedOut();
     if (msg.authenticated) loadTierQuota();
+    vgRefreshUniversalGate(true).then(() => getActiveTab().then((tb) => { if (tb?.id) void renderSniff(tb); }).catch(() => {}));
     return;
   }
   // Back-compat: older builds relayed the raw token through the popup.
@@ -1817,12 +1818,19 @@ async function loadTierQuota() {
       const d = await r.json();
       const tier = (d.tier || 'free').toLowerCase();
       const used = d.used ?? d.downloads_today ?? 0;
-      const limit = d.limit ?? d.daily_limit ?? (tier === 'pro' ? 100 : 10);
-      const pct = Math.min(100, Math.round((used / limit) * 100));
-      const tierLabel = tier === 'pro'
-        ? '<span style="color:#a78bfa;font-weight:700;background:rgba(139,92,246,0.15);padding:1px 5px;border-radius:4px;font-size:9px;">PRO</span>'
-        : '<span style="color:#94a3b8;font-size:9px;background:rgba(148,163,184,0.1);padding:1px 5px;border-radius:4px;">FREE</span>';
-      const barColor = tier === 'pro' ? '#8b5cf6' : pct >= 90 ? '#ef4444' : '#3b82f6';
+      const limit = d.limit ?? d.daily_limit ?? (tier === 'pro' ? 300 : tier === 'team' ? 1000 : 20);
+      const isUnlimited = limit < 0;
+      const pct = isUnlimited ? 100 : Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
+      const isTopTier = ['team', 'enterprise', 'admin'].includes(tier);
+      const isPaidTier = isTopTier || tier === 'pro' || tier === 'starter';
+      const tierText = tier.toUpperCase();
+      const tierLabel = isTopTier
+        ? `<span style="color:#fcd34d;font-weight:700;background:rgba(245,158,11,0.18);padding:1px 6px;border-radius:4px;font-size:9px;">${escapeHtml(tierText)}</span>`
+        : isPaidTier
+          ? `<span style="color:#a78bfa;font-weight:700;background:rgba(139,92,246,0.15);padding:1px 5px;border-radius:4px;font-size:9px;">${escapeHtml(tierText)}</span>`
+          : '<span style="color:#94a3b8;font-size:9px;background:rgba(148,163,184,0.1);padding:1px 5px;border-radius:4px;">FREE</span>';
+      const barColor = isTopTier ? '#f59e0b' : isPaidTier ? '#8b5cf6' : pct >= 90 ? '#ef4444' : '#3b82f6';
+      const quotaText = isUnlimited ? `${used}/∞` : `${used}/${limit}`;
       tierRow.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="color:#94a3b8;font-size:10px;">${escapeHtml(t('tier_plan'))}</span>
@@ -1830,15 +1838,15 @@ async function loadTierQuota() {
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#64748b;margin-bottom:3px;">
           <span>${escapeHtml(t('tier_quota_today'))}</span>
-          <span style="color:#e2e8f0;font-family:monospace;">${used}/${limit}</span>
+          <span style="color:#e2e8f0;font-family:monospace;">${quotaText}</span>
         </div>
         <div style="height:3px;background:rgba(148,163,184,0.15);border-radius:2px;overflow:hidden;">
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width 0.3s;"></div>
         </div>
-        ${tier !== 'pro' ? `<div style="margin-top:5px;font-size:9px;color:#6366f1;cursor:pointer;" id="vg-upgrade-link">${escapeHtml(t('tier_upgrade'))}</div>` : ''}
+        ${!isTopTier ? `<div style="margin-top:5px;font-size:9px;color:#6366f1;cursor:pointer;" id="vg-upgrade-link">${escapeHtml(t('tier_upgrade'))}</div>` : ''}
       `;
       document.getElementById('vg-upgrade-link')?.addEventListener('click', () => {
-        chrome.tabs.create({ url: `${base}/upgrade` });
+        chrome.tabs.create({ url: `${WEB_BASE}/pricing` });
       });
     } catch {
       tierRow.innerHTML = `
@@ -2361,6 +2369,9 @@ const VG_SNIFF_TEXT = {
   copied: t('sniff_copied'),
   started: t('sniff_started'),
   failed: t('sniff_failed'),
+  tierLockedBtn: t('sniff_tierLockedBtn'),
+  signinLockedBtn: t('sniff_signinLockedBtn'),
+  tierLockedHint: t('sniff_tierLockedHint'),
 };
 
 function vgFmtBytes(b) {
@@ -2386,6 +2397,19 @@ function vgHasOrigin(pattern) {
 
 let _vgSniffTimer = null;
 let _vgAppFound = false;   // the VidGrab app answers on this computer
+let _vgUniversalGate = { allowed: false, authenticated: false, tier: 'guest' };
+
+async function vgRefreshUniversalGate(force = false) {
+  const g = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_UNIVERSAL_TIER_STATUS', force }, r));
+  if (g && typeof g === 'object') {
+    _vgUniversalGate = { allowed: !!g.allowed, authenticated: !!g.authenticated, tier: String(g.tier || 'guest') };
+  }
+  return _vgUniversalGate;
+}
+
+function vgOpenPricing() {
+  chrome.tabs.create({ url: `${WEB_BASE}/pricing` });
+}
 
 async function initSniff(tab) {
   const box = document.getElementById('vg-sniff');
@@ -2408,11 +2432,23 @@ async function initSniff(tab) {
     allow.textContent = VG_SNIFF_TEXT.allow;
     allow.onclick = () => {
       // must run inside the click: Chrome shows its own permission prompt
-      chrome.permissions.request({ origins: [pattern] }, (ok) => {
+      chrome.permissions.request({ origins: [pattern] }, async (ok) => {
         if (ok) {
-          empty.textContent = VG_SNIFF_TEXT.granted;
-          allow.textContent = VG_SNIFF_TEXT.reload;
-          allow.onclick = () => { chrome.tabs.reload(tab.id); window.close(); };
+          allow.style.display = 'none';
+          document.getElementById('vg-sniff-refresh').onclick = () => renderSniff(tab);
+          const [app] = await Promise.all([
+            new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_APP_STATUS' }, r)),
+            vgRefreshUniversalGate(false),
+          ]);
+          _vgAppFound = !!(app && app.found);
+          await renderSniff(tab);
+          if (!document.getElementById('vg-sniff-list')?.children.length) {
+            empty.style.display = 'block';
+            empty.textContent = VG_SNIFF_TEXT.granted;
+            allow.style.display = 'block';
+            allow.textContent = VG_SNIFF_TEXT.reload;
+            allow.onclick = () => { chrome.tabs.reload(tab.id); window.close(); };
+          }
         } else {
           empty.textContent = VG_SNIFF_TEXT.denied;
         }
@@ -2422,15 +2458,24 @@ async function initSniff(tab) {
   }
 
   document.getElementById('vg-sniff-refresh').onclick = () => renderSniff(tab);
-  const app = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_APP_STATUS' }, r));
+  const [app] = await Promise.all([
+    new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_APP_STATUS' }, r)),
+    vgRefreshUniversalGate(false),
+  ]);
   _vgAppFound = !!(app && app.found);
   await renderSniff(tab);
   renderHlsJobs();
 }
 
+function vgSniffReplyText(r, okText, failText) {
+  if (r && r.ok) return okText;
+  if (r && (r.error === 'tier_required' || r.error === 'signin_required')) return VG_SNIFF_TEXT.tierLockedHint;
+  return failText;
+}
+
 function vgSendToApp(tab, it, msg, height = null) {
   chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id, height }, (r) => {
-    msg.textContent = r && r.ok ? VG_SNIFF_TEXT.appSent : VG_SNIFF_TEXT.appFailed;
+    msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.appSent, VG_SNIFF_TEXT.appFailed);
   });
 }
 
@@ -2497,7 +2542,7 @@ async function renderSniff(tab) {
   // "Video đang xem" + "Tải Video Ngay" only (owner 22/10). wording: BA review
   const handledHost = /(^|\.)(tiktok|douyin|facebook|instagram)\.com$/i.test((() => { try { return new URL(tab.url).hostname; } catch { return ''; } })());
   if (handledHost) { box.style.display = 'none'; return; }
-  const resp = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_SNIFF_LIST', tabId: tab.id }, r));
+  const resp = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_SNIFF_PROBE', tabId: tab.id }, r));
   const items = (resp && resp.items) || [];
   if (!items.length) {
     // on a site VidGrab supports by link the panel stays out of the way
@@ -2512,19 +2557,26 @@ async function renderSniff(tab) {
   empty.style.display = 'none';
   document.getElementById('vg-sniff-count').textContent = `(${items.length})`;
   list.textContent = '';
-  // 5.18.1: which file is the video on screen (when its <video> plays a real URL)
-  const cur = await vgAskCurrentVideo(tab.id);
+  // 5.18.1 + 5.25.0: active <video> across all frames (from VG_SNIFF_PROBE or content.js)
+  const cur = (resp && resp.playing) || await vgAskCurrentVideo(tab.id);
   const canon = (u) => { try { const x = new URL(u); ['bytestart', 'byteend', 'range'].forEach((k) => x.searchParams.delete(k)); return x.origin + x.pathname; } catch { return u; } };
   const playing = cur && cur.src ? canon(cur.src) : null;
   const ordered = [...items].reverse().sort((a, b) => (canon(b.url) === playing) - (canon(a.url) === playing));
-  ordered.forEach((it) => {
+  ordered.forEach((it, idx) => {
     const row = vgSniffRow(tab, it);
-    if (playing && canon(it.url) === playing) {
+    const isPlayingRow = (playing && canon(it.url) === playing) || (!playing && idx === 0 && cur && cur.title);
+    if (isPlayingRow) {
       row.style.borderColor = '#6366f1';
       const mark = document.createElement('div');
-      mark.style.cssText = 'font-size:10px;color:#a5b4fc;font-weight:700;margin-bottom:4px;';
-      mark.textContent = cur.title ? t('sniff_playing_title', cur.title.slice(0, 60)) : t('sniff_playing');
+      mark.style.cssText = 'font-size:10px;color:#a5b4fc;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      const shownTitle = (it.title || (cur && cur.title) || '').slice(0, 70);
+      mark.textContent = shownTitle ? t('sniff_playing_title', shownTitle) : t('sniff_playing');
       row.prepend(mark);
+    } else if (it.title) {
+      const titleLine = document.createElement('div');
+      titleLine.style.cssText = 'font-size:10px;color:#e2e8f0;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      titleLine.textContent = it.title.slice(0, 75);
+      row.prepend(titleLine);
     }
     list.appendChild(row);
   });
@@ -2552,7 +2604,7 @@ function vgSniffRow(tab, it) {
   info.className = 'vg-sniff-meta';
   info.style.cssText = 'flex:1;min-width:0;font-size:10px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
   info.textContent = meta || (it.title || '').slice(0, 60);
-  info.title = it.url;
+  if (_vgUniversalGate.allowed) info.title = it.url;
   top.append(tag, info);
   row.appendChild(top);
 
@@ -2567,6 +2619,19 @@ function vgSniffRow(tab, it) {
     note.style.cssText = 'font-size:10px;color:#fca5a5;flex:1;';
     note.textContent = blocked;
     actions.appendChild(note);
+  } else if (!_vgUniversalGate.allowed) {
+    const upBtn = document.createElement('button');
+    upBtn.className = 'vg-sniff-upgrade';
+    upBtn.style.cssText = 'flex:1;background:linear-gradient(135deg,#d97706,#6366f1);border:none;border-radius:8px;padding:6px 8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;';
+    upBtn.textContent = _vgUniversalGate.authenticated ? VG_SNIFF_TEXT.tierLockedBtn : VG_SNIFF_TEXT.signinLockedBtn;
+    upBtn.title = VG_SNIFF_TEXT.tierLockedHint;
+    upBtn.onclick = () => {
+      if (msg) msg.textContent = VG_SNIFF_TEXT.tierLockedHint;
+      vgOpenPricing();
+    };
+    actions.appendChild(upBtn);
+    row.appendChild(actions);
+    return row;
   } else if (!it.pending) {
     const btn = document.createElement('button');
     btn.className = 'vg-sniff-dl';
@@ -2574,7 +2639,7 @@ function vgSniffRow(tab, it) {
     if (it.kind === 'file') {
       btn.textContent = VG_SNIFF_TEXT.download;
       btn.onclick = () => chrome.runtime.sendMessage({ type: 'VG_SNIFF_DOWNLOAD', tabId: tab.id, id: it.id }, (r) => {
-        msg.textContent = r && r.ok ? VG_SNIFF_TEXT.started : VG_SNIFF_TEXT.failed;
+        msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started, VG_SNIFF_TEXT.failed);
       });
     } else if (it.kind === 'hls') {
       // in this browser first; VidGrab's server only when that cannot work
@@ -2590,7 +2655,7 @@ function vgSniffRow(tab, it) {
       btn.textContent = VG_SNIFF_TEXT.local;
       btn.onclick = () => chrome.runtime.sendMessage(
         { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
-        (r) => { msg.textContent = r && r.ok ? VG_SNIFF_TEXT.started2 : VG_SNIFF_TEXT.failed; renderHlsJobs(); });
+        (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
       actions.appendChild(btn);
       const srv = document.createElement('button');
       srv.className = 'vg-sniff-server';

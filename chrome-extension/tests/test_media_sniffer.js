@@ -19,8 +19,13 @@ assert(S.classify(d('https://cdn.x/v/master.m3u8?t=1', { 'content-type': 'applic
 assert(S.classify(d('https://cdn.x/play?id=9', { 'content-type': 'application/x-mpegURL' })).kind === 'hls', 'HLS by content-type only');
 assert(S.classify(d('https://cdn.x/hls/ep01/index.txt', { 'content-type': 'text/plain', 'content-length': 4200 }))?.kind === 'hls', 'disguised HLS index.txt under /hls/');
 assert(S.classify(d('https://cdn.x/vod/playlist?token=abc', { 'content-type': 'application/octet-stream', 'content-length': 1800 }))?.kind === 'hls', 'disguised HLS playlist with octet-stream');
+assert(S.classify(d('https://cdn.x/uuid-a1b2/720p/chunklist_b2000.txt', { 'content-type': 'text/html; charset=utf-8', 'content-length': 6400 }))?.kind === 'hls', 'disguised HLS chunklist served with text/html');
+assert(S.classify(d('https://cdn.x/vod/urlset/master', { 'content-type': 'application/json', 'content-length': 900 }))?.kind === 'hls', 'disguised HLS urlset/master served with application/json');
 assert(S.classify(d('https://cdn.x/api/stream?format=m3u8', { 'content-type': 'text/plain' }))?.kind === 'hls', 'disguised HLS m3u8 query hint');
 assert(S.classify(d('https://cdn.x/hls/seg_001.png', { 'content-type': 'image/png', 'content-length': 250000 })) === null, 'PNG segment under /hls/ is NOT classified as manifest');
+assert(S.classify(d('https://cdn.x/vod/seg-12-v1-a1.mp4', { 'content-type': 'video/mp4', 'content-length': 1500000 })) === null, 'small numbered video chunk (seg-12-v1-a1.mp4) suppressed');
+assert(S.classify(d('https://stream.cdn.x/play/998877?sig=abc', { 'content-type': 'application/octet-stream', 'content-length': 45000000 }, { type: 'media' }))?.kind === 'file', 'extensionless <video> media stream with application/octet-stream classified as file');
+assert(S.classify(d('https://stream.cdn.x/api/blob?sig=abc', { 'content-type': 'application/octet-stream', 'content-length': 45000000 }, { type: 'xmlhttprequest' })) === null, 'XHR octet-stream without media element not falsely listed as file');
 assert(S.classify(d('https://cdn.x/hls/player.js', { 'content-type': 'application/javascript', 'content-length': 12000 })) === null, 'JS under /hls/ is NOT classified as manifest');
 assert(S.classify(d('https://cdn.x/robots.txt', { 'content-type': 'text/plain', 'content-length': 500 })) === null, 'plain txt without HLS hint ignored');
 assert(S.classify(d('https://cdn.x/hls/index.txt', { 'content-type': 'text/plain', 'content-length': 5000000 })) === null, 'oversized disguised txt ignored');
@@ -123,6 +128,25 @@ if (typeof S.pickReferer === 'function') {
     S.pickReferer({ frameId: 0, frameUrl: 'javascript:alert(1)', initiator: 'chrome-extension://abc', pageUrl: 'https://site.example/v' })
       === 'https://site.example/v',
     'non-http(s) frameUrl/initiator ignored',
+  );
+}
+
+console.log('cleanMediaTitle');
+assert(typeof S.cleanMediaTitle === 'function', 'cleanMediaTitle exported');
+if (typeof S.cleanMediaTitle === 'function') {
+  assert(
+    S.cleanMediaTitle('(3) Xem phim Lên Đường Nhậm Chức Tập 01 Full HD Vietsub | cinema-stream.example', 'https://cinema-stream.example/phim/len-duong-nham-chuc/tap-01')
+      === 'Lên Đường Nhậm Chức Tập 01',
+    'strips notification count, Xem phim prefix, Full HD Vietsub & domain suffix while keeping episode',
+  );
+  assert(
+    S.cleanMediaTitle('[DOC-451] Midnight Harbor Story - Watch Online Free - vodhub.example', 'https://www.vodhub.example/v/doc-451')
+      === '[DOC-451] Midnight Harbor Story',
+    'preserves catalog code [DOC-451] and strips English Watch Online Free + host suffix',
+  );
+  assert(
+    S.cleanMediaTitle('Just a moment...', 'https://cinema.example/v/1') === '',
+    'rejects anti-bot / generic player placeholder titles',
   );
 }
 

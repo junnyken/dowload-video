@@ -47,8 +47,10 @@ function makeChrome() {
   const fetches = [];
   const listeners = [];
   const session = {};
+  const local = {};
   let cookie = null;
   let nativeError = null;
+  let usagePayload = { tier: 'free', universal_stream: false };
   const chrome = new Proxy({
     runtime: new Proxy({
       lastError: undefined,
@@ -72,8 +74,16 @@ function makeChrome() {
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     storage: new Proxy({
       local: {
-        get: async (k, cb) => { const r = {}; if (cb) cb(r); return r; },
-        set: async () => {}, remove: async () => {},
+        get: async (k, cb) => {
+          let r = {};
+          if (typeof k === 'string') { if (k in local) r[k] = local[k]; }
+          else if (Array.isArray(k)) { for (const x of k) if (x in local) r[x] = local[x]; }
+          else r = { ...local };
+          if (cb) cb(r);
+          return r;
+        },
+        set: async (o) => { Object.assign(local, JSON.parse(JSON.stringify(o))); },
+        remove: async (k) => { for (const x of (Array.isArray(k) ? k : [k])) delete local[x]; },
       },
       session: {
         get: async (k) => ({ [k]: session[k] }),
@@ -88,9 +98,11 @@ function makeChrome() {
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
   }, { get: (t, k) => (k in t ? t[k] : anything()) });
   return {
-    chrome, posted, ports, tabs, fetches, listeners, session,
+    chrome, posted, ports, tabs, fetches, listeners, session, local,
     setCookie: (c) => { cookie = c; },
     setNativeError: (e) => { nativeError = e; },
+    getUsagePayload: () => usagePayload,
+    setUsagePayload: (u) => { usagePayload = u; },
   };
 }
 
@@ -102,7 +114,11 @@ const sandbox = {
   crypto: require('crypto').webcrypto, btoa, atob,
   navigator: { userAgent: 'Mozilla/5.0 Chrome/141 Edg/141', userAgentData: { brands: [{ brand: 'Not=A?Brand' }, { brand: 'Chromium' }, { brand: 'Microsoft Edge' }] } },
   fetch: async (url, init = {}) => {
-    env.fetches.push({ url: String(url), init });
+    const s = String(url);
+    env.fetches.push({ url: s, init });
+    if (s.endsWith('/api/v1/user/usage')) {
+      return { ok: true, status: 200, json: async () => env.getUsagePayload() };
+    }
     return { ok: true, status: 200, json: async () => ({ ok: true, count: 1 }) };
   },
   self: {},
@@ -205,22 +221,45 @@ const send = (msg) => new Promise((resolve) => {
   const pkg = fs.readFileSync(path.join(dir, '..', 'scripts', 'package-extension.py'), 'utf8');
   assert(/m\.pop\("key", None\)/.test(pkg) && pkg.includes('still has the manifest key'), '[8] store build removes the key and checks it');
 
-  // [9] Universal HLS: AES-128 allowed + iframe refererUrl, userAgent, height, stream forwarded
+  // [9] Universal HLS: highest-tier gate (guest/pro refused, team allowed) + AES-128 + clean title + DRM block
   vm.runInContext('vgNativeRetryAt = 0; vgNativeConnect()', sandbox);
   const p3 = env.ports[env.ports.length - 1];
-  p3.deliver({ t: 'app', up: true, version: '0.22.2' });
+  p3.deliver({ t: 'app', up: true, version: '0.22.3' });
   sandbox.vgSniffList = async () => [
-    { id: 'aes1', kind: 'hls', encryption: 'aes128', live: false, url: 'https://cdn.x/hls/index.txt', title: 'Episode 01', pageUrl: 'https://site.x/watch/1', refererUrl: 'https://player.embed.x/v/1' },
-    { id: 'drm1', kind: 'hls', encryption: 'drm', live: false, url: 'https://cdn.x/drm.m3u8', title: 'DRM', pageUrl: 'https://site.x/watch/2' },
+    { id: 'aes1', kind: 'hls', encryption: 'aes128', live: false, url: 'https://cdn.x/hls/index.txt', title: '(2) Xem phim Hành Trình Tập 01 Full HD Vietsub - cinema.example', pageUrl: 'https://cinema.example/watch/1', refererUrl: 'https://player.embed.x/v/1' },
+    { id: 'drm1', kind: 'hls', encryption: 'drm', live: false, url: 'https://cdn.x/drm.m3u8', title: 'DRM', pageUrl: 'https://cinema.example/watch/2' },
   ];
+  sandbox.VGSniff = require(path.join(dir, 'media-sniffer.js'));
+
+  // 9a: Guest (no auth token) -> refused before touching native port
+  env.posted.length = 0;
+  delete env.local.vg_auth_token;
+  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
+  const rGuest = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
+  assert(rGuest && rGuest.ok === false && rGuest.error === 'signin_required' && !env.posted.some((x) => x.t === 'download'),
+    '[9a] VG_APP_SEND refuses unauthenticated guest with signin_required');
+
+  // 9b: Pro user (not highest tier) -> refused with tier_required
+  env.local.vg_auth_token = 'tok-pro-user';
+  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
+  const rPro = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
+  assert(rPro && rPro.ok === false && rPro.error === 'tier_required' && rPro.tier === 'pro' && !env.posted.some((x) => x.t === 'download'),
+    '[9b] VG_APP_SEND refuses Pro tier with tier_required');
+
+  // 9c: Team user (highest purchasable tier) -> allowed, forwards clean title + iframe refererUrl + height + userAgent + stream
+  env.local.vg_auth_token = 'tok-team-user';
+  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  vm.runInContext('vgStreamTierCache = { token: "", at: 0, res: null }', sandbox);
   env.posted.length = 0;
   const rAes = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
   const dlMsg = env.posted.find((x) => x.t === 'download');
   assert(rAes && rAes.ok === true && dlMsg && dlMsg.referer === 'https://player.embed.x/v/1'
+    && dlMsg.title === 'Hành Trình Tập 01'
     && dlMsg.height === 720 && dlMsg.stream === true && typeof dlMsg.userAgent === 'string' && dlMsg.userAgent.includes('Chrome'),
-    '[9] VG_APP_SEND allows AES-128 and forwards iframe refererUrl + height + userAgent + stream');
+    '[9c] VG_APP_SEND allows Team tier, cleans movie title, and forwards iframe refererUrl + height + userAgent + stream');
   const rDrm = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'drm1' });
-  assert(rDrm && rDrm.ok === false && rDrm.error === 'unsupported', '[9] VG_APP_SEND still refuses DRM streams');
+  assert(rDrm && rDrm.ok === false && rDrm.error === 'unsupported', '[9d] VG_APP_SEND still refuses DRM streams even for Team tier');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

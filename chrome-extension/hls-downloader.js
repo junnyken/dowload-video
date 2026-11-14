@@ -142,6 +142,18 @@
     }
   }
 
+  const ISO_BMFF_BOXES = new Set(['ftyp', 'styp', 'moof', 'sidx', 'emsg', 'free', 'skip']);
+
+  /** True when `u8` starts with a valid ISO BMFF / fMP4 box (`ftyp`, `styp`, `moof`…) rather than MPEG-TS. */
+  function isIsoBmffSegment(u8) {
+    if (!u8 || u8.length < 12) return false;
+    if (u8[0] === 0x47 && (u8.length < 189 || u8[188] === 0x47)) return false;
+    const size = ((u8[0] << 24) >>> 0) + (u8[1] << 16) + (u8[2] << 8) + u8[3];
+    if (size !== 1 && size < 8) return false;
+    const box = String.fromCharCode(u8[4], u8[5], u8[6], u8[7]);
+    return ISO_BMFF_BOXES.has(box);
+  }
+
   /**
    * Strips a fake image/header prefix prepended before 188-byte MPEG-TS packets
    * (e.g. a PNG/JPEG/BMP header before `0x47` sync bytes). Leaves valid TS or
@@ -286,13 +298,13 @@
       }
       return keyCache.get(uri);
     };
-    const loadSegment = async (item, isFmp4) => {
+    const loadSegment = async (item) => {
       let u8 = await fetchBytes(item.url, item.range, job);
       if (item.key) {
         const ck = await loadCryptoKey(item.key.uri);
         u8 = await decryptSegment(u8, ck, item.key.iv);
       }
-      return isFmp4 ? u8 : stripDisguisedTsPrefix(u8);
+      return u8;
     };
 
     let writer = null;
@@ -303,8 +315,14 @@
       const total = plan.segs.length;
       send({ type: 'HLS_PROGRESS', id: job.id, done: 0, total, bytes: 0, height: media.height || null });
 
-      const sink = plan.fmp4 ? { push: (u8) => writer.write(u8), end: async () => {} } : tsRemuxer(writer);
-      if (plan.map) await sink.push(await loadSegment(plan.map, true));
+      const rawSink = { push: (u8) => writer.write(u8), end: async () => {} };
+      let fmp4Mode = plan.fmp4;
+      let sink = fmp4Mode ? rawSink : null;
+      if (plan.map) {
+        fmp4Mode = true;
+        sink = rawSink;
+        await sink.push(await loadSegment(plan.map));
+      }
 
       // parallel fetch + decrypt, in-order write: at most POOL segments in flight or waiting
       const ready = new Map();
@@ -316,7 +334,7 @@
           if (failure || state.cancelled) { done(); return; }
           while (next < total && next - written < POOL) {
             const i = next++;
-            loadSegment(plan.segs[i], plan.fmp4).then((u8) => {
+            loadSegment(plan.segs[i]).then((u8) => {
               ready.set(i, u8);
               drain();
             }, (e) => { failure = failure || e; done(); });
@@ -329,8 +347,13 @@
           draining = true;
           try {
             while (ready.has(written)) {
-              const u8 = ready.get(written);
+              const rawU8 = ready.get(written);
               ready.delete(written);
+              if (!sink) {
+                fmp4Mode = fmp4Mode || isIsoBmffSegment(rawU8);
+                sink = fmp4Mode ? rawSink : tsRemuxer(writer);
+              }
+              const u8 = fmp4Mode ? rawU8 : stripDisguisedTsPrefix(rawU8);
               await sink.push(u8);
               written += 1;
               if (written % 3 === 0 || written === total) {
@@ -369,7 +392,7 @@
     }
   }
 
-  const exported = { mediaPlan, byterange, seqToIv, parseHexIv, decryptSegment, stripDisguisedTsPrefix };
+  const exported = { mediaPlan, byterange, seqToIv, parseHexIv, decryptSegment, stripDisguisedTsPrefix, isIsoBmffSegment };
   root.__vgHls = exported;
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;
 

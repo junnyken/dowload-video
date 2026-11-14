@@ -1702,6 +1702,18 @@
     "message": "Qua VidGrab",
     "description": "wording: BA review"
   },
+  "sniff_tierLockedBtn": {
+    "message": "🔒 Nâng cấp gói Team (cao nhất) để tải phim",
+    "description": "wording: BA review"
+  },
+  "sniff_signinLockedBtn": {
+    "message": "🔒 Đăng nhập gói Team (cao nhất) để tải phim",
+    "description": "wording: BA review"
+  },
+  "sniff_tierLockedHint": {
+    "message": "Tính năng tải video & luồng phát trên mọi trang web chỉ dành cho tài khoản gói cao nhất (Team).",
+    "description": "wording: BA review"
+  },
   "sp_album_label": {
     "message": "ALBUM • SPOTIFY"
   },

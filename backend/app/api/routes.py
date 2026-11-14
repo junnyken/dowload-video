@@ -633,6 +633,26 @@ async def fetch_link(
     # an internal URL reached the extractor and came back as a generic 500).
     _assert_safe_url(payload.url)
 
+    from app.api.client_quota import (
+        UNIVERSAL_STREAM_DENIED_MSG as _us_msg,
+        can_universal_stream as _can_us,
+        is_manifest_stream_url as _is_manifest_url,
+    )
+    if _is_manifest_url(payload.url):
+        _us_uid = user["id"] if user else None
+        _us_req = resolve_requester(request, user_id=_us_uid, ip=get_client_ip(request))
+        if not _can_us(_us_req):
+            raise HTTPException(
+                status_code=403,
+                detail=make_error(ERR_FEATURE, extra={
+                    "feature": "universal_stream",
+                    "required_tier": "team",
+                    "current_tier": _us_req.tier if _us_uid else "guest",
+                    "upgrade_url": "/upgrade",
+                    "message": _us_msg,
+                }),
+            )
+
     # quality #5: audio strings are checked here, never left for yt-dlp to choke on
     from app.services.downloader import audio_quality_valid
     _q_in = payload.quality or "video"

@@ -32,11 +32,19 @@
     return false;
   }
   const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init)$/i;
+  const SEGMENT_PATH_HINT = /(?:^|[/_.-])(seg|frag|chunk|part|piece)[-_]?\d+(?:[-_][va]\d+)*(?:\.[a-z0-9]+)?$/i;
   const FILE_EXT = /\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i;
   const NON_MANIFEST_EXT = /\.(js|mjs|cjs|css|png|jpe?g|gif|webp|avif|bmp|svg|ico|woff2?|ttf|otf|wasm|map|mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav|ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init|pdf|zip)$/i;
-  const DISGUISED_HLS_MIMES = new Set(['', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'audio/mpegurl', 'audio/x-mpegurl']);
-  const HLS_URL_HINT = /(?:^|[/?&=_.-])(m3u8|hls|playlist|master)(?:$|[/?&=_.-])/i;
+  const DISGUISED_HLS_MIMES = new Set(['', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'audio/mpegurl', 'audio/x-mpegurl', 'application/x-mpegurl']);
+  const SOFT_HLS_MIMES = new Set(['text/html', 'application/json']);
+  const HLS_URL_HINT = /(?:^|[/?&=_.-])(m3u8|hls\d*|playlist|master|manifest|chunklist|urlset|index[-_]v\d)(?:$|[/?&=_.-])/i;
+  const STRONG_HLS_PATH_HINT = /(\.(m3u8?|txt)$|(?:^|[/_.-])(m3u8|playlist|master|chunklist|urlset)(?:$|[/_.-]))/i;
   const RANGE_PARAMS = ['bytestart', 'byteend', 'range', 'rn', 'rbuf'];
+  const JUNK_TITLE_RE = /^(?:just a moment\.{0,3}|attention required!?.*|(?:video\s*|jw\s*|html5\s*)?player|embed(?:\s+player)?|loading\.{0,3}|untitled|index|playlist|master|manifest)$/i;
+  const FILE_LIKE_TITLE_RE = /^[a-z0-9_-]+\.(?:m3u8?|mpd|mp4|ts|txt|html?|php)$/i;
+  const GENERIC_TRAIL_RE = /^(?:watch(?:\s+online)?(?:\s+free)?(?:\s+hd)?|free\s+(?:hd|videos?|movies?|streaming)|full\s+hd(?:\s+online)?|stream(?:ing)?\s+online|xem\s+phim(?:\s+online)?(?:\s+(?:hd|miễn\s+phí|mới(?:\s+nhất)?|nhanh|vietsub))?|phim\s+(?:hd|mới(?:\s+nhất)?|hay|lẻ|bộ)|trang\s+chủ|home)$/i;
+  const DOMAIN_TOKEN_RE = /\b[a-z0-9-]{2,}\.(?:com|net|org|io|vn|ws|tv|to|me|cc|co|xyz|pro|vip|club|top|site|online|stream|watch|live|today|one|fun|info|biz|asia|gg|la|sh|bz|su|icu|cyou|click|shop|lol|cfd)\b/i;
+  const EPISODE_OR_CODE_RE = /(?:\b(?:tập|tap|ep(?:isode)?)\s*\d+|\b[a-z]{2,6}-\d{2,5}\b)/i;
 
   function pathOf(url) {
     try { return new URL(url).pathname.toLowerCase(); } catch { return ''; }
@@ -74,14 +82,93 @@
     return init || '';
   }
 
+  function hostStems(pageUrl) {
+    const h = hostOf(pageUrl).replace(/^(?:www\d*|m|web|v|play|player)\./, '');
+    if (!h) return [];
+    const first = h.split('.')[0] || '';
+    const compact = first.replace(/[^a-z0-9]/g, '');
+    const alpha = compact.replace(/\d+$/, '');
+    return [h, first, compact, alpha.length >= 4 ? alpha : ''].filter((s) => s && s.length >= 3);
+  }
+
+  function isSiteSuffixSegment(seg, stems) {
+    const s = String(seg || '').trim();
+    if (!s) return true;
+    if (GENERIC_TRAIL_RE.test(s) || DOMAIN_TOKEN_RE.test(s)) return true;
+    const low = s.toLowerCase();
+    const compact = low.replace(/[^a-z0-9]/g, '');
+    if (!compact) return true;
+    for (const st of stems) {
+      if (low === st || compact === st) return true;
+      if (st.length >= 5 && compact.length <= st.length + 4 && compact.startsWith(st)) return true;
+    }
+    return false;
+  }
+
+  function cleanSingleTitle(raw, stems) {
+    let s = String(raw || '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim();
+    if (!s || /^https?:\/\//i.test(s)) return '';
+    s = s.replace(/^(?:\(\d+\)\s*|▶\s*)+/, '').trim();
+    if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
+
+    const sepRe = /\s+(?:\||::|—|–|•|»|-)\s+/;
+    const parts = s.split(sepRe).map((p) => p.trim()).filter(Boolean);
+    while (parts.length > 1 && isSiteSuffixSegment(parts[parts.length - 1], stems)) {
+      parts.pop();
+    }
+    while (parts.length > 1 && GENERIC_TRAIL_RE.test(parts[0])) {
+      parts.shift();
+    }
+    s = parts.join(' - ');
+    const strippedLead = s.replace(/^(?:xem\s+phim(?:\s+online)?|watch(?:\s+online)?(?:\s+free)?)\s*(?:[:\-–—]\s*|\s+)/i, '').trim();
+    if (strippedLead.length >= 3) s = strippedLead;
+    const strippedTail = s.replace(/(?:\s+(?:full\s*hd|fhd|hd|4k|vietsub|thuyết\s*minh|thuyet\s*minh|lồng\s*tiếng|long\s*tieng|online|miễn\s*phí|mien\s*phi|free))+\s*$/i, '').trim();
+    if (strippedTail.length >= 3) s = strippedTail;
+
+    s = s.replace(/[<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[.\-\s]+|[.\-\s]+$/g, '');
+    if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
+    return s.length > 140 ? s.slice(0, 140).trim().replace(/[.\-\s]+$/, '') : s;
+  }
+
+  /**
+   * Produces a clean movie/video title from either a raw title string or
+   * `{ ogTitle, h1Title, tabTitle }` candidates, stripping site domain spam,
+   * leading notification counters, and generic watch-online boilerplate while
+   * preserving episode numbers and title codes.
+   */
+  function cleanMediaTitle(input, pageUrl) {
+    const stems = hostStems(pageUrl);
+    if (!input || typeof input === 'string') {
+      return cleanSingleTitle(input, stems);
+    }
+    const og = cleanSingleTitle(input.ogTitle, stems);
+    const h1 = cleanSingleTitle(input.h1Title, stems);
+    const tab = cleanSingleTitle(input.tabTitle, stems);
+    const primary = og || h1 || tab;
+    if (!primary) return '';
+    // Keep tabTitle when it carries an episode number or catalog code that h1/og omitted.
+    if (tab && tab !== primary && EPISODE_OR_CODE_RE.test(tab) && !EPISODE_OR_CODE_RE.test(primary)) {
+      return tab;
+    }
+    if (h1 && og && h1.length >= 4 && h1.length < og.length && (!EPISODE_OR_CODE_RE.test(og) || EPISODE_OR_CODE_RE.test(h1))) {
+      return h1;
+    }
+    return primary;
+  }
+
   function isDisguisedHls(url, path, mime, size) {
     if (NON_MANIFEST_EXT.test(path)) return false;
     if (size !== null && size > MAX_MANIFEST_BYTES) return false;
-    if (!DISGUISED_HLS_MIMES.has(mime)) return false;
-    try {
-      const u = new URL(url);
-      return HLS_URL_HINT.test(u.pathname) || HLS_URL_HINT.test(u.search);
-    } catch { return false; }
+    if (DISGUISED_HLS_MIMES.has(mime)) {
+      try {
+        const u = new URL(url);
+        return HLS_URL_HINT.test(u.pathname) || HLS_URL_HINT.test(u.search);
+      } catch { return false; }
+    }
+    if (SOFT_HLS_MIMES.has(mime) && size !== null && size >= 16 && size <= 512 * 1024) {
+      return STRONG_HLS_PATH_HINT.test(path);
+    }
+    return false;
   }
 
   /** The file a ranged media request belongs to (Facebook's bytestart/byteend…). */
@@ -130,11 +217,15 @@
 
     const size = totalSize(details.responseHeaders, details.statusCode);
     if (isDisguisedHls(url, path, mime, size)) return { kind: 'hls', mime, size: null };
+    if (details.type !== 'media' && SEGMENT_PATH_HINT.test(path) && (size === null || size < 15 * 1024 * 1024)) return null;
 
-    const isMedia = /^(video|audio)\//.test(mime) || (FILE_EXT.test(path) && (!mime || mime === 'application/octet-stream'));
+    const isOctet = !mime || mime === 'application/octet-stream' || mime === 'binary/octet-stream';
+    const isMediaElementStream = details.type === 'media' && isOctet && !NON_MANIFEST_EXT.test(path)
+      && (size >= MIN_FILE_BYTES || (details.statusCode === 200 && size === null));
+    const isMedia = /^(video|audio)\//.test(mime) || (FILE_EXT.test(path) && isOctet) || isMediaElementStream;
     if (!isMedia) return null;
     if (size !== null && size < MIN_FILE_BYTES) return null;
-    return { kind: 'file', mime, size };
+    return { kind: 'file', mime: mime || 'video/mp4', size };
   }
 
   // ── HLS (RFC 8216) ──────────────────────────────────────────────────────
@@ -240,7 +331,7 @@
   }
 
   const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, qualityLabel, isoDuration,
-                    pickReferer, MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
+                    pickReferer, cleanMediaTitle, MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
   root.VGSniff = VGSniff;
   if (typeof module !== 'undefined' && module.exports) module.exports = VGSniff;
 
@@ -391,7 +482,11 @@
     const item = { id: Math.random().toString(36).slice(2, 10), url, kind: c.kind, mime: c.mime, size: c.size,
                    title: '', pageUrl: '', refererUrl: '', at: ts, pending: c.kind !== 'file', encryption: 'none' };
     items.push(item);
-    try { const t = await chrome.tabs.get(tabId); item.title = t.title || ''; item.pageUrl = t.url || ''; } catch { /* closed */ }
+    try {
+      const t = await chrome.tabs.get(tabId);
+      item.pageUrl = t.url || '';
+      item.title = cleanMediaTitle(t.title || '', item.pageUrl) || (t.title || '').trim();
+    } catch { /* closed */ }
     const tabFrames = frames.get(tabId);
     item.refererUrl = pickReferer({
       frameId: details.frameId || 0,
@@ -402,6 +497,163 @@
     });
     save(tabId);
     if (item.pending) enrich(tabId, item);
+  }
+
+  /**
+   * Probes all frames (including nested cross-origin player iframes) for active
+   * <video> sources, PerformanceResourceTiming manifest/media entries missed by a
+   * cold-started service worker, and clean og:title / <h1> movie titles.
+   */
+  async function probeTab(tabId) {
+    const items = await load(tabId);
+    if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') {
+      return { items: visible(items), playing: null };
+    }
+    let tabMeta = null;
+    try { tabMeta = await chrome.tabs.get(tabId); } catch { return { items: visible(items), playing: null }; }
+    if (!tabMeta || !tabMeta.url || !/^https?:\/\//i.test(tabMeta.url)) {
+      return { items: visible(items), playing: null };
+    }
+
+    let results = [];
+    try {
+      results = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => {
+          const out = {
+            frameUrl: String(location.href || ''),
+            isTop: window === window.top,
+            docTitle: String(document.title || '').slice(0, 240),
+            ogTitle: '',
+            h1Title: '',
+            videos: [],
+            resources: [],
+          };
+          if (out.isTop) {
+            const og = document.querySelector('meta[property="og:title"], meta[name="twitter:title"]');
+            out.ogTitle = og ? String(og.getAttribute('content') || '').slice(0, 240) : '';
+            const h1 = document.querySelector('h1');
+            out.h1Title = h1 ? String(h1.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+          }
+          const vids = document.querySelectorAll('video');
+          for (let i = 0; i < vids.length && out.videos.length < 6; i++) {
+            const v = vids[i];
+            const src = String(v.currentSrc || v.src || '');
+            out.videos.push({
+              src: /^https?:\/\//i.test(src) ? src : '',
+              playing: !v.paused && !v.ended,
+              height: v.videoHeight || 0,
+              duration: Number.isFinite(v.duration) && v.duration > 0 ? Math.round(v.duration) : 0,
+            });
+          }
+          try {
+            const entries = performance.getEntriesByType('resource') || [];
+            for (let i = entries.length - 1; i >= 0 && out.resources.length < 30; i--) {
+              const e = entries[i];
+              const name = String((e && e.name) || '');
+              if (!/^https?:\/\//i.test(name)) continue;
+              const initType = String(e.initiatorType || '');
+              const size = Number(e.decodedBodySize || e.transferSize || 0) || 0;
+              if (/\.(m3u8|mpd)(\?|$)/i.test(name)
+                  || /(?:^|[/?&=_.-])(m3u8|hls\d*|playlist|master|manifest|chunklist|urlset|index[-_]v\d)(?:$|[/?&=_.-])/i.test(name)
+                  || initType === 'video'
+                  || /\.(mp4|m4v|webm|mov|mkv)(\?|$)/i.test(name)) {
+                out.resources.push({ url: name, initiatorType: initType, size });
+              }
+            }
+          } catch { /* cross-origin timing restricted */ }
+          return out;
+        },
+      });
+    } catch {
+      return { items: visible(items), playing: null };
+    }
+
+    let topFrame = null;
+    let playing = null;
+    for (const entry of results || []) {
+      const r = entry && entry.result;
+      if (!r) continue;
+      if (r.isTop) topFrame = r;
+      if (entry.frameId > 0 && /^https?:/i.test(r.frameUrl || '')) {
+        let m = frames.get(tabId);
+        if (!m) { m = new Map(); frames.set(tabId, m); }
+        if (m.size < 64) m.set(entry.frameId, r.frameUrl);
+      }
+      for (const v of r.videos || []) {
+        if (v.playing || !playing) {
+          playing = { src: v.src || '', title: '', frameUrl: r.frameUrl };
+          if (v.playing) break;
+        }
+      }
+    }
+
+    const bestTitle = cleanMediaTitle({
+      ogTitle: topFrame && topFrame.ogTitle,
+      h1Title: topFrame && topFrame.h1Title,
+      tabTitle: (topFrame && topFrame.docTitle) || tabMeta.title || '',
+    }, tabMeta.url) || cleanMediaTitle(tabMeta.title || '', tabMeta.url) || (tabMeta.title || '').trim();
+
+    if (playing) playing.title = bestTitle;
+
+    let changed = false;
+    for (const it of items) {
+      if (bestTitle && (!it.title || it.title !== bestTitle)) {
+        it.title = bestTitle;
+        changed = true;
+      }
+    }
+
+    const toEnrich = [];
+    const ingestUrl = (rawUrl, kindHint, sizeHint, frameId, frameUrl) => {
+      if (!rawUrl || isBlockedStream(rawUrl) || items.length >= MAX_ITEMS) return;
+      const p = pathOf(rawUrl);
+      if (SEGMENT_EXT.test(p)) return;
+      let kind = kindHint;
+      if (!kind) {
+        if (p.endsWith('.m3u8')) kind = 'hls';
+        else if (p.endsWith('.mpd')) kind = 'dash';
+        else if (isDisguisedHls(rawUrl, p, '', sizeHint || null)) kind = 'hls';
+        else if (FILE_EXT.test(p) && (!sizeHint || sizeHint >= MIN_FILE_BYTES)) kind = 'file';
+      }
+      if (!kind) return;
+      const url = kind === 'file' ? canonicalUrl(rawUrl) : rawUrl;
+      if (items.some((x) => x.url === url)) return;
+      if (kind === 'hls' && children.get(tabId) && children.get(tabId).has(url)) return;
+      const item = {
+        id: Math.random().toString(36).slice(2, 10),
+        url,
+        kind,
+        mime: kind === 'file' ? 'video/mp4' : '',
+        size: kind === 'file' && sizeHint >= MIN_FILE_BYTES ? sizeHint : null,
+        title: bestTitle,
+        pageUrl: tabMeta.url || '',
+        refererUrl: pickReferer({ frameId, frameUrl, pageUrl: tabMeta.url || '' }),
+        at: Date.now(),
+        pending: kind !== 'file',
+        encryption: 'none',
+      };
+      items.push(item);
+      changed = true;
+      if (item.pending) toEnrich.push(item);
+    };
+
+    for (const entry of results || []) {
+      const r = entry && entry.result;
+      if (!r) continue;
+      const fid = entry.frameId || 0;
+      for (const v of r.videos || []) {
+        if (v.src) ingestUrl(v.src, /\.(m3u8)(\?|$)/i.test(v.src) ? 'hls' : /\.(mpd)(\?|$)/i.test(v.src) ? 'dash' : 'file', null, fid, r.frameUrl);
+      }
+      for (const res of r.resources || []) {
+        const k = res.initiatorType === 'video' && !/\.(m3u8|mpd)(\?|$)/i.test(res.url) ? 'file' : '';
+        ingestUrl(res.url, k, res.size || null, fid, r.frameUrl);
+      }
+    }
+
+    if (changed) save(tabId);
+    for (const item of toEnrich) enrich(tabId, item);
+    return { items: visible(items), playing };
   }
 
   chrome.webRequest.onResponseStarted.addListener(
@@ -427,5 +679,6 @@
   chrome.tabs.onRemoved.addListener((tabId) => { clearTab(tabId); });
 
   root.vgSniffList = async (tabId) => visible(await load(tabId));
+  root.vgSniffProbe = probeTab;
   root.vgSniffClear = clearTab;
 })(typeof self !== 'undefined' ? self : globalThis);

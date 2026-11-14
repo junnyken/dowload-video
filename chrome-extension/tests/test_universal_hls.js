@@ -237,9 +237,46 @@ https://seg.cdn-d.example/chunk1.png
   assert(!!doneMsg && !failMsg, 'encrypted + PNG-disguised HLS job completes with HLS_DONE', failMsg || doneMsg);
   assert(keyFetches === 1, 'AES-128 key fetched only ONCE across multiple segments', keyFetches);
   assert(pushedChunks.length === 2 && pushedChunks.every((c) => c[0] === 0x47 && c.byteLength === seg0Plain.byteLength), 'both segments decrypted and PNG-stripped before mux.js');
-  const refDomains = swMessages.filter((m) => m.type === 'VG_ENSURE_REFERER').map((m) => new URL(m.url).hostname);
+    const refDomains = swMessages.filter((m) => m.type === 'VG_ENSURE_REFERER').map((m) => new URL(m.url).hostname);
   assert(refDomains.includes('manifest.cdn-a.example') && refDomains.includes('variant.cdn-b.example')
     && refDomains.includes('key.cdn-c.example') && refDomains.includes('seg.cdn-d.example'), 'VG_ENSURE_REFERER ensured for manifest, variant, key, and segment CDN hosts', refDomains);
+
+  console.log('[5] Disguised .jpeg self-initializing fMP4 segments (no EXT-X-MAP) bypass mux.js and write ISO-BMFF directly');
+  assert(typeof H.isIsoBmffSegment === 'function', 'isIsoBmffSegment exported');
+  const fmp4Seg0 = new Uint8Array([
+    0x00, 0x00, 0x00, 0x10, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
+    0x00, 0x00, 0x00, 0x08, 0x6d, 0x6f, 0x6f, 0x66,
+  ]);
+  const fmp4Seg1 = new Uint8Array([
+    0x00, 0x00, 0x00, 0x08, 0x73, 0x74, 0x79, 0x70,
+    0x00, 0x00, 0x00, 0x08, 0x6d, 0x6f, 0x6f, 0x66,
+  ]);
+  assert(H.isIsoBmffSegment(fmp4Seg0) === true && H.isIsoBmffSegment(fmp4Seg1) === true, 'ftyp/styp ISO-BMFF boxes recognised');
+  assert(H.isIsoBmffSegment(seg0Plain) === false, 'MPEG-TS packets not misidentified as ISO-BMFF');
+
+  routes.set('https://fmp4.cdn.example/playlist.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:4
+#EXTINF:4.0,
+https://fmp4.cdn.example/part0.jpeg
+#EXTINF:4.0,
+https://fmp4.cdn.example/part1.jpeg
+#EXT-X-ENDLIST
+`));
+  routes.set('https://fmp4.cdn.example/part0.jpeg', fmp4Seg0);
+  routes.set('https://fmp4.cdn.example/part1.jpeg', fmp4Seg1);
+
+  swMessages.length = 0;
+  pushedChunks.length = 0;
+  writtenParts.length = 0;
+  listener({ target: 'offscreen', type: 'HLS_START', job: { id: 'j2', url: 'https://fmp4.cdn.example/playlist.m3u8', height: 1080, title: 'Disguised fMP4', referer: 'https://cinema.example/watch/9' } }, {}, () => {});
+  for (let i = 0; i < 40 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  const doneMsg2 = swMessages.find((m) => m.type === 'HLS_DONE');
+  assert(!!doneMsg2 && pushedChunks.length === 0 && writtenParts.length === 2,
+    'disguised .jpeg fMP4 segments write directly to OPFS MP4 without mux.js TS transmuxer',
+    { done: !!doneMsg2, muxPushes: pushedChunks.length, opfsWrites: writtenParts.length });
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

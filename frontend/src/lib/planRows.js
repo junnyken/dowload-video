@@ -37,6 +37,10 @@ export function buildPlanRows(tiers) {
       },
     },
     {
+      key: 'universalStream', label: tp('rows.universalStream'),
+      get: (t) => (t.universal_stream ? tp('universalStreamTeam') : false),
+    },
+    {
       key: 'reupClean', label: tp('rows.reupClean'),
       get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('reupPro') : false),
     },

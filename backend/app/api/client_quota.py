@@ -148,6 +148,7 @@ class ClaimIn(BaseModel):
     route: str = Field(default="local", max_length=20)
     clientVersion: str = Field(default="", max_length=32)
     retro: bool = False
+    streamCapture: bool = False
 
 
 class BatchItem(BaseModel):
@@ -289,12 +290,58 @@ def ip_cap_message() -> str:
     return _ip_cap_message()
 
 
+UNIVERSAL_STREAM_DENIED_MSG = (
+    "Tính năng tải video & luồng phát từ các trang web ngoài chỉ dành cho gói tài khoản cao nhất (Team). "
+    "Vui lòng nâng cấp tài khoản để sử dụng."
+)
+
+
+def is_manifest_stream_url(url: str) -> bool:
+    from urllib.parse import urlsplit  # noqa: PLC0415
+    try:
+        path = (urlsplit(url or "").path or "").lower()
+    except ValueError:
+        return False
+    return path.endswith((".m3u8", ".mpd"))
+
+
+def can_universal_stream(req: "quotas.QuotaRequester") -> bool:
+    if req.kind == quotas.REQ_ADMIN:
+        return True
+    if req.kind != quotas.REQ_USER:
+        return False
+    from app.core.entitlements import is_universal_stream_tier  # noqa: PLC0415
+    return is_universal_stream_tier(req.tier)
+
+
+def _req_tier_name(req: "quotas.QuotaRequester") -> str:
+    if req.kind == quotas.REQ_ADMIN:
+        return "admin"
+    if req.kind == quotas.REQ_USER:
+        return req.tier
+    return "guest"
+
+
 def _usage(req: "quotas.QuotaRequester") -> dict:
     limit = quotas.platform_limit(req)
     used = 0 if req.kind == quotas.REQ_ADMIN else quotas.platform_used(req, quotas._TOTAL_BUCKET)
     return {"limit": limit, "usedToday": used,
             "remaining": -1 if limit == -1 else max(0, limit - used),
-            "resetTimeVn": quotas.reset_time_vn_text(), "requester": req.kind}
+            "resetTimeVn": quotas.reset_time_vn_text(), "requester": req.kind,
+            "tier": _req_tier_name(req), "universalStream": can_universal_stream(req)}
+
+
+def _stream_tier_refusal(req: "quotas.QuotaRequester") -> dict:
+    return {
+        "allowed": False,
+        "error_code": "tier_required_feature",
+        "feature": "universal_stream",
+        "required_tier": "team",
+        "reason": "tier_required_feature",
+        "detail": UNIVERSAL_STREAM_DENIED_MSG,
+        "upsell": "upgrade" if req.kind == quotas.REQ_USER else "signin",
+        **_usage(req),
+    }
 
 
 def _refusal(req: "quotas.QuotaRequester", message: str, reason: str = "daily_limit") -> dict:
@@ -388,11 +435,18 @@ def _record_device(request: Request, req: "quotas.QuotaRequester", user: Optiona
 @router.post("/client/quota/claim")
 @limiter.limit("60/minute")
 async def claim(payload: ClaimIn, request: Request, user=Depends(get_optional_user)):
-    if not quota_enabled():
-        return _disabled()
     url = _http_url(payload.url)
     if not url:
+        if not quota_enabled():
+            return _disabled()
         return JSONResponse(status_code=400, content={"detail": "Link không hợp lệ.", "error_code": "invalid_url"})
+    if (bool(payload.streamCapture) or is_manifest_stream_url(url)) and not bool(payload.retro):
+        req_gate = _requester(request, user)
+        if not can_universal_stream(req_gate):
+            _stat(payload.route if payload.route in _ROUTES else "local", "refused_tier", req_gate)
+            return JSONResponse(status_code=403, content=_stream_tier_refusal(req_gate))
+    if not quota_enabled():
+        return _disabled()
     route = payload.route if payload.route in _ROUTES else "local"
     req = _requester(request, user)
     retro = bool(payload.retro) and _take_retro(req)
