@@ -66,6 +66,12 @@ export type QueueItem = {
   errorText?: string | null;
   /** 0.21.0: what ffprobe measured on the finished file (null = could not be read). */
   media?: Media | null;
+  /** Request headers & output filename handed over by the browser extension for HLS/DASH streams. */
+  extHeaders?: { name: string; value: string }[];
+  fileTitle?: string | null;
+  fileId?: string | null;
+  /** True when the URL is a browser-sniffed CDN stream (never fall through to server /fetch-link). */
+  localOnly?: boolean;
   addedAt: string;
 };
 
@@ -109,6 +115,10 @@ export type NewJob = Pick<QueueItem, 'url' | 'title' | 'thumbnail' | 'platform' 
   claimToken?: string | null;
   /** 'S0': skip the local steps (the local analysis already failed and the user chose the server). */
   startAt?: 'S0';
+  extHeaders?: { name: string; value: string }[];
+  fileTitle?: string | null;
+  fileId?: string | null;
+  localOnly?: boolean;
 };
 
 export function enqueue(job: NewJob): string {
@@ -166,7 +176,7 @@ export function pump() {
 
 /** The step this item runs next (or is running): the first step of its plan it has not used yet. */
 function stepOf(item: QueueItem): RouteId | null {
-  return currentStep(routesFor(item.url), item.tried ?? []);
+  return currentStep(item.localOnly ? ['L0'] : routesFor(item.url), item.tried ?? []);
 }
 /** pickNext's view: the old route name of the step this item would take now. */
 function planOf(item: QueueItem): Plan {
@@ -268,8 +278,12 @@ async function start(item: QueueItem) {
         if (!queue.get().some((i) => i.id === item.id)) { void settle(v.claimId, 'cancelled'); return; } // cancelled while claiming
       }
       const tok = queue.get().find((i) => i.id === item.id)?.claimToken;
-      extra = tok ? { claimToken: tok } : {};
-      if (step === 'L1') extra = { ...extra, useCookies: true };
+      extra = {
+        ...(tok ? { claimToken: tok } : {}),
+        ...(step === 'L1' ? { useCookies: true } : {}),
+        ...(item.extHeaders?.length ? { headers: item.extHeaders } : {}),
+        ...(item.fileTitle && item.fileId ? { fileTitle: item.fileTitle, fileId: item.fileId } : {}),
+      };
     }
     if (!queue.get().some((i) => i.id === item.id && i.state === 'running')) return; // cancelled / paused while resolving
     // a guest's local download stops at 1080p (server-route steps override formatId in `extra`)
@@ -372,7 +386,7 @@ export async function initQueue() {
       case 'failed': {
         const code = e.errorCode ?? 'unknown';
         if (isLocalStep(it.step)) {
-          const plan = routesFor(it.url);
+          const plan: RouteId[] = it.localOnly ? ['L0'] : routesFor(it.url);
           const next = nextRoute(plan, it.tried ?? [], it.step, code);
           if (next) {
             if (e.cookiesUsed) void refreshCookieStatus(); // Rust may have flagged the blob

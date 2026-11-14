@@ -2428,8 +2428,8 @@ async function initSniff(tab) {
   renderHlsJobs();
 }
 
-function vgSendToApp(tab, it, msg) {
-  chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id }, (r) => {
+function vgSendToApp(tab, it, msg, height = null) {
+  chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id, height }, (r) => {
     msg.textContent = r && r.ok ? VG_SNIFF_TEXT.appSent : VG_SNIFF_TEXT.appFailed;
   });
 }
@@ -2540,7 +2540,7 @@ function vgSniffRow(tab, it) {
   const quality = it.variants && it.variants.length
     ? it.variants.map((v) => vgQ(v.height)).filter(Boolean).filter((q, i, a) => a.indexOf(q) === i).slice(0, 4).join(' · ')
     : vgQ(it.height);
-  const meta = [quality, vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
+  const meta = [quality, it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes : '', vgFmtDur(it.duration), vgFmtBytes(it.size), it.pending ? VG_SNIFF_TEXT.reading : ''].filter(Boolean).join(' · ');
 
   const top = document.createElement('div');
   top.style.cssText = 'display:flex;align-items:center;gap:6px;';
@@ -2560,7 +2560,6 @@ function vgSniffRow(tab, it) {
   actions.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
   const msg = document.getElementById('vg-sniff-msg');
   const blocked = it.encryption === 'drm' ? VG_SNIFF_TEXT.drm
-    : it.encryption === 'aes128' ? VG_SNIFF_TEXT.aes
     : it.live ? VG_SNIFF_TEXT.live : '';
   if (blocked) {
     const note = document.createElement('span');
@@ -2606,7 +2605,7 @@ function vgSniffRow(tab, it) {
         appBtn.textContent = 'App';
         appBtn.title = VG_SNIFF_TEXT.viaApp;
         appBtn.style.cssText = srv.style.cssText;
-        appBtn.onclick = () => vgSendToApp(tab, it, msg);
+        appBtn.onclick = () => vgSendToApp(tab, it, msg, pick ? Number(pick.value) : null);
         actions.appendChild(appBtn);
       }
     } else if (_vgAppFound) {

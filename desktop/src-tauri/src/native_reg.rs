@@ -20,11 +20,11 @@ pub const TOKEN_FILE: &str = "token";
 const IDENTIFIER: &str = "xyz.tinhgon.vidgrab";
 
 /// Extension ids allowed to start the host. The website build pins its id
-/// with the manifest "key" (chrome-extension/manifest.json, 5.22.0); add the
-/// Chrome Web Store item's id here once it is published.
+/// with the manifest "key" (chrome-extension/manifest.json, 5.22.0); the second
+/// entry is the published Chrome Web Store item id.
 pub const ALLOWED_IDS: [&str; 2] = [
     "gkoepflfmpdmkhmccekmajlfdnfklmgi",
-    "lhodalmameagalaociflghencoefpclp",
+    "ihodaimameagalaodiflghencoefpclp",
 ];
 
 /// Same folder as Tauri's app_local_data_dir, computed without Tauri (the
@@ -167,7 +167,13 @@ mod tests {
         let m: serde_json::Value = serde_json::from_str(&host_manifest(Path::new("/x/vidgrab-host-0.20.0.exe"))).unwrap();
         assert_eq!(m["name"], HOST_NAME);
         assert_eq!(m["type"], "stdio");
-        assert_eq!(m["allowed_origins"], serde_json::json!(["chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi/"]));
+        assert_eq!(
+            m["allowed_origins"],
+            serde_json::json!([
+                "chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi/",
+                "chrome-extension://ihodaimameagalaodiflghencoefpclp/",
+            ])
+        );
         // Chrome: lowercase alphanumerics, '_' and '.' only
         assert!(HOST_NAME.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_'));
     }

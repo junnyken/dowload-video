@@ -57,10 +57,42 @@ pub fn set_device(hash: &str) {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Job {
     pub url: String,
     pub title: Option<String>,
     pub referer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+}
+
+/// Parses and validates a download payload sent by the extension over either
+/// `POST /vidgrab/download` or the native messaging link (`ext_link.rs`).
+pub fn parse_job(v: &serde_json::Value) -> Option<Job> {
+    let url = v.get("url").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+    if !valid_http_url(&url) {
+        return None;
+    }
+    let referer = clean_text(v.get("referer"), MAX_URL).filter(|r| valid_http_url(r));
+    let user_agent = clean_text(v.get("userAgent"), 512);
+    let height = v
+        .get("height")
+        .and_then(|x| x.as_u64())
+        .and_then(|h| u32::try_from(h).ok())
+        .filter(|h| (144..=4320).contains(h));
+    let stream = v.get("stream").and_then(|x| x.as_bool()).filter(|&b| b);
+    Some(Job {
+        url,
+        title: clean_text(v.get("title"), 200),
+        referer,
+        user_agent,
+        height,
+        stream,
+    })
 }
 
 /// First free port of PORTS.
@@ -267,12 +299,9 @@ pub fn handle(req: &Request, port: u16, version: &str) -> (u16, Option<String>, 
             let Ok(v) = serde_json::from_slice::<serde_json::Value>(&req.body) else {
                 return (400, Some(o), err_json("bad json"), None);
             };
-            let url = v.get("url").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
-            if !valid_http_url(&url) {
+            let Some(job) = parse_job(&v) else {
                 return (400, Some(o), err_json("bad url"), None);
-            }
-            let referer = clean_text(v.get("referer"), MAX_URL).filter(|r| valid_http_url(r));
-            let job = Job { url, title: clean_text(v.get("title"), 200), referer };
+            };
             (200, Some(o), serde_json::json!({ "ok": true }).to_string(), Some(job))
         }
         (_, "/vidgrab/ping" | "/vidgrab/download") => (405, ext_origin, err_json("method not allowed"), None),
@@ -343,8 +372,40 @@ mod tests {
         assert_eq!(s, 200);
         assert_eq!(
             job,
-            Some(Job { url: "https://cdn.x/a.mpd".into(), title: Some("Phim hay".into()), referer: Some("https://site.x/watch".into()) })
+            Some(Job {
+                url: "https://cdn.x/a.mpd".into(),
+                title: Some("Phim hay".into()),
+                referer: Some("https://site.x/watch".into()),
+                user_agent: None,
+                height: None,
+                stream: None,
+            })
         );
+
+        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true}"#;
+        let (s, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, rich), 17325, "x");
+        assert_eq!(s, 200);
+        let j = job.expect("rich job");
+        assert_eq!(
+            j,
+            Job {
+                url: "https://cdn.x/hls/master.m3u8".into(),
+                title: Some("Tap 01".into()),
+                referer: Some("https://embed.x/e/1".into()),
+                user_agent: Some("Mozilla/5.0 Chrome/135".into()),
+                height: Some(1080),
+                stream: Some(true),
+            }
+        );
+        let wire = serde_json::to_value(&j).unwrap();
+        assert_eq!(wire["userAgent"], "Mozilla/5.0 Chrome/135");
+        assert_eq!(wire["height"], 1080);
+        assert_eq!(wire["stream"], true);
+
+        let odd = r#"{"url":"https://cdn.x/hls/master.m3u8","height":99999,"stream":false}"#;
+        let (_, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, odd), 17325, "x");
+        let j = job.expect("odd job");
+        assert_eq!((j.height, j.stream), (None, None));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-# Chrome Web Store Listing — Tiếng Việt (v5.23.1)
+# Chrome Web Store Listing — Tiếng Việt (v5.24.0)
 
 ## Tên
 ```

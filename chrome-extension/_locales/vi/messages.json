@@ -1569,7 +1569,7 @@
     "message": "Cài đặt"
   },
   "sniff_aes": {
-    "message": "Video được mã hoá — chưa hỗ trợ",
+    "message": "AES-128",
     "description": "wording: BA review"
   },
   "sniff_allow": {

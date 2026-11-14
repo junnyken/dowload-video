@@ -53,12 +53,14 @@ pub fn format_id(f: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err("invalid format id".into()) }
 }
 
-/// Request headers the webview may ask yt-dlp to send (Douyin direct links
-/// need the Referer / User-Agent the server resolved them with). Names are
-/// allowlisted and returned in canonical case; values are single-line text.
+/// Request headers the webview may ask yt-dlp to send (Douyin direct links and
+/// browser-sniffed HLS/DASH streams need the Referer / Origin / User-Agent the
+/// browser resolved them with). Names are allowlisted and returned in canonical
+/// case; values are single-line text.
 pub fn download_header(name: &str, value: &str) -> Result<(String, String), String> {
     let canonical = match name.trim().to_ascii_lowercase().as_str() {
         "referer" => "Referer",
+        "origin" => "Origin",
         "user-agent" => "User-Agent",
         _ => return Err("header not allowed".into()),
     };
@@ -68,6 +70,22 @@ pub fn download_header(name: &str, value: &str) -> Result<(String, String), Stri
     }
     if canonical == "Referer" && url(v).is_err() {
         return Err("invalid referer".into());
+    }
+    if canonical == "Origin" {
+        let ok = !v.ends_with('/')
+            && !v.contains('\\')
+            && url::Url::parse(v).is_ok_and(|u| {
+                matches!(u.scheme(), "http" | "https")
+                    && u.host_str().is_some()
+                    && u.username().is_empty()
+                    && u.password().is_none()
+                    && u.path() == "/"
+                    && u.query().is_none()
+                    && u.fragment().is_none()
+            });
+        if !ok {
+            return Err("invalid origin".into());
+        }
     }
     Ok((canonical.to_string(), v.to_string()))
 }
@@ -206,11 +224,24 @@ mod tests {
     #[test]
     fn download_header_validation() {
         assert_eq!(download_header("referer", "https://www.douyin.com/").unwrap(), ("Referer".into(), "https://www.douyin.com/".into()));
+        assert_eq!(download_header("origin", "https://player.embed.example").unwrap(), ("Origin".into(), "https://player.embed.example".into()));
+        assert_eq!(download_header("ORIGIN", "http://localhost:8080").unwrap(), ("Origin".into(), "http://localhost:8080".into()));
         assert_eq!(download_header("User-Agent", "Mozilla/5.0 (X)").unwrap().0, "User-Agent");
         assert!(download_header("Cookie", "a=b").is_err());
         assert!(download_header("Authorization", "Bearer x").is_err());
         assert!(download_header("User-Agent", "a\r\nX: y").is_err());
         assert!(download_header("Referer", "not a url").is_err());
+        for bad_origin in [
+            "https://player.embed.example/",
+            "https://player.embed.example/path",
+            "https://player.embed.example?x=1",
+            "https://player.embed.example#frag",
+            "https://u:p@player.embed.example",
+            "null",
+            "javascript:x",
+        ] {
+            assert!(download_header("Origin", bad_origin).is_err(), "{bad_origin}");
+        }
         assert!(download_header("User-Agent", "").is_err());
         assert!(download_header("User-Agent", &"a".repeat(513)).is_err());
         assert!(file_id("7311_a-B").is_ok());

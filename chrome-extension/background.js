@@ -294,6 +294,49 @@ function vgRefererRules(list = VG_REFERER_RULES) {
 }
 vgRefererRules();
 
+// Ephemeral TAB_ID_NONE Referer + Origin rules for sniffed HLS/DASH/file CDNs
+// (IDs 9200..9231). Scoped strictly to extension background/offscreen fetches
+// (tabId -1), so real browser tabs are never modified.
+const VG_STREAM_RULE_BASE = 9200;
+const VG_STREAM_RULE_MAX = 32;
+const _vgStreamDomainSlot = new Map();
+let _vgStreamRuleSeq = 0;
+async function vgEnsureStreamReferer(targetUrl, refererUrl) {
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateSessionRules) return false;
+  let target, ref;
+  try {
+    target = new URL(String(targetUrl || ''));
+    ref = new URL(String(refererUrl || ''));
+  } catch { return false; }
+  if (!/^https?:$/.test(target.protocol) || !/^https?:$/.test(ref.protocol)) return false;
+  const host = target.hostname.toLowerCase();
+  if (!host || host === 'localhost' || host === '127.0.0.1' || isFirstPartyHost(host)) return false;
+  if (VG_REFERER_RULES.some((r) => r.domains.some((d) => host === d || host.endsWith('.' + d)))) return true;
+  let id = _vgStreamDomainSlot.get(host);
+  if (id == null) {
+    id = VG_STREAM_RULE_BASE + (_vgStreamRuleSeq++ % VG_STREAM_RULE_MAX);
+    for (const [k, v] of _vgStreamDomainSlot) if (v === id) _vgStreamDomainSlot.delete(k);
+    _vgStreamDomainSlot.set(host, id);
+  }
+  const headers = [
+    { header: 'referer', operation: 'set', value: ref.toString() },
+    { header: 'origin', operation: 'set', value: ref.origin },
+  ];
+  try {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [id],
+      addRules: [{
+        id,
+        priority: 2,
+        action: { type: 'modifyHeaders', requestHeaders: headers },
+        condition: { requestDomains: [host], tabIds: [chrome.tabs.TAB_ID_NONE], resourceTypes: ['other', 'media', 'xmlhttprequest'] },
+      }],
+    });
+    return true;
+  } catch { return false; }
+}
+self.vgEnsureStreamReferer = vgEnsureStreamReferer;
+
 function vgNeedsReferer(url) {
   let host = '';
   try { host = new URL(url).hostname; } catch { return false; }
@@ -454,6 +497,8 @@ function hlsSafeName(t) {
 
 async function hlsStart(item, height) {
   await hlsLoad();
+  const referer = item.refererUrl || item.pageUrl || '';
+  if (referer) await vgEnsureStreamReferer(item.url, referer);
   const id = `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const job = { id, title: item.title || 'video', url: item.url, height: height || null, state: 'running',
                 done: 0, total: 0, bytes: 0, at: Date.now(), message: '' };
@@ -461,7 +506,7 @@ async function hlsStart(item, height) {
   hlsSave();
   await ensureOffscreen();
   await chrome.runtime.sendMessage({ target: 'offscreen', type: 'HLS_START',
-                                     job: { id, url: item.url, height: job.height, title: job.title } });
+                                     job: { id, url: item.url, height: job.height, title: job.title, referer } });
   return job;
 }
 
@@ -838,6 +883,7 @@ function vgBulkCounts(b) {
 // The offscreen page cannot use chrome.i18n: it sends a reason code, the text is made here.
 const VG_HLS_REASONS = ['not_hls', 'encrypted', 'live', 'empty', 'too_long', 'separate_audio', 'remux_failed', 'cancelled'];
 function vgHlsMessage(msg) {
+  if (msg.reason === 'drm') return t('sniff_drm');
   if (VG_HLS_REASONS.includes(msg.reason)) return t('hls_' + msg.reason);
   if (msg.reason === 'error') return t('hls_error', msg.message || '');
   return msg.message || '';
@@ -988,12 +1034,23 @@ async function vgFindApp(force = false) {
   return found;
 }
 
-async function vgSendToApp(item) {
+async function vgSendToApp(item, height) {
+  const referer = item.refererUrl || item.pageUrl || '';
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent).slice(0, 512) : '';
+  const h = Number.isInteger(height) && height >= 144 && height <= 4320 ? height : undefined;
+  const payload = {
+    url: item.url,
+    title: item.title || '',
+    referer,
+    ...(ua ? { userAgent: ua } : {}),
+    ...(h ? { height: h } : {}),
+    ...(item.kind ? { stream: true } : {}),
+  };
   // 5.22.0: over the native link when the app is on it (only the app's own
   // host can be on that end; the HTTP port stays for apps before 0.20.0)
   if (vgNativePort && vgNativeApp.up) {
     try {
-      vgNativePort.postMessage({ t: 'download', url: item.url, title: item.title || '', referer: item.pageUrl || '' });
+      vgNativePort.postMessage({ t: 'download', ...payload });
       return { ok: true };
     } catch { /* port just closed: HTTP below */ }
   }
@@ -1002,7 +1059,7 @@ async function vgSendToApp(item) {
   const r = await fetch(`http://127.0.0.1:${app.port}/vidgrab/download`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: item.url, title: item.title || '', referer: item.pageUrl || '' }),
+    body: JSON.stringify(payload),
   });
   const j = await r.json().catch(() => null);
   return r.ok && j && j.ok ? { ok: true } : { ok: false, error: (j && j.error) || `HTTP ${r.status}` };
@@ -1489,11 +1546,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     self.vgSniffClear(msg.tabId).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.type === 'VG_ENSURE_REFERER') {
+    if (!_fromExtensionPage) { sendResponse({ ok: false }); return false; }
+    vgEnsureStreamReferer(msg.url, msg.referer).then((ok) => sendResponse({ ok }), () => sendResponse({ ok: false }));
+    return true;
+  }
   if (msg.type === 'VG_SNIFF_DOWNLOAD') {
     (async () => {
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.kind !== 'file') { sendResponse({ ok: false, error: 'not_a_file' }); return; }
+      const ref = item.refererUrl || item.pageUrl || '';
+      if (ref) await vgEnsureStreamReferer(item.url, ref);
       const base = await getApiBase();
       const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
         || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
@@ -1509,7 +1573,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item || item.kind !== 'hls') { sendResponse({ ok: false, error: 'not_hls' }); return; }
-      if (item.encryption !== 'none' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      if (item.encryption === 'drm' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
       const job = await hlsStart(item, msg.height);
       sendResponse({ ok: true, job });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
@@ -1528,8 +1592,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
-      if (!item || item.encryption !== 'none' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
-      sendResponse(await vgSendToApp(item));
+      if (!item || item.encryption === 'drm' || item.live) { sendResponse({ ok: false, error: 'unsupported' }); return; }
+      sendResponse(await vgSendToApp(item, msg.height));
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }

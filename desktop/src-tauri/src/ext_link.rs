@@ -31,7 +31,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use regex::Regex;
 use serde_json::{json, Value};
 
-use crate::ext_bridge::{clean_text, valid_http_url, Job, MAX_URL};
+use crate::ext_bridge::{clean_text, parse_job, Job};
 use crate::native_host::{is_browser_exe, read_line_capped, MAX_IN};
 
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -171,12 +171,7 @@ fn dispatch(link: &Link, v: &Value) {
             info.ext_version = clean_text(v.get("ext"), 20);
         }
         Some("download") => {
-            let url = v.get("url").and_then(Value::as_str).unwrap_or("").trim().to_string();
-            if !valid_http_url(&url) {
-                return;
-            }
-            let referer = clean_text(v.get("referer"), MAX_URL).filter(|r| valid_http_url(r));
-            let job = Job { url, title: clean_text(v.get("title"), 200), referer };
+            let Some(job) = parse_job(v) else { return };
             if let Some(f) = ON_JOB.get() {
                 f(job);
             }
@@ -525,8 +520,10 @@ mod tests {
 
         // a download handed over the link, and one the app refuses
         write_frame(&mut ext_out, br#"{"t":"download","url":"file:///etc/passwd"}"#).unwrap();
-        write_frame(&mut ext_out, br#"{"t":"download","url":"https://cdn.x/a.mpd","title":"T"}"#).unwrap();
-        assert_eq!(jobs_rx.recv_timeout(Duration::from_secs(5)).unwrap().url, "https://cdn.x/a.mpd");
+        write_frame(&mut ext_out, br#"{"t":"download","url":"https://cdn.x/a.mpd","title":"T","referer":"https://embed.x/p","userAgent":"Mozilla/5.0","height":720,"stream":true}"#).unwrap();
+        let got = jobs_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(got.url, "https://cdn.x/a.mpd");
+        assert_eq!((got.referer.as_deref(), got.user_agent.as_deref(), got.height, got.stream), (Some("https://embed.x/p"), Some("Mozilla/5.0"), Some(720), Some(true)));
 
         // the browser closes the port: the host ends, the link goes away
         drop(ext_out);

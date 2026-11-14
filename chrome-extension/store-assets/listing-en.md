@@ -1,4 +1,4 @@
-# Chrome Web Store Listing — English (v5.23.1)
+# Chrome Web Store Listing — English (v5.24.0)
 
 ## Name (manifest "name" limit 45 chars; dashboard 75)
 ```

@@ -222,9 +222,14 @@ pub fn download_args(
                 a.push("0".into());
             }
         }
+    } else if cookies.is_none() {
+        // Multi-segment HLS/DASH downloads run 4x faster without touching
+        // cookie-authenticated runs (which pace requests sequentially via SLEEP).
+        a.push("--concurrent-fragments".into());
+        a.push("4".into());
     }
     // Each header is its own argv item (`Name:Value`); validate::download_header
-    // already limited names to Referer / User-Agent and refused control chars.
+    // already limited names to Referer / Origin / User-Agent and refused control chars.
     for (k, v) in headers {
         a.push("--add-header".into());
         a.push(format!("{k}:{v}").into());
@@ -406,16 +411,27 @@ mod tests {
     fn headers_become_add_header_args_and_url_stays_last() {
         let (f, d) = tools();
         let t = Tools { ffmpeg: &f, deno: &d };
-        let h = [("Referer".to_string(), "https://www.douyin.com/".to_string()), ("User-Agent".to_string(), "Mozilla/5.0 X".to_string())];
+        let h = [
+            ("Referer".to_string(), "https://www.douyin.com/".to_string()),
+            ("Origin".to_string(), "https://www.douyin.com".to_string()),
+            ("User-Agent".to_string(), "Mozilla/5.0 X".to_string()),
+        ];
         let s = strs(&download_args(&t, "https://cdn/x.mp4", Path::new("/out"), None, false, &h, None, None));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "Referer:https://www.douyin.com/"));
+        assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "Origin:https://www.douyin.com"));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "User-Agent:Mozilla/5.0 X"));
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "4"));
         assert_eq!(s[s.len() - 2], "--");
         assert_eq!(s[s.len() - 1], "https://cdn/x.mp4");
         assert!(s.iter().position(|a| a == "--add-header").unwrap() < s.len() - 2);
         // No headers -> no flag at all.
         let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, None));
         assert!(!s.contains(&"--add-header".into()));
+        // Cookie-authenticated or audio-only runs do not enable concurrent fragments.
+        let s_ck = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, Some(Path::new("/tmp/ck.txt"))));
+        assert!(!s_ck.contains(&"--concurrent-fragments".into()));
+        let s_aud = strs(&download_args(&t, "u", Path::new("/out"), None, true, &[], None, None));
+        assert!(!s_aud.contains(&"--concurrent-fragments".into()));
     }
 
     #[test]

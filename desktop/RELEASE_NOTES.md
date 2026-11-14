@@ -1,3 +1,4 @@
+- Hỗ trợ đồng bộ luồng phát HLS (.m3u8, bao gồm AES-128) và DASH từ tiện ích trình duyệt sang ứng dụng Windows kèm đầy đủ tiêu đề, độ phân giải và thông tin phiên phát nhúng, tăng tốc tải phân đoạn song song.
+- Khắc phục kết nối Native Messaging trực tiếp cho bản tiện ích cài từ Chrome Web Store.
 - Nâng cấp lõi tải yt-dlp lên bản 2026.10.26 giúp tải ổn định YouTube, TikTok, Facebook Reels và Instagram.
 - Theo dõi kênh: hỗ trợ chế độ Tự động tải về thư mục riêng từng kênh, tải bù khi mở lại ứng dụng và quét nhanh kênh YouTube qua RSS.
-- Hiển thị nhãn Mới kèm giờ đăng và giờ phát hiện cho từng video mới.

@@ -6,13 +6,17 @@
 // auto → the link is analysed and queued with the default quality at once.
 // off  → Rust stops reading the clipboard.
 import { decide, normalize } from './clipboard-core';
-import { api, onClipboardLink, onExtDownload } from './tauri';
-import { settings } from './settings';
+import { planExtJob } from './ext-handoff-core';
+import { api, onClipboardLink, onExtDownload, type ExtJob } from './tauri';
+import { ensureOutDir, settings } from './settings';
 import { createStore } from './store';
 import { analyze, probes } from './probes';
 import { go, openInChannels, toast } from './ui';
 import { isChannelOnDownloadScreen } from './urls';
 import { addToQueue } from '../screens/DownloadScreen';
+import { enqueue } from './queue';
+import { findDuplicate } from './dedupe';
+import { auth } from './auth';
 
 export type ClipOffer = { url: string; platform: string };
 export const clipOffer = createStore<ClipOffer | null>(null);
@@ -77,16 +81,55 @@ function apply() {
 // in the browser (DASH, audio in a separate playlist). Same path as a copied
 // link in "auto" mode: analysed and queued with the default quality, here on
 // this machine — not on the VidGrab server.
+async function handleExtDownload(job: ExtJob) {
+  const st = settings.get();
+  const plan = planExtJob(job, { defaultQuality: st.defaultQuality, guest: auth.get().status !== 'in' });
+  if (plan.mode === 'probe') {
+    const name = (job.title || '').trim() || 'video từ trình duyệt';
+    downloadNow(plan.url, plan.platform);
+    if (document.hidden) void api.notify('VidGrab', `Đang tải "${name.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
+    else toast('info', `Tiện ích VidGrab đã gửi "${name.slice(0, 60)}" sang app — đang phân tích để tải.`);
+    return;
+  }
+
+  const outDir = (await ensureOutDir()) || st.outDir;
+  if (!outDir) {
+    toast('error', 'Chưa chọn thư mục lưu tệp tải về.');
+    go('settings');
+    return;
+  }
+  const dup = await findDuplicate(plan.url);
+  if (dup?.kind === 'queued') {
+    toast('info', 'Video này đang có trong hàng đợi.');
+    go('queue');
+    return;
+  }
+  enqueue({
+    url: plan.url,
+    title: plan.title,
+    thumbnail: null,
+    platform: plan.platform,
+    uploader: null,
+    outDir,
+    formatId: plan.formatId,
+    audioOnly: plan.audioOnly,
+    formatLabel: plan.formatLabel,
+    estSize: null,
+    quality: plan.quality,
+    extHeaders: plan.headers,
+    fileTitle: plan.fileTitle,
+    fileId: plan.fileId,
+    localOnly: true,
+  });
+  if (document.hidden) void api.notify('VidGrab', `Đang tải "${plan.title.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
+  else toast('success', `Đã thêm "${plan.title.slice(0, 60)}" từ tiện ích vào hàng đợi tải.`);
+}
+
 let extStarted = false;
 export function startExtensionBridge() {
   if (extStarted) return;
   extStarted = true;
-  void onExtDownload((job) => {
-    const name = (job.title || '').trim() || 'video từ trình duyệt';
-    downloadNow(job.url, 'từ trình duyệt');
-    if (document.hidden) void api.notify('VidGrab', `Đang tải "${name.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
-    else toast('info', `Tiện ích VidGrab đã gửi "${name.slice(0, 60)}" sang app — đang phân tích để tải.`);
-  });
+  void onExtDownload((job) => { void handleExtDownload(job); });
 }
 
 let started = false;

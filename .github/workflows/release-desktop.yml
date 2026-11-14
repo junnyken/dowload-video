@@ -126,6 +126,14 @@ jobs:
           node scripts/fetch-binaries.mjs --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Build frontend & run Rust unit tests
+        working-directory: desktop
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --manifest-path src-tauri/Cargo.toml --lib --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build signed NSIS installer & updater .sig
         working-directory: desktop
         env:

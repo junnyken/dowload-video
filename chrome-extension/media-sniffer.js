@@ -31,8 +31,11 @@
     if (/^(www\.|m\.)?y[o]ut/i.test(h) || /(^|\.)y[t]img\./i.test(h)) return true;
     return false;
   }
-  const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|key|init)$/i;
+  const SEGMENT_EXT = /\.(ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init)$/i;
   const FILE_EXT = /\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i;
+  const NON_MANIFEST_EXT = /\.(js|mjs|cjs|css|png|jpe?g|gif|webp|avif|bmp|svg|ico|woff2?|ttf|otf|wasm|map|mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav|ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init|pdf|zip)$/i;
+  const DISGUISED_HLS_MIMES = new Set(['', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'audio/mpegurl', 'audio/x-mpegurl']);
+  const HLS_URL_HINT = /(?:^|[/?&=_.-])(m3u8|hls|playlist|master)(?:$|[/?&=_.-])/i;
   const RANGE_PARAMS = ['bytestart', 'byteend', 'range', 'rn', 'rbuf'];
 
   function pathOf(url) {
@@ -40,6 +43,45 @@
   }
   function hostOf(url) {
     try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
+  }
+  function httpUrl(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    const s = raw.trim();
+    if (!/^https?:\/\//i.test(s)) return '';
+    try { return new URL(s).toString(); } catch { return ''; }
+  }
+  function originOf(raw) {
+    try { return new URL(raw).origin.toLowerCase(); } catch { return ''; }
+  }
+
+  /**
+   * Picks the best Referer URL for a sniffed stream:
+   *  1. Exact sub_frame URL when the request came from an embedded <iframe>;
+   *  2. Cross-origin initiator origin (iframe loaded before service worker woke);
+   *  3. Top-level tab pageUrl;
+   *  4. Same-origin initiator fallback.
+   */
+  function pickReferer(ctx) {
+    const c = ctx || {};
+    if ((c.frameId || 0) > 0) {
+      const f = httpUrl(c.frameUrl) || httpUrl(c.documentUrl);
+      if (f) return f;
+    }
+    const init = httpUrl(c.initiator);
+    const page = httpUrl(c.pageUrl);
+    if (init && (!page || originOf(init) !== originOf(page))) return init;
+    if (page) return page;
+    return init || '';
+  }
+
+  function isDisguisedHls(url, path, mime, size) {
+    if (NON_MANIFEST_EXT.test(path)) return false;
+    if (size !== null && size > MAX_MANIFEST_BYTES) return false;
+    if (!DISGUISED_HLS_MIMES.has(mime)) return false;
+    try {
+      const u = new URL(url);
+      return HLS_URL_HINT.test(u.pathname) || HLS_URL_HINT.test(u.search);
+    } catch { return false; }
   }
 
   /** The file a ranged media request belongs to (Facebook's bytestart/byteend…). */
@@ -86,9 +128,11 @@
     if (path.endsWith('.mpd') || mime === 'application/dash+xml') return { kind: 'dash', mime, size: null };
     if (SEGMENT_EXT.test(path) || mime === 'video/mp2t' || mime === 'video/iso.segment') return null;
 
+    const size = totalSize(details.responseHeaders, details.statusCode);
+    if (isDisguisedHls(url, path, mime, size)) return { kind: 'hls', mime, size: null };
+
     const isMedia = /^(video|audio)\//.test(mime) || (FILE_EXT.test(path) && (!mime || mime === 'application/octet-stream'));
     if (!isMedia) return null;
-    const size = totalSize(details.responseHeaders, details.statusCode);
     if (size !== null && size < MIN_FILE_BYTES) return null;
     return { kind: 'file', mime, size };
   }
@@ -196,7 +240,7 @@
   }
 
   const VGSniff = { classify, canonicalUrl, totalSize, parseM3U8, parseMPD, qualityLabel, isoDuration,
-                    MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
+                    pickReferer, MAX_ITEMS, MIN_FILE_BYTES, MAX_MANIFEST_BYTES, isBlockedStream };
   root.VGSniff = VGSniff;
   if (typeof module !== 'undefined' && module.exports) module.exports = VGSniff;
 
@@ -206,6 +250,7 @@
   const KEY = (tabId) => `vg_sniff_${tabId}`;
   const lists = new Map();          // tabId -> items (memory copy of storage.session)
   const children = new Map();       // tabId -> Set of manifest URLs a master already stands for
+  const frames = new Map();         // tabId -> Map(frameId -> frame URL)
   const saveTimers = new Map();
 
   // One load per tab, shared: responses arrive together, and two loads racing
@@ -243,6 +288,7 @@
   async function clearTab(tabId) {
     lists.delete(tabId);
     children.delete(tabId);
+    frames.delete(tabId);
     navAt.delete(tabId);
     try { await chrome.storage.session.remove(KEY(tabId)); } catch { /* gone */ }
     root.vgSniffBadge && root.vgSniffBadge(tabId, 0);
@@ -252,9 +298,11 @@
   // Chrome's own request timestamps rather than by the order events reach
   // the worker, which webRequest does not promise across event types.
   const navAt = new Map();
-  async function navigated(tabId, ts) {
+  async function navigated(tabId, ts, url) {
     if (ts <= (navAt.get(tabId) || 0)) return;
     navAt.set(tabId, ts);
+    frames.delete(tabId);
+    if (url && /^https?:/i.test(url)) frames.set(tabId, new Map([[0, url]]));
     const items = await load(tabId);
     const keep = items.filter((x) => x.at >= ts);
     items.length = 0;
@@ -263,7 +311,10 @@
     save(tabId);
   }
 
-  async function fetchText(url) {
+  async function fetchText(url, refererUrl) {
+    if (refererUrl && typeof root.vgEnsureStreamReferer === 'function') {
+      await root.vgEnsureStreamReferer(url, refererUrl).catch(() => {});
+    }
     const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const text = await r.text();
@@ -278,7 +329,8 @@
 
   async function enrich(tabId, item) {
     try {
-      const text = await fetchText(item.url);
+      const ref = item.refererUrl || item.pageUrl || '';
+      const text = await fetchText(item.url, ref);
       if (item.kind === 'hls') {
         const p = parseM3U8(text, item.url);
         if (!p.valid) { item.hidden = true; return; }
@@ -296,7 +348,7 @@
           // the best variant tells the duration and whether its segments are encrypted
           if (p.variants[0] && item.encryption === 'none') {
             try {
-              const v = parseM3U8(await fetchText(p.variants[0].url), p.variants[0].url);
+              const v = parseM3U8(await fetchText(p.variants[0].url, ref), p.variants[0].url);
               if (v.valid) {
                 item.encryption = worse(item.encryption, v.encryption);
                 item.duration = v.duration || item.duration;
@@ -337,9 +389,17 @@
     if (items.length >= MAX_ITEMS) return;
     // pushed before any await, so the same URL arriving twice is listed once
     const item = { id: Math.random().toString(36).slice(2, 10), url, kind: c.kind, mime: c.mime, size: c.size,
-                   title: '', pageUrl: '', at: ts, pending: c.kind !== 'file', encryption: 'none' };
+                   title: '', pageUrl: '', refererUrl: '', at: ts, pending: c.kind !== 'file', encryption: 'none' };
     items.push(item);
     try { const t = await chrome.tabs.get(tabId); item.title = t.title || ''; item.pageUrl = t.url || ''; } catch { /* closed */ }
+    const tabFrames = frames.get(tabId);
+    item.refererUrl = pickReferer({
+      frameId: details.frameId || 0,
+      frameUrl: (tabFrames && tabFrames.get(details.frameId)) || '',
+      documentUrl: details.documentUrl || '',
+      initiator: details.initiator || '',
+      pageUrl: item.pageUrl,
+    });
     save(tabId);
     if (item.pending) enrich(tabId, item);
   }
@@ -349,10 +409,20 @@
     { urls: ['<all_urls>'], types: ['media', 'xmlhttprequest', 'other', 'object'] },
     ['responseHeaders'],
   );
-  // A real navigation of the tab starts a new list (an in-page route change does not).
+  // A real navigation of the tab starts a new list; sub_frame navigations record
+  // embedded player URLs so Referer/Origin match the iframe player rather than the outer shell.
   chrome.webRequest.onBeforeRequest.addListener(
-    (d) => { if (d.tabId >= 0 && d.frameId === 0) navigated(d.tabId, d.timeStamp || Date.now()).catch(() => {}); },
-    { urls: ['<all_urls>'], types: ['main_frame'] },
+    (d) => {
+      if (d.tabId < 0) return;
+      if (d.frameId === 0) {
+        navigated(d.tabId, d.timeStamp || Date.now(), d.url).catch(() => {});
+      } else if (d.frameId > 0 && /^https?:/i.test(d.url || '')) {
+        let m = frames.get(d.tabId);
+        if (!m) { m = new Map(); frames.set(d.tabId, m); }
+        if (m.size < 64) m.set(d.frameId, d.url);
+      }
+    },
+    { urls: ['<all_urls>'], types: ['main_frame', 'sub_frame'] },
   );
   chrome.tabs.onRemoved.addListener((tabId) => { clearTab(tabId); });
 

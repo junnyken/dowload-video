@@ -205,6 +205,23 @@ const send = (msg) => new Promise((resolve) => {
   const pkg = fs.readFileSync(path.join(dir, '..', 'scripts', 'package-extension.py'), 'utf8');
   assert(/m\.pop\("key", None\)/.test(pkg) && pkg.includes('still has the manifest key'), '[8] store build removes the key and checks it');
 
+  // [9] Universal HLS: AES-128 allowed + iframe refererUrl, userAgent, height, stream forwarded
+  vm.runInContext('vgNativeRetryAt = 0; vgNativeConnect()', sandbox);
+  const p3 = env.ports[env.ports.length - 1];
+  p3.deliver({ t: 'app', up: true, version: '0.22.2' });
+  sandbox.vgSniffList = async () => [
+    { id: 'aes1', kind: 'hls', encryption: 'aes128', live: false, url: 'https://cdn.x/hls/index.txt', title: 'Episode 01', pageUrl: 'https://site.x/watch/1', refererUrl: 'https://player.embed.x/v/1' },
+    { id: 'drm1', kind: 'hls', encryption: 'drm', live: false, url: 'https://cdn.x/drm.m3u8', title: 'DRM', pageUrl: 'https://site.x/watch/2' },
+  ];
+  env.posted.length = 0;
+  const rAes = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
+  const dlMsg = env.posted.find((x) => x.t === 'download');
+  assert(rAes && rAes.ok === true && dlMsg && dlMsg.referer === 'https://player.embed.x/v/1'
+    && dlMsg.height === 720 && dlMsg.stream === true && typeof dlMsg.userAgent === 'string' && dlMsg.userAgent.includes('Chrome'),
+    '[9] VG_APP_SEND allows AES-128 and forwards iframe refererUrl + height + userAgent + stream');
+  const rDrm = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'drm1' });
+  assert(rDrm && rDrm.ok === false && rDrm.error === 'unsupported', '[9] VG_APP_SEND still refuses DRM streams');
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

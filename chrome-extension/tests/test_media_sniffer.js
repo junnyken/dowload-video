@@ -17,6 +17,13 @@ const d = (url, headers = {}, extra = {}) => ({ url, tabId: 3, statusCode: 200, 
 console.log('classify');
 assert(S.classify(d('https://cdn.x/v/master.m3u8?t=1', { 'content-type': 'application/vnd.apple.mpegurl' })).kind === 'hls', 'm3u8 by path');
 assert(S.classify(d('https://cdn.x/play?id=9', { 'content-type': 'application/x-mpegURL' })).kind === 'hls', 'HLS by content-type only');
+assert(S.classify(d('https://cdn.x/hls/ep01/index.txt', { 'content-type': 'text/plain', 'content-length': 4200 }))?.kind === 'hls', 'disguised HLS index.txt under /hls/');
+assert(S.classify(d('https://cdn.x/vod/playlist?token=abc', { 'content-type': 'application/octet-stream', 'content-length': 1800 }))?.kind === 'hls', 'disguised HLS playlist with octet-stream');
+assert(S.classify(d('https://cdn.x/api/stream?format=m3u8', { 'content-type': 'text/plain' }))?.kind === 'hls', 'disguised HLS m3u8 query hint');
+assert(S.classify(d('https://cdn.x/hls/seg_001.png', { 'content-type': 'image/png', 'content-length': 250000 })) === null, 'PNG segment under /hls/ is NOT classified as manifest');
+assert(S.classify(d('https://cdn.x/hls/player.js', { 'content-type': 'application/javascript', 'content-length': 12000 })) === null, 'JS under /hls/ is NOT classified as manifest');
+assert(S.classify(d('https://cdn.x/robots.txt', { 'content-type': 'text/plain', 'content-length': 500 })) === null, 'plain txt without HLS hint ignored');
+assert(S.classify(d('https://cdn.x/hls/index.txt', { 'content-type': 'text/plain', 'content-length': 5000000 })) === null, 'oversized disguised txt ignored');
 assert(S.classify(d('https://cdn.x/a/stream.mpd')).kind === 'dash', 'mpd by path');
 assert(S.classify(d('https://cdn.x/manifest', { 'content-type': 'application/dash+xml' })).kind === 'dash', 'DASH by content-type');
 const f = S.classify(d('https://cdn.x/v.mp4', { 'content-type': 'video/mp4', 'content-length': 5e6 }));
@@ -93,6 +100,31 @@ assert(S.parseMPD(mpd.replace('<Representation id="1"', '<ContentProtection sche
 assert(S.parseMPD(mpd.replace('type="static"', 'type="dynamic"')).live === true, 'dynamic = live');
 assert(S.parseMPD('{"not":"xml"}').valid === false, 'not an MPD');
 assert(S.isoDuration('PT2H') === 7200 && S.isoDuration('P1DT1S') === 86401, 'ISO durations');
+
+console.log('pickReferer');
+assert(typeof S.pickReferer === 'function', 'pickReferer exported');
+if (typeof S.pickReferer === 'function') {
+  assert(
+    S.pickReferer({ frameId: 2, frameUrl: 'https://player.embed.example/e/99?k=1', initiator: 'https://player.embed.example', pageUrl: 'https://site.example/watch/ep-1' })
+      === 'https://player.embed.example/e/99?k=1',
+    'sub_frame URL beats outer pageUrl',
+  );
+  assert(
+    S.pickReferer({ frameId: 2, frameUrl: '', initiator: 'https://player.embed.example', pageUrl: 'https://site.example/watch/ep-1' })
+      === 'https://player.embed.example/',
+    'cross-origin iframe initiator beats outer pageUrl when sub_frame URL was not seen',
+  );
+  assert(
+    S.pickReferer({ frameId: 0, frameUrl: '', initiator: 'https://site.example', pageUrl: 'https://site.example/watch/ep-1' })
+      === 'https://site.example/watch/ep-1',
+    'same-origin main frame keeps full pageUrl',
+  );
+  assert(
+    S.pickReferer({ frameId: 0, frameUrl: 'javascript:alert(1)', initiator: 'chrome-extension://abc', pageUrl: 'https://site.example/v' })
+      === 'https://site.example/v',
+    'non-http(s) frameUrl/initiator ignored',
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

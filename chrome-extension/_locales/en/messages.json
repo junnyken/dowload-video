@@ -1569,7 +1569,7 @@
     "message": "Settings"
   },
   "sniff_aes": {
-    "message": "Encrypted video — not supported yet",
+    "message": "AES-128",
     "description": "wording: BA review"
   },
   "sniff_allow": {
