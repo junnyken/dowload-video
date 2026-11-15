@@ -80,6 +80,8 @@ pub struct Job {
     pub cookie_jar: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitles: Option<Vec<ExtSub>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_lang: Option<String>,
 }
 
 fn parse_subtitles(v: Option<&serde_json::Value>) -> Option<Vec<ExtSub>> {
@@ -122,6 +124,7 @@ pub fn parse_job(v: &serde_json::Value) -> Option<Job> {
         .and_then(|x| x.as_str())
         .and_then(crate::cookies::sanitize_netscape);
     let subtitles = parse_subtitles(v.get("subtitles"));
+    let audio_lang = clean_text(v.get("audioLang"), 16).filter(|s| crate::subs::valid_lang(s));
     Some(Job {
         url,
         title: clean_text(v.get("title"), 200),
@@ -131,6 +134,7 @@ pub fn parse_job(v: &serde_json::Value) -> Option<Job> {
         stream,
         cookie_jar,
         subtitles,
+        audio_lang,
     })
 }
 
@@ -420,10 +424,11 @@ mod tests {
                 stream: None,
                 cookie_jar: None,
                 subtitles: None,
+                audio_lang: None,
             })
         );
 
-        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true,"cookieJar":"# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz","subtitles":[{"url":"https://cdn.x/subs/vi.vtt","lang":"vi","format":"vtt"},{"url":"javascript:x","lang":"en","format":"vtt"}]}"#;
+        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true,"audioLang":"vi-VN","cookieJar":"# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz","subtitles":[{"url":"https://cdn.x/subs/vi.vtt","lang":"vi","format":"vtt"},{"url":"javascript:x","lang":"en","format":"vtt"}]}"#;
         let (s, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, rich), 17325, "x");
         assert_eq!(s, 200);
         let j = job.expect("rich job");
@@ -433,6 +438,7 @@ mod tests {
         assert_eq!(j.user_agent.as_deref(), Some("Mozilla/5.0 Chrome/135"));
         assert_eq!(j.height, Some(1080));
         assert_eq!(j.stream, Some(true));
+        assert_eq!(j.audio_lang.as_deref(), Some("vi-VN"));
         assert!(j.cookie_jar.as_deref().unwrap_or("").contains(".cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz"));
         assert_eq!(
             j.subtitles,

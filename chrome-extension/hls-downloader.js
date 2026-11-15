@@ -77,6 +77,22 @@
     await chrome.runtime.sendMessage({ type: 'VG_ENSURE_REFERER', url, referer: job.referer }).catch(() => {});
   }
 
+  function parseRetryAfterMs(headerVal, nowMs = Date.now()) {
+    const raw = String(headerVal || '').trim();
+    if (!raw) return 0;
+    if (/^\d+(?:\.\d+)?$/.test(raw)) {
+      const sec = parseFloat(raw);
+      if (!Number.isFinite(sec) || sec <= 0) return 500;
+      return Math.min(15000, Math.max(500, Math.round(sec * 1000)));
+    }
+    const at = Date.parse(raw);
+    if (Number.isFinite(at)) {
+      const diff = at - nowMs;
+      return diff > 0 ? Math.min(15000, Math.max(500, Math.round(diff))) : 500;
+    }
+    return 0;
+  }
+
   async function fetchBytes(url, range, job, state) {
     await ensureHostReferer(url, job);
     const maxRetries = Math.max(1, Number(job && job.retries) || RETRIES);
@@ -85,19 +101,38 @@
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       if (job && job.cancelled) throw new JobError('cancelled');
       try {
+        const t0 = Date.now();
         const headers = range ? { Range: `bytes=${range[0]}-${range[0] + range[1] - 1}` } : {};
         const r = await fetch(url, { credentials: 'include', headers, cache: 'no-store' });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return new Uint8Array(await r.arrayBuffer());
+        if (r.status === 429 || r.status === 503) {
+          const raHeader = r.headers && typeof r.headers.get === 'function' ? r.headers.get('retry-after') : '';
+          const raMs = parseRetryAfterMs(raHeader);
+          if (state && typeof state.onThrottle === 'function') {
+            state.onThrottle(raMs || baseDelay * (attempt + 1) ** 2, r.status);
+          }
+          throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, retryAfterMs: raMs });
+        }
+        if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        if (attempt === 0 && state && typeof state.onCleanSegment === 'function') {
+          state.onCleanSegment(Date.now() - t0, bytes.byteLength);
+        }
+        return bytes;
       } catch (e) {
         lastErr = e;
+        if (attempt === 0 && !(e && e.retryAfterMs) && state && typeof state.onSegmentRetry === 'function') {
+          state.onSegmentRetry((e && e.status) || 0);
+        }
         if (attempt + 1 < maxRetries) {
-          await interruptibleWait(baseDelay * (attempt + 1) ** 2, state);
+          const waitMs = (e && e.retryAfterMs) ? e.retryAfterMs : baseDelay * (attempt + 1) ** 2;
+          await interruptibleWait(waitMs, state);
           if (state && state.stopAndSave) break;
         }
       }
     }
-    throw new JobError('segment_failed', String((lastErr && lastErr.message) || lastErr));
+    throw new JobError('segment_failed', String((lastErr && lastErr.message) || lastErr), {
+      status: (lastErr && lastErr.status) || 0,
+    });
   }
 
   async function fetchText(url, job, state) {
@@ -898,18 +933,45 @@
     return { segs, map, fmp4, live: !ended, targetDuration, mediaSequence: mediaSeq, hasMediaSeq };
   }
 
+  function selectAudioRendition(group, audioTrack) {
+    if (!Array.isArray(group) || !group.length) return null;
+    if (audioTrack) {
+      const wantName = typeof audioTrack === 'object' ? String(audioTrack.name || '').trim().toLowerCase() : '';
+      const rawLang = typeof audioTrack === 'string'
+        ? audioTrack
+        : String((audioTrack && (audioTrack.lang || audioTrack.language)) || '');
+      const wantLang = rawLang.trim().toLowerCase().split(/[-_]/)[0] || '';
+      if (wantName) {
+        const byName = group.find((r) => String(r.name || '').trim().toLowerCase() === wantName);
+        if (byName) return byName;
+      }
+      if (wantLang) {
+        const byLang = group.find((r) => (String(r.language || r.lang || '').trim().toLowerCase().split(/[-_]/)[0] || '') === wantLang);
+        if (byLang) return byLang;
+        const byNameSub = group.find((r) => String(r.name || '').toLowerCase().includes(wantLang));
+        if (byNameSub) return byNameSub;
+      }
+    }
+    return group.find((r) => r.default) || group.find((r) => r.autoselect) || group[0];
+  }
+
   /** The variant to download (by height) and its optional separate `#EXT-X-MEDIA:TYPE=AUDIO` playlist. */
   async function pickMedia(job, state) {
-    if (job.resume && job.resume.mediaUrl) {
-      const text = await fetchText(job.resume.mediaUrl, job, state);
-      let audioMedia = null;
-      if (job.resume.audioMediaUrl) {
-        audioMedia = {
-          url: job.resume.audioMediaUrl,
-          text: await fetchText(job.resume.audioMediaUrl, job, state),
-        };
+    if (job.resume && job.resume.mediaUrl && !job.resume.rebindMaster) {
+      try {
+        const text = await fetchText(job.resume.mediaUrl, job, state);
+        let audioMedia = null;
+        if (job.resume.audioMediaUrl) {
+          audioMedia = {
+            url: job.resume.audioMediaUrl,
+            text: await fetchText(job.resume.audioMediaUrl, job, state),
+          };
+        }
+        return { url: job.resume.mediaUrl, text, height: job.resume.height || job.height || null, audioMedia };
+      } catch (resumeErr) {
+        // Signed variant playlist URL expired (401/403/410): if master URL is distinct, fall back to re-resolving master!
+        if (!job.url || job.url === job.resume.mediaUrl) throw resumeErr;
       }
-      return { url: job.resume.mediaUrl, text, height: job.resume.height || job.height || null, audioMedia };
     }
     const text = await fetchText(job.url, job, state);
     if (!/#EXT-X-STREAM-INF/.test(text)) return { url: job.url, text, audioMedia: null };
@@ -954,10 +1016,15 @@
 
     const isHevcOrAv1 = (c) => /\b(?:hvc1|hev1|av01)\b/i.test(c || '');
     const isAvc = (c) => /\bavc1\b/i.test(c || '');
+    const targetHeight = (job.resume && job.resume.height) || job.height || 0;
     let v = null;
-    if (job.height) {
-      const sameHeight = variants.filter((x) => x.height === job.height);
+    if (targetHeight) {
+      const sameHeight = variants.filter((x) => x.height === targetHeight);
       v = sameHeight.find((x) => isAvc(x.codecs)) || sameHeight[0] || null;
+      if (!v && job.maxHeightCap) {
+        const capped = variants.filter((x) => x.height > 0 && x.height <= targetHeight);
+        v = capped.find((x) => isAvc(x.codecs)) || capped[0] || null;
+      }
     }
     if (!v) {
       // In-browser mux.js TS transmuxer only remuxes H.264 AVC; prefer AVC when an AVC rendition is offered.
@@ -974,7 +1041,8 @@
     let audioMedia = null;
     if (v.audio && audioGroups.has(v.audio)) {
       const group = audioGroups.get(v.audio);
-      const picked = group.find((r) => r.default) || group.find((r) => r.autoselect) || group[0];
+      const targetAudio = job.audioTrack || (job.resume && job.resume.audioTrack) || null;
+      const picked = selectAudioRendition(group, targetAudio);
       if (picked && picked.url && picked.url !== v.url) {
         audioMedia = { url: picked.url, text: await fetchText(picked.url, job, state) };
       }
@@ -1108,10 +1176,13 @@
         }
         while (pendingFrags.length) {
           const f = pendingFrags.shift();
-          await writer.write(f.track === 2 ? rewriteMoofTrackId(f.data, 2) : f.data);
+          await writer.write(rewriteMoofTrackId(f.data, f.track === 2 ? 2 : 1, seqCounter));
           produced += 1;
         }
         if (!produced) throw new JobError('remux_failed', 'Không ghép được luồng hình và tiếng sang MP4.');
+      },
+      get lastSeq() {
+        return Math.max(0, seqCounter.next - 1);
       },
     };
   }
@@ -1146,6 +1217,7 @@
 
     let writer = null;
     let media = null;
+    let dualSink = null;
     let isLive = false;
     let total = 0;
     let written = 0;
@@ -1301,7 +1373,6 @@
         height: media.height || null,
       });
 
-      let dualSink = null;
       if (audioPlan) {
         const [vInit, aInit] = startIdx === 0
           ? await Promise.all([
@@ -1315,6 +1386,7 @@
           videoFmp4: plan.fmp4,
           audioFmp4: audioPlan.fmp4,
           skipInit: startIdx > 0,
+          startSeq: (startIdx > 0 && job.resume && Number(job.resume.seq) > 0) ? Number(job.resume.seq) : 0,
         });
       } else if (plan.map && startIdx === 0) {
         fmp4Mode = true;
@@ -1324,14 +1396,30 @@
         sink = tsRemuxer(writer, { skipInit: true });
       }
 
-      // parallel fetch + decrypt, in-order write: at most POOL segments in flight or waiting
+      // Adaptive parallel fetch + decrypt, in-order write:
+      // scales up to 8 on clean fast segments (< 900ms), immediately drops to 2 on HTTP 429/503 Retry-After.
+      let poolLimit = Math.max(1, Math.min(8, Number(job.pool) || (audioPlan ? 4 : POOL)));
+      const maxPool = audioPlan ? 6 : 8;
+      let cleanStreak = 0;
+      state.onThrottle = () => { poolLimit = 2; cleanStreak = 0; };
+      state.onSegmentRetry = () => { poolLimit = Math.max(2, Math.floor(poolLimit / 2)); cleanStreak = 0; };
+      state.onCleanSegment = (elapsedMs) => {
+        if (elapsedMs <= 900) {
+          cleanStreak += 1;
+          if (cleanStreak >= 5 && poolLimit < maxPool) {
+            poolLimit += 1;
+            cleanStreak = 0;
+          }
+        }
+      };
+
       const ready = new Map();
       let next = startIdx;   // next index to start
       let failure = null;
       await new Promise((done) => {
         const pump = () => {
           if (failure || state.cancelled) { done(); return; }
-          while (next < total && next - written < POOL) {
+          while (next < total && next - written < poolLimit) {
             const i = next++;
             const fetchTask = audioPlan
               ? Promise.all([
@@ -1406,6 +1494,8 @@
                 total,
                 bytes: partialBytes,
                 fmp4Mode,
+                seq: dualSink ? dualSink.lastSeq : written,
+                audioTrack: job.audioTrack || (job.resume && job.resume.audioTrack) || null,
               };
             }
           } catch { /* fall back to abort */ }
@@ -1440,7 +1530,7 @@
   }
 
   const exported = {
-    mediaPlan, byterange, seqToIv, parseHexIv, parseKeyAttr,
+    mediaPlan, byterange, seqToIv, parseHexIv, parseKeyAttr, parseRetryAfterMs, selectAudioRendition,
     decryptSegment, decryptAesCbcRaw, decryptSampleAesTs, mpeg2Crc32,
     stripDisguisedTsPrefix, isIsoBmffSegment, mergeMp4InitSegments, rewriteMoofTrackId,
   };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Languages, Menu, X, Crown } from 'lucide-react';
+import { Video, Languages, Menu, X, Crown, Sparkles } from 'lucide-react';
 import SearchPage from './pages/SearchPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -41,6 +41,7 @@ import InstallPage from './pages/InstallPage';
 import DownloadPage from './pages/DownloadPage';
 import PlatformsPage from './pages/PlatformsPage';
 import PricingPage from './pages/PricingPage';
+import FeaturesPage from './pages/FeaturesPage';
 import BillingPage from './pages/BillingPage';
 import CheckoutPage from './pages/CheckoutPage';
 import SubtitleHubPage from './pages/SubtitleHubPage';
@@ -63,6 +64,7 @@ import { trackEvent, EVENT } from './utils/trackEvent';
 // ── Path → view mapping ──────────────────────────────────────────────
 const PATH_MAP = {
   '/':                    'landing',
+  '/tinh-nang':           'features',
   '/extension':           'extension',
   '/preferences':         'preferences',
   '/usage':               'usage',
@@ -301,9 +303,7 @@ function AppInner() {
   const goTo = (v, path = '/') => { setMenuOpen(false); navigateTo(v, path); };
 
   const navItems = [
-    // "Tìm kiếm" removed from the menu (owner 15/10: feature dropped).
-    // Keep only 4 core items on the top bar; Archive, Schedule, Channel Watch,
-    // and Install App live inside AccountMenu once signed in.
+    { key: 'features', label: t('navFeatures'), title: t('navFeaturesTitle'), icon: Sparkles, active: view === 'features', onClick: () => goTo('features', '/tinh-nang') },
     { key: 'platforms', label: t('navPlatforms'), title: t('navPlatformsTitle'), active: view === 'platforms', onClick: () => goTo('platforms', '/platforms') },
     {
       key: 'extension',
@@ -635,6 +635,7 @@ function AppInner() {
         {view === 'platforms' && (
           <PlatformsPage />
         )}
+        {view === 'features' && <FeaturesPage onNavigate={navigateTo} />}
         {view === 'pricing' && <PricingPage />}
         {view === 'checkout' && <CheckoutPage />}
         {view === 'billing' && (

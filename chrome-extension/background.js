@@ -505,9 +505,9 @@ function vgSafeFolder(raw) {
   return s;
 }
 
-function vgStreamPaths(title, suffix = '') {
+function vgStreamPaths(title, suffix = '', allowSeriesFolder = true) {
   const safeName = hlsSafeName(title);
-  const ep = self.VGSniff && typeof self.VGSniff.parseSeriesEpisode === 'function'
+  const ep = allowSeriesFolder && self.VGSniff && typeof self.VGSniff.parseSeriesEpisode === 'function'
     ? self.VGSniff.parseSeriesEpisode(title)
     : null;
   const subDir = ep && ep.seriesTitle ? vgSafeFolder(ep.seriesTitle) : '';
@@ -645,16 +645,27 @@ function vgCleanStreamTitle(item) {
 }
 
 const UNIVERSAL_STREAM_TIERS = new Set(['team', 'enterprise', 'admin']);
+const UNIVERSAL_PRO_TIERS = new Set(['pro', 'growth']);
 let _vgUniversalTierCache = { token: '', at: 0, res: null };
 
 function vgResetUniversalTierCache() {
   _vgUniversalTierCache = { token: '', at: 0, res: null };
 }
 
+function vgUniversalModeFromPayload(d, tier) {
+  if (d && typeof d.universal_stream_mode === 'string') {
+    const m = d.universal_stream_mode.toLowerCase();
+    if (m === 'team' || m === 'pro' || m === 'none') return m;
+  }
+  if ((d && d.universal_stream === true) || UNIVERSAL_STREAM_TIERS.has(tier)) return 'team';
+  if (UNIVERSAL_PRO_TIERS.has(tier)) return 'pro';
+  return 'none';
+}
+
 async function vgCheckUniversalStreamTier(force = false) {
   const token = await getAuthToken();
   if (!token) {
-    return { allowed: false, authenticated: false, tier: 'guest', error: 'signin_required' };
+    return { allowed: false, mode: 'none', isTeam: false, authenticated: false, tier: 'guest', error: 'signin_required' };
   }
   if (!force && _vgUniversalTierCache.res && _vgUniversalTierCache.token === token && Date.now() - _vgUniversalTierCache.at < 90_000) {
     return _vgUniversalTierCache.res;
@@ -668,36 +679,51 @@ async function vgCheckUniversalStreamTier(force = false) {
       ...(ctrl ? { signal: ctrl.signal } : {}),
     }).finally(() => { if (timer) clearTimeout(timer); });
     if (r.status === 401 || r.status === 403) {
-      const denied = { allowed: false, authenticated: false, tier: 'guest', error: 'signin_required' };
+      const denied = { allowed: false, mode: 'none', isTeam: false, authenticated: false, tier: 'guest', error: 'signin_required' };
       _vgUniversalTierCache = { token, at: Date.now(), res: denied };
       return denied;
     }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     const tier = String((d && d.tier) || 'free').toLowerCase();
-    const allowed = Boolean((d && d.universal_stream === true) || UNIVERSAL_STREAM_TIERS.has(tier));
-    const res = { allowed, authenticated: true, tier, error: allowed ? null : 'tier_required' };
+    const mode = vgUniversalModeFromPayload(d, tier);
+    const allowed = mode !== 'none';
+    const isTeam = mode === 'team';
+    const res = { allowed, mode, isTeam, authenticated: true, tier, error: allowed ? null : 'tier_required' };
     _vgUniversalTierCache = { token, at: Date.now(), res };
     chrome.storage.local.set({
       vg_cached_tier: tier,
       vg_cached_universal: allowed,
+      vg_cached_universal_mode: mode,
       vg_cached_tier_tok: token.slice(0, 16),
     }).catch(() => {});
     return res;
   } catch {
     try {
-      const c = await chrome.storage.local.get(['vg_cached_tier', 'vg_cached_universal', 'vg_cached_tier_tok']);
-      if (c && c.vg_cached_tier_tok === token.slice(0, 16) && typeof c.vg_cached_universal === 'boolean') {
+      const c = await chrome.storage.local.get(['vg_cached_tier', 'vg_cached_universal', 'vg_cached_universal_mode', 'vg_cached_tier_tok']);
+      if (c && c.vg_cached_tier_tok === token.slice(0, 16)) {
         const tier = String(c.vg_cached_tier || 'free').toLowerCase();
-        const allowed = Boolean(c.vg_cached_universal && UNIVERSAL_STREAM_TIERS.has(tier));
-        return { allowed, authenticated: true, tier, error: allowed ? null : 'tier_required' };
+        const mode = typeof c.vg_cached_universal_mode === 'string'
+          ? c.vg_cached_universal_mode
+          : (c.vg_cached_universal && UNIVERSAL_STREAM_TIERS.has(tier) ? 'team' : (UNIVERSAL_PRO_TIERS.has(tier) ? 'pro' : 'none'));
+        const allowed = mode === 'pro' || mode === 'team';
+        return { allowed, mode, isTeam: mode === 'team', authenticated: true, tier, error: allowed ? null : 'tier_required' };
       }
     } catch { /* ignore */ }
-    return { allowed: false, authenticated: true, tier: 'free', error: 'tier_required' };
+    return { allowed: false, mode: 'none', isTeam: false, authenticated: true, tier: 'free', error: 'tier_required' };
   }
 }
 
-async function hlsStart(item, height) {
+function vgCanonicalManifestIdentity(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || ''));
+    return `${u.origin.toLowerCase()}${u.pathname}`;
+  } catch {
+    return String(rawUrl || '');
+  }
+}
+
+async function hlsStart(item, height, opts = {}) {
   await hlsLoad();
   const referer = item.refererUrl || item.pageUrl || '';
   if (referer) await vgEnsureStreamReferer(item.url, referer);
@@ -711,12 +737,25 @@ async function hlsStart(item, height) {
   const cleanTitle = vgCleanStreamTitle(item);
   const now = Date.now();
   const isLive = !!item.live;
+  const isTeam = opts.isTeam !== false;
+  const maxHeightCap = !isTeam;
+  const effectiveHeight = maxHeightCap
+    ? (height && height <= 1080 ? height : 1080)
+    : (height || null);
+  const audioTrack = (isTeam && opts.audioTrack && typeof opts.audioTrack === 'object')
+    ? {
+      lang: String(opts.audioTrack.lang || '').slice(0, 16),
+      name: String(opts.audioTrack.name || '').slice(0, 64),
+    }
+    : null;
   const subtitles = Array.isArray(item.subtitles)
     ? item.subtitles.slice(0, 6).map((s) => ({ url: s.url, lang: s.lang || 'sub', format: s.format || 'vtt' }))
     : [];
   const job = {
     id, title: cleanTitle, url: item.url, referer, subtitles,
-    height: height || null, state: 'running',
+    tabId: Number.isInteger(opts.tabId) ? opts.tabId : null,
+    isTeam, audioTrack,
+    height: effectiveHeight, state: 'running',
     live: isLive, stopping: false, resumable: false, checkpoint: null,
     startedAt: now, elapsedSec: 0,
     done: 0, total: 0, bytes: 0, at: now, message: '',
@@ -727,6 +766,7 @@ async function hlsStart(item, height) {
     live: isLive,
     encryption: item.encryption || 'none',
     reason: item.encryptionReason || 'unencrypted',
+    audioTrack: audioTrack ? (audioTrack.name || audioTrack.lang) : 'default',
     maxEmptyPolls,
   });
   hlsJobs.set(id, job);
@@ -735,19 +775,49 @@ async function hlsStart(item, height) {
   await chrome.runtime.sendMessage({
     target: 'offscreen',
     type: 'HLS_START',
-    job: { id, url: item.url, height: job.height, title: job.title, referer, live: isLive, allowLive: true, maxEmptyPolls },
+    job: {
+      id,
+      url: item.url,
+      height: job.height,
+      maxHeightCap,
+      audioTrack,
+      title: job.title,
+      referer,
+      live: isLive,
+      allowLive: true,
+      maxEmptyPolls,
+    },
   });
   return job;
 }
 
-async function hlsResume(id) {
+async function hlsResume(id, allowTokenRebind = true) {
   await hlsLoad();
   const job = hlsJobs.get(id);
   if (!job || job.state !== 'failed' || !job.resumable || !job.checkpoint) {
     return { ok: false, error: 'not_resumable' };
   }
+  let cp = { ...job.checkpoint };
+  // #1 Auto Token-Refresh OPFS Resume: if the source tab is still open and refreshed its signed manifest URL,
+  // rebind job.url to the fresh manifest while keeping 100% of already-written OPFS bytes.
+  if (allowTokenRebind && Number.isInteger(job.tabId) && job.tabId >= 0) {
+    try {
+      if (typeof self.vgSniffProbe === 'function') {
+        await self.vgSniffProbe(job.tabId).catch(() => null);
+      }
+      const tabItems = typeof self.vgSniffList === 'function' ? await self.vgSniffList(job.tabId).catch(() => []) : [];
+      const wantCanon = vgCanonicalManifestIdentity(job.url);
+      const candidates = tabItems.filter((x) => x && x.kind === 'hls' && x.encryption !== 'drm' && !x.live);
+      const fresh = candidates.find((x) => x.url !== job.url && vgCanonicalManifestIdentity(x.url) === wantCanon)
+        || candidates.find((x) => x.url !== job.url && vgCleanStreamTitle(x) === job.title);
+      if (fresh && fresh.url) {
+        job.url = fresh.url;
+        if (fresh.refererUrl || fresh.pageUrl) job.referer = fresh.refererUrl || fresh.pageUrl;
+        cp = { ...cp, rebindMaster: true };
+      }
+    } catch { /* keep existing job.url */ }
+  }
   if (job.referer) await vgEnsureStreamReferer(job.url, job.referer).catch(() => {});
-  const cp = job.checkpoint;
   Object.assign(job, {
     state: 'running',
     stopping: false,
@@ -764,6 +834,8 @@ async function hlsResume(id) {
       id: job.id,
       url: job.url,
       height: cp.height || job.height || null,
+      maxHeightCap: job.isTeam === false,
+      audioTrack: job.audioTrack || cp.audioTrack || null,
       title: job.title,
       referer: job.referer || '',
       live: false,
@@ -771,7 +843,7 @@ async function hlsResume(id) {
       resume: cp,
     },
   });
-  return { ok: true, job };
+  return { ok: true, job, rebound: Boolean(cp.rebindMaster) };
 }
 
 const VG_AUTO_EP_KEY = 'vg_auto_ep_tabs';
@@ -808,7 +880,7 @@ self.vgOnSniffStreamReady = async (tabId, item) => {
   if (!item || item.hidden || item.encryption === 'drm' || item.live) return;
   if (!(await vgAutoEpGet(tabId))) return;
   const gate = await vgCheckUniversalStreamTier();
-  if (!gate.allowed) {
+  if (!gate.isTeam) {
     await vgAutoEpSet(tabId, false);
     return;
   }
@@ -837,17 +909,289 @@ self.vgOnSniffStreamReady = async (tabId, item) => {
     if (res && res.ok) return;
   }
   if (item.kind === 'hls') {
-    await hlsStart(item, item.height || null);
+    await hlsStart(item, item.height || null, { tabId, isTeam: true });
   } else if (item.kind === 'file') {
     const ref = item.refererUrl || item.pageUrl || '';
     if (ref) await vgEnsureStreamReferer(item.url, ref);
     const base = await getApiBase();
     const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
       || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-    const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item));
+    const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item), '', true);
     smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
     void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
   }
+};
+
+// ── #5 Floating In-Page <video> Hover Pill (Shadow-DOM, Non-DRM Only, Zero New Permissions) ──
+const _vgPillTimers = new Map();
+const VG_PILL_SKIP_HOST_RE = /(?:^|\.)(youtube\.com|youtu\.be|tiktok\.com|douyin\.com|facebook\.com|instagram\.com)$/i;
+
+function vgScheduleFloatingPill(tabId) {
+  if (tabId == null || tabId < 0) return;
+  clearTimeout(_vgPillTimers.get(tabId));
+  _vgPillTimers.set(tabId, setTimeout(() => {
+    _vgPillTimers.delete(tabId);
+    vgSyncFloatingPill(tabId).catch(() => {});
+  }, 350));
+}
+
+async function vgSyncFloatingPill(tabId) {
+  if (!chrome.scripting || typeof chrome.scripting.executeScript !== 'function') return false;
+  let enabled = true;
+  try {
+    const cfg = await chrome.storage.sync.get('vg_floating_pill');
+    if (cfg && cfg.vg_floating_pill === false) enabled = false;
+  } catch { /* default on */ }
+  if (!enabled) return false;
+
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !tab.url || !/^https?:\/\//i.test(tab.url)) return false;
+  let host = '';
+  try { host = new URL(tab.url).hostname.toLowerCase(); } catch { return false; }
+  if (!host || isFirstPartyHost(host) || VG_PILL_SKIP_HOST_RE.test(host)) return false;
+
+  const items = typeof self.vgSniffList === 'function' ? await self.vgSniffList(tabId).catch(() => []) : [];
+  if (!items.length) return false;
+  const cleanItems = items.filter((x) => x && !x.hidden && !x.pending && !x.error && x.encryption !== 'drm');
+  if (!cleanItems.length) return false;
+  // Prefer HLS > DASH > File, highest height first
+  const rankKind = (k) => (k === 'hls' ? 3 : k === 'dash' ? 2 : 1);
+  const best = [...cleanItems].sort((a, b) => rankKind(b.kind) - rankKind(a.kind) || (b.height || 0) - (a.height || 0) || (b.at || 0) - (a.at || 0))[0];
+  if (!best) return false;
+
+  const qLbl = self.VGSniff && typeof self.VGSniff.qualityLabel === 'function'
+    ? self.VGSniff.qualityLabel(best.height)
+    : (best.height ? `${best.height}p` : '');
+  const metaParts = [
+    qLbl || (best.kind === 'hls' ? 'HLS' : best.kind === 'dash' ? 'DASH' : 'MP4'),
+    Array.isArray(best.audioRenditions) && best.audioRenditions.length > 1 ? '🔊' : '',
+    Array.isArray(best.subtitles) && best.subtitles.length > 0 ? 'CC' : '',
+    best.live ? 'LIVE' : '',
+  ].filter(Boolean);
+
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    args: [{
+      itemId: best.id,
+      label: t('pill_btn_label'),
+      badge: metaParts.join(' · '),
+      closeTitle: t('common_close'),
+    }],
+    func: (cfg) => {
+      try {
+        const findEligibleVideo = () => {
+          const vids = document.querySelectorAll('video');
+          let bestVid = null;
+          let bestArea = 0;
+          for (let i = 0; i < vids.length; i++) {
+            const v = vids[i];
+            if (v.mediaKeys) continue;
+            const r = v.getBoundingClientRect();
+            if (r.width >= 240 && r.height >= 135) {
+              const area = r.width * r.height;
+              if (area > bestArea) { bestArea = area; bestVid = v; }
+            }
+          }
+          return bestVid;
+        };
+
+        if (window.__vgHoverPill) {
+          window.__vgHoverPill.update(cfg);
+          return true;
+        }
+        if (!document.querySelector('video')) return false;
+
+        const state = {
+          cfg,
+          dismissed: false,
+          activeVideo: null,
+          hideTimer: null,
+          overPill: false,
+        };
+
+        const hostEl = document.createElement('div');
+        hostEl.id = 'vg-floating-pill-host';
+        hostEl.setAttribute('data-vg-pill', '1');
+        hostEl.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646;pointer-events:none;';
+        const shadow = hostEl.attachShadow({ mode: 'open' });
+        const style = document.createElement('style');
+        style.textContent = `
+          .pill {
+            position: fixed;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px 6px 11px;
+            border-radius: 999px;
+            background: rgba(15, 17, 26, 0.88);
+            border: 1px solid rgba(99, 102, 241, 0.55);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(8px);
+            color: #f8fafc;
+            font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            pointer-events: auto;
+            cursor: pointer;
+            opacity: 0;
+            transform: translateY(-4px);
+            transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.15s ease;
+            user-select: none;
+          }
+          .pill.visible { opacity: 1; transform: translateY(0); }
+          .pill:hover { border-color: #818cf8; background: rgba(22, 25, 38, 0.96); }
+          .main-btn {
+            all: unset;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            color: #f8fafc;
+          }
+          .dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #22d3ee);
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+          }
+          .badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: rgba(99, 102, 241, 0.22);
+            color: #c7d2fe;
+          }
+          .close-btn {
+            all: unset;
+            margin-left: 2px;
+            padding: 0 4px;
+            font-size: 14px;
+            line-height: 1;
+            color: #94a3b8;
+            cursor: pointer;
+            border-radius: 4px;
+          }
+          .close-btn:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+        `;
+        const pill = document.createElement('div');
+        pill.className = 'pill';
+        const mainBtn = document.createElement('button');
+        mainBtn.className = 'main-btn';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        const textSpan = document.createElement('span');
+        textSpan.className = 'lbl';
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'badge';
+        mainBtn.append(dot, textSpan, badgeSpan);
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'close-btn';
+        closeBtn.textContent = '×';
+        pill.append(mainBtn, closeBtn);
+        shadow.append(style, pill);
+        (document.documentElement || document.body).appendChild(hostEl);
+
+        const renderCfg = () => {
+          textSpan.textContent = state.cfg.label || 'VidGrab';
+          badgeSpan.textContent = state.cfg.badge || '';
+          badgeSpan.style.display = state.cfg.badge ? 'inline-block' : 'none';
+          closeBtn.title = state.cfg.closeTitle || 'Close';
+        };
+        renderCfg();
+
+        const positionPill = (v) => {
+          if (!v || state.dismissed || v.mediaKeys) {
+            pill.classList.remove('visible');
+            return;
+          }
+          const r = v.getBoundingClientRect();
+          if (r.width < 240 || r.height < 135 || r.bottom < 40 || r.top > window.innerHeight - 40) {
+            pill.classList.remove('visible');
+            return;
+          }
+          const top = Math.max(8, Math.round(r.top + 12));
+          const right = Math.max(8, Math.round(window.innerWidth - r.right + 12));
+          pill.style.top = `${top}px`;
+          pill.style.right = `${right}px`;
+        };
+
+        const showForVideo = (v) => {
+          if (state.dismissed || !v || v.mediaKeys) return;
+          state.activeVideo = v;
+          positionPill(v);
+          pill.classList.add('visible');
+          clearTimeout(state.hideTimer);
+          state.hideTimer = setTimeout(() => {
+            if (!state.overPill) pill.classList.remove('visible');
+          }, 2600);
+        };
+
+        pill.addEventListener('mouseenter', () => {
+          state.overPill = true;
+          clearTimeout(state.hideTimer);
+        });
+        pill.addEventListener('mouseleave', () => {
+          state.overPill = false;
+          state.hideTimer = setTimeout(() => pill.classList.remove('visible'), 900);
+        });
+
+        closeBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          state.dismissed = true;
+          pill.classList.remove('visible');
+          pill.style.display = 'none';
+        });
+
+        mainBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const origLabel = state.cfg.label;
+          textSpan.textContent = '⏳ VidGrab...';
+          chrome.runtime.sendMessage({ type: 'VG_PILL_CLICK', itemId: state.cfg.itemId }, (res) => {
+            void chrome.runtime.lastError;
+            textSpan.textContent = (res && res.statusText) || origLabel;
+            setTimeout(() => { textSpan.textContent = state.cfg.label; }, 3200);
+          });
+        });
+
+        document.addEventListener('mousemove', (ev) => {
+          if (state.dismissed) return;
+          const v = findEligibleVideo();
+          if (!v) {
+            if (!state.overPill) pill.classList.remove('visible');
+            return;
+          }
+          const r = v.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) {
+            showForVideo(v);
+          }
+        }, { passive: true });
+
+        window.addEventListener('scroll', () => {
+          if (state.activeVideo && pill.classList.contains('visible')) positionPill(state.activeVideo);
+        }, { passive: true });
+
+        const initialVid = findEligibleVideo();
+        if (initialVid) showForVideo(initialVid);
+
+        window.__vgHoverPill = {
+          update(nextCfg) {
+            state.cfg = nextCfg;
+            renderCfg();
+            const v = findEligibleVideo();
+            if (v && !state.dismissed) positionPill(v);
+          },
+        };
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  }).catch(() => {});
+  return true;
+}
+
+self.vgOnSniffPillUpdate = (tabId) => {
+  vgScheduleFloatingPill(tabId);
 };
 
 // One video: server fetch-link -> the file straight to this computer (smartDownload),
@@ -1342,7 +1686,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         done: job.total || job.done,
       });
       if (typeof msg.elapsedSec === 'number') job.elapsedSec = msg.elapsedSec;
-      const { relBase } = vgStreamPaths(job.title, job.height ? ` (${job.height}p)` : '');
+      const { relBase } = vgStreamPaths(job.title, job.height ? ` (${job.height}p)` : '', job.isTeam !== false);
       const filename = `${relBase}.${msg.ext || 'mp4'}`;
       chrome.downloads.download({ url: msg.url, filename, saveAs: false }, (downloadId) => {
         const finish = (state, message) => {
@@ -1407,10 +1751,13 @@ async function vgFindApp(force = false) {
   return found;
 }
 
-async function vgSendToApp(item, height) {
+async function vgSendToApp(item, height, audioLang) {
   const referer = item.refererUrl || item.pageUrl || '';
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent).slice(0, 512) : '';
   const h = Number.isInteger(height) && height >= 144 && height <= 4320 ? height : undefined;
+  const cleanAudioLang = typeof audioLang === 'string' && /^[a-z0-9_-]{1,16}$/i.test(audioLang.trim())
+    ? audioLang.trim()
+    : undefined;
   const cleanTitle = item.title ? vgCleanStreamTitle(item) : '';
   const isStream = Boolean(item.kind);
   const cookieJar = isStream ? await vgGetStreamCookieJar(item.url, referer).catch(() => undefined) : undefined;
@@ -1430,6 +1777,7 @@ async function vgSendToApp(item, height) {
     ...(isStream ? { stream: true } : {}),
     ...(cookieJar ? { cookieJar } : {}),
     ...(subtitles ? { subtitles } : {}),
+    ...(cleanAudioLang ? { audioLang: cleanAudioLang } : {}),
   };
   // 5.22.0: over the native link when the app is on it (only the app's own
   // host can be on that end; the HTTP port stays for apps before 0.20.0)
@@ -1937,7 +2285,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'VG_UNIVERSAL_TIER_STATUS') {
-    vgCheckUniversalStreamTier(!!msg.force).then(sendResponse, () => sendResponse({ allowed: false, authenticated: false, tier: 'guest' }));
+    vgCheckUniversalStreamTier(!!msg.force).then(sendResponse, () => sendResponse({ allowed: false, mode: 'none', isTeam: false, authenticated: false, tier: 'guest' }));
     return true;
   }
   if (msg.type === 'VG_SNIFF_CLEAR') {
@@ -1953,6 +2301,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.enabled) {
         const gate = await vgCheckUniversalStreamTier();
         if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
+        if (!gate.isTeam) { sendResponse({ ok: false, error: 'team_required', tier: gate.tier }); return; }
       }
       const enabled = await vgAutoEpSet(msg.tabId, Boolean(msg.enabled));
       sendResponse({ ok: true, enabled });
@@ -1976,7 +2325,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const base = await getApiBase();
       const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
         || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-      const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item));
+      const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item), '', gate.isTeam);
       smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
       if (Array.isArray(item.subtitles) && item.subtitles.length) {
         void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
@@ -2003,7 +2352,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: 'drm_protected', drmSystem: item.drmSystem || 'DRM', reason: item.encryptionReason || '' });
         return;
       }
-      const job = await hlsStart(item, msg.height);
+      if (!gate.isTeam && (item.live || msg.audioTrack || (Number(msg.height) > 1080))) {
+        sendResponse({ ok: false, error: 'team_required', tier: gate.tier });
+        return;
+      }
+      const job = await hlsStart(item, msg.height, {
+        tabId: msg.tabId,
+        audioTrack: msg.audioTrack || null,
+        isTeam: gate.isTeam,
+      });
       sendResponse({ ok: true, job });
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
@@ -2012,7 +2369,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const gate = await vgCheckUniversalStreamTier();
       if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
-      sendResponse(await hlsResume(msg.id));
+      sendResponse(await hlsResume(msg.id, gate.isTeam));
+    })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_PILL_CLICK') {
+    (async () => {
+      const tabId = sender && sender.tab ? sender.tab.id : null;
+      if (tabId == null) { sendResponse({ ok: false }); return; }
+      const gate = await vgCheckUniversalStreamTier();
+      if (!gate.allowed) {
+        chrome.tabs.create({ url: 'https://dowloadvideo.io.vn/pricing' }).catch(() => {});
+        sendResponse({ ok: false, error: gate.error || 'tier_required', statusText: t('pill_locked_toast') });
+        return;
+      }
+      if (typeof self.vgSniffProbe === 'function') {
+        await self.vgSniffProbe(tabId).catch(() => null);
+      }
+      const items = await self.vgSniffList(tabId).catch(() => []);
+      const clean = items.filter((x) => x && !x.hidden && !x.pending && !x.error && x.encryption !== 'drm');
+      const item = clean.find((x) => x.id === msg.itemId) || clean[clean.length - 1];
+      if (!item) { sendResponse({ ok: false, error: 'not_found' }); return; }
+      if (!gate.isTeam && (item.live || item.kind === 'dash')) {
+        chrome.tabs.create({ url: 'https://dowloadvideo.io.vn/pricing' }).catch(() => {});
+        sendResponse({ ok: false, error: 'team_required', statusText: t('pill_team_only_toast') });
+        return;
+      }
+      if (gate.isTeam && !item.live) {
+        const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+        if (appConnected) {
+          const r = await vgSendToApp(item, item.height || undefined);
+          if (r && r.ok) {
+            sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
+            return;
+          }
+        }
+      }
+      if (item.kind === 'hls') {
+        const capH = gate.isTeam ? (item.height || null) : Math.min(item.height || 1080, 1080);
+        await hlsStart(item, capH, { tabId, isTeam: gate.isTeam });
+        sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
+        return;
+      }
+      if (item.kind === 'file') {
+        const ref = item.refererUrl || item.pageUrl || '';
+        if (ref) await vgEnsureStreamReferer(item.url, ref);
+        const base = await getApiBase();
+        const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
+          || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
+        const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item), '', gate.isTeam);
+        smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
+        if (Array.isArray(item.subtitles) && item.subtitles.length) {
+          void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
+        }
+        sendResponse({ ok: true, via: 'file', statusText: t('pill_started_browser') });
+        return;
+      }
+      sendResponse({ ok: false, error: 'unsupported' });
     })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
@@ -2039,6 +2452,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const gate = await vgCheckUniversalStreamTier();
       if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
+      if (!gate.isTeam) { sendResponse({ ok: false, error: 'team_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item) { sendResponse({ ok: false, error: 'not_found' }); return; }
@@ -2052,7 +2466,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: 'drm_protected', drmSystem: item.drmSystem || 'DRM' });
         return;
       }
-      sendResponse(await vgSendToApp(item, msg.height));
+      sendResponse(await vgSendToApp(item, msg.height, msg.audioLang));
     })().catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
@@ -2393,6 +2807,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearStore(tabId);
   void vgAutoEpSet(tabId, false);
+  clearTimeout(_vgPillTimers.get(tabId));
+  _vgPillTimers.delete(tabId);
 });
 
 // ── Right-click Context Menu ─────────────────────────────────────

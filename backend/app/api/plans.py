@@ -76,13 +76,16 @@ async def get_plans():
 
 @public_router.get("/plans/me")
 async def get_my_plan(user: Dict[str, Any] = Depends(get_required_user)):
-    from app.core.entitlements import resolve_effective_tier, is_user_admin_db, is_universal_stream_tier  # noqa: PLC0415
+    from app.core.entitlements import (  # noqa: PLC0415
+        resolve_effective_tier, is_user_admin_db, is_universal_stream_tier, universal_stream_mode_for_tier,
+    )
     from app.api.flow_cleanup import _get_flow_access_mode  # noqa: PLC0415
     from app.core import payment_orders as po  # noqa: PLC0415
     uid = str(user["id"])
     prof = _profile(uid)
     eff_tier = resolve_effective_tier(prof) if prof else "free"
     is_adm = is_user_admin_db(uid, email=user.get("email"), raise_on_error=False)
+    us_mode = "team" if is_adm else universal_stream_mode_for_tier(eff_tier)
     return {
         "tier": eff_tier,
         "billing_status": prof.get("billing_status") or "none",
@@ -91,6 +94,7 @@ async def get_my_plan(user: Dict[str, Any] = Depends(get_required_user)):
         "is_first_time_buyer": po.is_first_time_buyer(uid),
         "is_admin": is_adm,
         "universal_stream": bool(is_adm or is_universal_stream_tier(eff_tier)),
+        "universal_stream_mode": us_mode,
         "flow_access_mode": _get_flow_access_mode(),
     }
 

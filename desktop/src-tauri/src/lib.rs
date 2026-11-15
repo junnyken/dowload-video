@@ -931,6 +931,7 @@ fn fetch_and_save_companion_subs(
     subtitles: &[ExtSubArg],
     headers: &[(String, String)],
     db: Option<&history::Db>,
+    ffmpeg: Option<&Path>,
 ) {
     if subtitles.is_empty() {
         return;
@@ -941,6 +942,7 @@ fn fetch_and_save_companion_subs(
         .build()
         .into();
     let media_display = paths::display_form(canon_media);
+    let mut written_srts: Vec<(PathBuf, String)> = Vec::new();
     for sub in subtitles.iter().take(4) {
         let lang = if subs::valid_lang(&sub.lang) { sub.lang.as_str() } else { "sub" };
         let Some(text) = fetch_sub_text(&agent, &sub.url, headers) else { continue };
@@ -986,6 +988,14 @@ fn fetch_and_save_companion_subs(
             if let (Some(db), Ok(sub_canon)) = (db, paths::canonical(&written)) {
                 let _ = db.add_produced(&sub_canon, job_id);
             }
+            if ext == "srt" {
+                written_srts.push((written, lang.to_string()));
+            }
+        }
+    }
+    if !written_srts.is_empty() {
+        if let Some(ff) = ffmpeg {
+            let _ = subs::mux_soft_subs_mp4(ff, &media_display, &written_srts);
         }
     }
 }
@@ -1125,6 +1135,7 @@ async fn start_download(
         engine::set_output_template(&mut args, &template);
     }
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
+    let ffmpeg = paths[1].clone();
     let ffprobe = paths[2].clone();
     let ext_subs = ext_subtitles.unwrap_or_default();
 
@@ -1183,7 +1194,7 @@ async fn start_download(
                         let _ = db.clear_partials(&job_id);
                     }
                     if !ext_subs.is_empty() {
-                        fetch_and_save_companion_subs(&canon, &job_id, &ext_subs, &headers, store.0.as_ref());
+                        fetch_and_save_companion_subs(&canon, &job_id, &ext_subs, &headers, store.0.as_ref(), Some(&ffmpeg));
                     }
                     ev.state = "completed";
                     ev.file_size = std::fs::metadata(&canon).ok().map(|m| m.len());

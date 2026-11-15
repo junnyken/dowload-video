@@ -26,6 +26,20 @@ export const seoPages = [
     },
   },
   {
+    path: '/tinh-nang',
+    priority: '0.85',
+    vi: {
+      title: 'Tính năng Mới & Hệ sinh thái VidGrab - Phim, Anime 4K & AI Studio',
+      description: 'Khám phá hệ sinh thái VidGrab: Nút tải nổi trên khung video, giải mã luồng HLS/DASH 4K, ghép phụ đề chìm mov_text MP4 trên Windows App, chọn đa kênh tiếng và Studio Phụ đề AI.',
+      h1: 'Không chỉ dán link trên web — Hệ sinh thái Tải Phim, Anime & Studio AI',
+    },
+    en: {
+      title: 'New Features & VidGrab Ecosystem - 4K Cinema, Anime & AI Studio',
+      description: 'Explore the VidGrab ecosystem: floating video hover download pill, 4K HLS/DASH stream capture, embedded mov_text soft-sub MP4 muxing on Windows, multi-audio picker, and AI Subtitle Studio.',
+      h1: 'Beyond Pasting Links — The Complete Cinema, Anime & AI Video Ecosystem',
+    },
+  },
+  {
     path: '/platforms',
     priority: '0.8',
     vi: {

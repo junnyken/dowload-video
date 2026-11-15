@@ -510,7 +510,7 @@
     const out = {
       valid: true, master: false, variants: [], renditions: [], encryption: 'none',
       drmSystem: null, encryptionReason: 'unencrypted',
-      videoCodec: '', hasSeparateAudio: false, audioTracks: 0, subtitles: [],
+      videoCodec: '', hasSeparateAudio: false, audioTracks: 0, audioRenditions: [], subtitles: [],
       targetDuration: 0, mediaSequence: 0, duration: 0, segments: 0, live: true,
     };
     for (let i = 0; i < lines.length; i++) {
@@ -575,6 +575,25 @@
     out.audioTracks = extAudios.length;
     out.hasSeparateAudio = extAudios.some((r) => !out.variants.length
       || out.variants.some((v) => !v.audio || v.audio === r.groupId));
+    const seenAudioKeys = new Set();
+    out.audioRenditions = [];
+    for (const r of extAudios) {
+      const lang = inferSubtitleLang(r.url, r.language, r.name);
+      const normLang = lang === 'sub' ? (sanitizeSubLang(r.language) || '') : lang;
+      const label = (r.name || r.language || normLang || 'Audio').trim();
+      const dedupeKey = `${(r.name || '').toLowerCase()}|${normLang}`;
+      if (seenAudioKeys.has(dedupeKey)) continue;
+      seenAudioKeys.add(dedupeKey);
+      out.audioRenditions.push({
+        groupId: r.groupId || '',
+        name: r.name || '',
+        language: r.language || '',
+        lang: normLang,
+        label,
+        default: Boolean(r.default),
+        autoselect: Boolean(r.autoselect),
+      });
+    }
     out.subtitles = out.renditions
       .filter((r) => r.type === 'SUBTITLES' && r.url)
       .map((r) => {
@@ -822,6 +841,7 @@
         item.videoCodec = p.videoCodec || '';
         item.hasSeparateAudio = Boolean(p.hasSeparateAudio);
         item.audioTracks = p.audioTracks || 0;
+        item.audioRenditions = p.audioRenditions || [];
         item.hlsSubtitles = p.subtitles || [];
         item.targetDuration = p.targetDuration || 0;
         item.live = p.live;
@@ -895,6 +915,10 @@
     } finally {
       item.pending = false;
       save(tabId);
+      if (!item.hidden && !item.error && item.encryption !== 'drm'
+          && typeof root.vgOnSniffPillUpdate === 'function') {
+        Promise.resolve(root.vgOnSniffPillUpdate(tabId, item)).catch(() => {});
+      }
       if (!item.hidden && !item.error && item.encryption !== 'drm' && !item.live
           && typeof root.vgOnSniffStreamReady === 'function') {
         Promise.resolve(root.vgOnSniffStreamReady(tabId, item)).catch(() => {});
@@ -947,16 +971,21 @@
     save(tabId);
     if (item.pending) {
       enrich(tabId, item);
-    } else if (c.kind === 'file' && (c.size || 0) >= 5 * 1024 * 1024
-               && typeof root.vgOnSniffStreamReady === 'function') {
-      setTimeout(async () => {
-        try {
-          const cur = await load(tabId);
-          if (!cur.includes(item) || item.hidden) return;
-          if (cur.some((x) => !x.hidden && (x.kind === 'hls' || x.kind === 'dash'))) return;
-          await root.vgOnSniffStreamReady(tabId, item);
-        } catch { /* ignore */ }
-      }, 900);
+    } else {
+      if (c.kind === 'file' && typeof root.vgOnSniffPillUpdate === 'function') {
+        Promise.resolve(root.vgOnSniffPillUpdate(tabId, item)).catch(() => {});
+      }
+      if (c.kind === 'file' && (c.size || 0) >= 5 * 1024 * 1024
+          && typeof root.vgOnSniffStreamReady === 'function') {
+        setTimeout(async () => {
+          try {
+            const cur = await load(tabId);
+            if (!cur.includes(item) || item.hidden) return;
+            if (cur.some((x) => !x.hidden && (x.kind === 'hls' || x.kind === 'dash'))) return;
+            await root.vgOnSniffStreamReady(tabId, item);
+          } catch { /* ignore */ }
+        }, 900);
+      }
     }
   }
 

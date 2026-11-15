@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 // wording: BA review (labels: locales/*/footer.json, links.<view>)
 const LINKS = [
+  ['features', '/tinh-nang'],
   ['pricing', '/pricing'],
   ['api-docs', '/api-docs'],
   ['terms', '/terms'],

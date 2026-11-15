@@ -285,6 +285,25 @@ def is_universal_stream_tier(tier: Optional[str]) -> bool:
     return check_feature(tier, "universal_stream")
 
 
+def universal_stream_mode_for_tier(tier: Optional[str]) -> str:
+    """
+    Paid-tier stratification for Universal Stream Capture:
+      - 'team' : Team / Enterprise / Admin — full Cinema & Anime Suite
+                 (4K/2160p, Desktop App yt-dlp+ffmpeg handoff, soft-sub MP4 muxing,
+                  multi-audio selector, auto-episode collector, live recording,
+                  auto token-refresh OPFS resume)
+      - 'pro'  : Pro — standard in-browser VOD stream capture up to 1080p,
+                 companion .SRT download, and floating <video> hover pill
+      - 'none' : Guest / Free / Starter — locked (upgrade prompt)
+    """
+    resolved = _resolve_tier(tier)
+    if resolved in ("team", "enterprise", "admin"):
+        return "team"
+    if resolved == "pro":
+        return "pro"
+    return "none"
+
+
 def get_limit(tier: Optional[str], limit_key: str, default: Any = 0) -> Any:
     """Return a numeric limit for a tier. -1 = unlimited."""
     plan = get_plan_def(tier)

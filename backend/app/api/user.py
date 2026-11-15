@@ -204,6 +204,7 @@ async def get_usage(request: Request, user: Dict[str, Any] = Depends(get_require
         "daily_limit":            daily_limit,
         "plan":                   tier,
         "universal_stream":       bool(_rq.kind == REQ_ADMIN or perms.get("universal_stream")),
+        "universal_stream_mode":  "team" if _rq.kind == REQ_ADMIN else str(perms.get("universal_stream_mode") or "none"),
         "downloads_today":        usage.get("downloads_today", 0),
         "downloads_this_month":   usage.get("downloads_this_month", 0),
         "bulk_jobs_count":        usage.get("bulk_jobs_count", 0),

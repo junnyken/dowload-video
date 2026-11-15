@@ -148,6 +148,7 @@ export type ExtJob = {
   stream?: boolean | null;
   cookieJar?: string | null;
   subtitles?: ExtSubtitle[] | null;
+  audioLang?: string | null;
 };
 export const onExtDownload = (cb: (job: ExtJob) => void) => on<ExtJob>('ext-download', cb);
 // In-app update download progress (task #6205).

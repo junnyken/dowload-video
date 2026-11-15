@@ -7,7 +7,10 @@ import { platformPages } from '../content/platformPages.js';
 export const LANGS = ['vi', 'en'];
 export const DEFAULT_LANG = 'vi';
 
-const VI_TO_EN = Object.fromEntries(platformPages.filter((p) => p.slugEn).map((p) => [`/${p.slug}`, `/${p.slugEn}`]));
+const VI_TO_EN = {
+  '/tinh-nang': '/features',
+  ...Object.fromEntries(platformPages.filter((p) => p.slugEn).map((p) => [`/${p.slug}`, `/${p.slugEn}`])),
+};
 const EN_TO_VI = Object.fromEntries(Object.entries(VI_TO_EN).map(([vi, en]) => [en, vi]));
 
 export const langFromPath = (pathname) => (/^\/en(\/|$)/.test(pathname || '') ? 'en' : 'vi');

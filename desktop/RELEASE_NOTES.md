@@ -1,4 +1,4 @@
-- Tự động bắt và lưu tệp phụ đề rời (.srt, .ass) đi kèm khi chuyển luồng phát từ tiện ích trình duyệt sang ứng dụng Windows, hỗ trợ chuyển đổi phụ đề WebVTT và HLS sang định dạng .srt chuẩn UTF-8.
-- Hỗ trợ chuyển tiếp phiên xác thực tạm thời (cookie phiên phát) trong RAM từ tiện ích sang trình tải cục bộ cho các luồng HLS/DASH yêu cầu phiên trình duyệt, tự xóa ngay sau khi tải xong và giữ nguyên tốc độ tải phân đoạn song song.
-- Tự động gom các tập phim dài kỳ / anime vào thư mục riêng theo tên bộ phim và hỗ trợ chế độ tự động tải tiếp khi chuyển tập trên tiện ích (gói Team).
+- Tự động nhúng phụ đề mềm (Soft-Subtitle mov_text) trực tiếp vào tệp .mp4 (song song giữ tệp .srt rời) không cần mã hóa lại hình ảnh/âm thanh, giúp bật/tắt phụ đề ngay trên VLC, MPC-HC, QuickTime và Windows Media Player.
+- Hỗ trợ chọn luồng âm thanh đa ngôn ngữ (Thuyết minh / Lồng tiếng / Âm thanh gốc) từ tiện ích trình duyệt chuyển thẳng sang yt-dlp cục bộ.
+- Tự động gom các tập phim dài kỳ / anime vào thư mục riêng theo tên bộ phim, hỗ trợ tự động tải tiếp khi chuyển tập và chuyển tiếp phiên phát tạm thời trong RAM (gói Team).
 - Cải thiện nhận diện luồng HEVC, AV1, đa luồng âm thanh và bảo vệ an toàn các nội dung khóa bản quyền DRM.

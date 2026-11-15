@@ -3,9 +3,9 @@
   "tier": {
     "guest": { "name": "Guest", "sub": "Not signed in · 5/day (2 YT)" },
     "free": { "name": "Free", "sub": "Free account · 20/day (5 YT)" },
-    "starter": { "name": "Starter — Creator Mini", "sub": "100/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR" },
-    "pro": { "name": "Pro — Creator & Dev", "sub": "300/day · Full 4K/8K + AI Logo Removal + Reup + Hardsub + 3,000 API" },
-    "team": { "name": "Team / Business API", "sub": "1,000/day · 15,000 API calls/mo + 5 Seats + Priority SLA & Webhooks" }
+    "starter": { "name": "Starter — Creator Mini", "sub": "100/day · Unlock 4K Social + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR" },
+    "pro": { "name": "Pro — Creator & Stream", "sub": "300/day · 1080p Web Stream Capture & Hover Pill + Reup Cleaner + Hardsub + 3,000 API" },
+    "team": { "name": "Team — Cinema, Anime & API", "sub": "1,000/day · 4K Cinema/Anime + Windows App (Soft-Sub MP4, Multi-Audio) + 15,000 API" }
   },
   "yes": "Yes",
   "no": "Not included",

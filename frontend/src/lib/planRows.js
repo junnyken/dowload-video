@@ -38,7 +38,19 @@ export function buildPlanRows(tiers) {
     },
     {
       key: 'universalStream', label: tp('rows.universalStream'),
-      get: (t) => (t.universal_stream ? tp('universalStreamTeam') : false),
+      get: (t) => {
+        const mode = t.universal_stream_mode || (t.universal_stream ? 'team' : (t.id === 'pro' ? 'pro' : 'none'));
+        if (mode === 'team') return tp('universalStreamTeam');
+        if (mode === 'pro') return tp('universalStreamPro');
+        return false;
+      },
+    },
+    {
+      key: 'cinemaSuite', label: tp('rows.cinemaSuite'),
+      get: (t) => {
+        const mode = t.universal_stream_mode || (t.universal_stream ? 'team' : 'none');
+        return mode === 'team' ? tp('cinemaSuiteTeam') : false;
+      },
     },
     {
       key: 'reupClean', label: tp('rows.reupClean'),

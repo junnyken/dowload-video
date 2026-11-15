@@ -12,6 +12,7 @@ export type ExtHandoffInput = {
   stream?: boolean | null;
   cookieJar?: string | null;
   subtitles?: ExtSubtitlePlan[] | null;
+  audioLang?: string | null;
 };
 
 export type HeaderPair = { name: string; value: string };
@@ -32,6 +33,7 @@ export type ExtHandoffPlan =
       quality: string;
       seriesFolder: string | null;
       subtitles: ExtSubtitlePlan[];
+      audioLang: string | null;
     };
 
 const GUEST_MAX_HEIGHT = 1080;
@@ -226,29 +228,60 @@ function isSniffedStream(job: ExtHandoffInput, target: URL, ref: URL | null): bo
   return false;
 }
 
+function normalizeAudioLang(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!SUB_LANG_RE.test(trimmed)) return null;
+  const primary = (trimmed.split(/[-_]/)[0] || '').toLowerCase();
+  if (!/^[a-z0-9]{2,8}$/.test(primary)) return null;
+  return primary;
+}
+
 function resolveStreamFormat(
   height: number | null | undefined,
   defaultQuality: string,
   guest: boolean,
-): { formatId?: string; audioOnly: boolean; formatLabel: string; quality: string } {
+  audioLang?: string | null,
+): { formatId?: string; audioOnly: boolean; formatLabel: string; quality: string; audioLang: string | null } {
   const validHeight = typeof height === 'number' && Number.isInteger(height) && height >= 144 && height <= 4320 ? height : null;
   const q = validHeight ? String(validHeight) : (defaultQuality || 'best');
   if (q === 'audio') {
-    return { audioOnly: true, formatLabel: QUALITY_LABELS.audio, quality: 'audio' };
+    return { audioOnly: true, formatLabel: QUALITY_LABELS.audio, quality: 'audio', audioLang: null };
   }
   if (guest && (q === 'best' || (/^\d+$/.test(q) && Number(q) > GUEST_MAX_HEIGHT))) {
-    return { formatId: GUEST_FORMAT, audioOnly: false, formatLabel: QUALITY_LABELS['1080'], quality: '1080' };
+    return { formatId: GUEST_FORMAT, audioOnly: false, formatLabel: QUALITY_LABELS['1080'], quality: '1080', audioLang: null };
   }
+  const cleanAudio = guest ? null : normalizeAudioLang(audioLang);
   if (/^\d+$/.test(q)) {
     const h = Number(q);
+    const baseLabel = QUALITY_LABELS[q] ?? `${h}p`;
+    if (cleanAudio) {
+      return {
+        formatId: `bv*[height<=${h}]+ba[language^=${cleanAudio}]/bv*[height<=${h}]+ba/b[height<=${h}]/b`,
+        audioOnly: false,
+        formatLabel: `${baseLabel} · 🔊 ${cleanAudio.toUpperCase()}`,
+        quality: q,
+        audioLang: cleanAudio,
+      };
+    }
     return {
       formatId: `bv*[height<=${h}]+ba/b[height<=${h}]/b`,
       audioOnly: false,
-      formatLabel: QUALITY_LABELS[q] ?? `${h}p`,
+      formatLabel: baseLabel,
       quality: q,
+      audioLang: null,
     };
   }
-  return { audioOnly: false, formatLabel: QUALITY_LABELS.best, quality: 'best' };
+  if (cleanAudio) {
+    return {
+      formatId: `bv*+ba[language^=${cleanAudio}]/bv*+ba/b`,
+      audioOnly: false,
+      formatLabel: `${QUALITY_LABELS.best} · 🔊 ${cleanAudio.toUpperCase()}`,
+      quality: 'best',
+      audioLang: cleanAudio,
+    };
+  }
+  return { audioOnly: false, formatLabel: QUALITY_LABELS.best, quality: 'best', audioLang: null };
 }
 
 export function planExtJob(
@@ -284,7 +317,7 @@ export function planExtJob(
     headers.push({ name: 'User-Agent', value: rawUa });
   }
 
-  const fmt = resolveStreamFormat(job.height, opts.defaultQuality, opts.guest);
+  const fmt = resolveStreamFormat(job.height, opts.defaultQuality, opts.guest, job.audioLang);
   const parsedEp = parseSeriesEpisode(title);
   const seriesFolder = parsedEp ? sanitizeSeriesFolder(parsedEp.seriesTitle) : null;
   const subtitles = normalizeSubtitles(job.subtitles);
@@ -302,5 +335,6 @@ export function planExtJob(
     quality: fmt.quality,
     seriesFolder,
     subtitles,
+    audioLang: fmt.audioLang,
   };
 }

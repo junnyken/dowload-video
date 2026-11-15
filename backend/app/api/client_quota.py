@@ -323,12 +323,15 @@ def _req_tier_name(req: "quotas.QuotaRequester") -> str:
 
 
 def _usage(req: "quotas.QuotaRequester") -> dict:
+    from app.core.entitlements import universal_stream_mode_for_tier  # noqa: PLC0415
     limit = quotas.platform_limit(req)
     used = 0 if req.kind == quotas.REQ_ADMIN else quotas.platform_used(req, quotas._TOTAL_BUCKET)
+    mode = "team" if req.kind == quotas.REQ_ADMIN else (universal_stream_mode_for_tier(req.tier) if req.kind == quotas.REQ_USER else "none")
     return {"limit": limit, "usedToday": used,
             "remaining": -1 if limit == -1 else max(0, limit - used),
             "resetTimeVn": quotas.reset_time_vn_text(), "requester": req.kind,
-            "tier": _req_tier_name(req), "universalStream": can_universal_stream(req)}
+            "tier": _req_tier_name(req), "universalStream": can_universal_stream(req),
+            "universalStreamMode": mode}
 
 
 def _stream_tier_refusal(req: "quotas.QuotaRequester") -> dict:

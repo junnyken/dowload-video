@@ -260,25 +260,41 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   assert(rGuest && rGuest.ok === false && rGuest.error === 'signin_required' && !env.posted.some((x) => x.t === 'download'),
     '[9a] VG_APP_SEND refuses unauthenticated guest with signin_required');
 
-  // 9b: Pro user (not highest tier) -> refused with tier_required
+  // 9b: Starter user -> refused with tier_required; Pro user -> refused on VG_APP_SEND with team_required (Desktop App handoff is Team-exclusive)
+  env.local.vg_auth_token = 'tok-starter-user';
+  env.setUsagePayload({ tier: 'starter', universal_stream: false, universal_stream_mode: 'none' });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const rStarter = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
+  assert(rStarter && rStarter.ok === false && rStarter.error === 'tier_required' && rStarter.tier === 'starter' && !env.posted.some((x) => x.t === 'download'),
+    '[9b] VG_APP_SEND refuses Starter tier with tier_required');
+
   env.local.vg_auth_token = 'tok-pro-user';
-  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const rPro = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
-  assert(rPro && rPro.ok === false && rPro.error === 'tier_required' && rPro.tier === 'pro' && !env.posted.some((x) => x.t === 'download'),
-    '[9b] VG_APP_SEND refuses Pro tier with tier_required');
+  const rProHls720 = await send({ type: 'VG_HLS_START', tabId: 3, id: 'aes1', height: 720 });
+  const rProHls4k = await send({ type: 'VG_HLS_START', tabId: 3, id: 'aes1', height: 2160 });
+  const rProLive = await send({ type: 'VG_HLS_START', tabId: 3, id: 'live1' });
+  assert(
+    rPro && rPro.ok === false && rPro.error === 'team_required' && rPro.tier === 'pro' && !env.posted.some((x) => x.t === 'download')
+      && rProHls720 && rProHls720.ok === true
+      && rProHls4k && rProHls4k.ok === false && rProHls4k.error === 'team_required'
+      && rProLive && rProLive.ok === false && rProLive.error === 'team_required',
+    '[9b] Pro tier allows standard Browser VOD HLS <=1080p while gating Desktop App, 4K, and Live to Team (team_required)',
+  );
 
-  // 9c: Team user (highest purchasable tier) -> allowed for AES-128, SAMPLE-AES identity, and non-DRM Live
+  // 9c: Team user (highest purchasable tier) -> allowed for AES-128, SAMPLE-AES identity, non-DRM Live, and audioLang forwarding
   env.local.vg_auth_token = 'tok-team-user';
-  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  env.setUsagePayload({ tier: 'team', universal_stream: true, universal_stream_mode: 'team' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
   env.posted.length = 0;
-  const rAes = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
+  const rAes = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720, audioLang: 'vi' });
   const dlMsg = env.posted.find((x) => x.t === 'download');
   assert(rAes && rAes.ok === true && dlMsg && dlMsg.referer === 'https://player.embed.x/v/1'
     && dlMsg.title === 'Hành Trình Tập 01'
-    && dlMsg.height === 720 && dlMsg.stream === true && typeof dlMsg.userAgent === 'string' && dlMsg.userAgent.includes('Chrome'),
-    '[9c] VG_APP_SEND allows Team tier, cleans movie title, and forwards iframe refererUrl + height + userAgent + stream');
+    && dlMsg.height === 720 && dlMsg.audioLang === 'vi'
+    && dlMsg.stream === true && typeof dlMsg.userAgent === 'string' && dlMsg.userAgent.includes('Chrome'),
+    '[9c] VG_APP_SEND allows Team tier, cleans movie title, and forwards iframe refererUrl + height + audioLang + userAgent + stream');
 
   env.posted.length = 0;
   const rSa = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'sa1', height: 1080 });
@@ -388,16 +404,24 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   );
   sandbox.fetch = origSandboxFetch;
 
-  // 10c: Auto-queue next episode toggle (Team gated + deduplicated)
+  // 10c: Auto-queue next episode toggle (Team gated: Starter -> tier_required, Pro -> team_required, Team -> ok + deduplicated)
+  env.local.vg_auth_token = 'tok-starter-user';
+  env.setUsagePayload({ tier: 'starter', universal_stream: false, universal_stream_mode: 'none' });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const autoDeniedStarter = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
+
   env.local.vg_auth_token = 'tok-pro-user';
-  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const autoDenied = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
-  assert(autoDenied && autoDenied.ok === false && autoDenied.error === 'tier_required',
-    '[10c] VG_SNIFF_AUTO_EP_SET refuses non-Team tier');
+  assert(
+    autoDeniedStarter && autoDeniedStarter.ok === false && autoDeniedStarter.error === 'tier_required'
+      && autoDenied && autoDenied.ok === false && autoDenied.error === 'team_required',
+    '[10c] VG_SNIFF_AUTO_EP_SET refuses Starter (tier_required) and Pro (team_required)',
+  );
 
   env.local.vg_auth_token = 'tok-team-user';
-  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  env.setUsagePayload({ tier: 'team', universal_stream: true, universal_stream_mode: 'team' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const autoOk = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
   const autoState = await send({ type: 'VG_SNIFF_AUTO_EP_GET', tabId: 9 });
@@ -421,7 +445,7 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     '[10c] vgOnSniffStreamReady auto-sends next episode to connected Desktop App exactly once',
   );
 
-  // 10d: VG_HLS_RESUME resumes a checkpointed HLS job for Team tier and refuses Pro tier
+  // 10d: VG_HLS_RESUME refuses Starter tier, allows Pro standard resume, and auto-rebinds fresh signed URL on live tab for Team tier
   const extPageSender = { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', origin: 'chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi', url: 'chrome-extension://gkoepflfmpdmkhmccekmajlfdnfklmgi/offscreen.html' };
   const hStartRes = await send({ type: 'VG_HLS_START', tabId: 3, id: 'ep-hls-1', height: 720 }, extPageSender);
   const rJobId = hStartRes && hStartRes.job && hStartRes.job.id;
@@ -430,32 +454,63 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     type: 'HLS_FAILED',
     id: rJobId,
     reason: 'http',
-    message: 'HTTP 503',
+    message: 'HTTP 403',
     resumable: true,
     done: 12,
     total: 40,
     bytes: 409600,
-    checkpoint: { mediaUrl: 'https://cdn.x/anime/ep01/720.m3u8', written: 12, total: 40, bytes: 409600, fmp4Mode: false },
+    checkpoint: { mediaUrl: 'https://cdn.x/anime/ep01/720.m3u8?token=expired_1', written: 12, total: 40, bytes: 409600, seq: 13, fmp4Mode: false },
   }, extPageSender);
   await tick(); await tick();
   const keepResp = await send({ type: 'VG_HLS_KEEP_FILES' }, extPageSender);
   assert(keepResp && keepResp.ok === true && keepResp.keep.includes(`hls-${rJobId}.mp4`),
     '[10d] VG_HLS_KEEP_FILES preserves OPFS file of resumable failed HLS job');
 
-  env.local.vg_auth_token = 'tok-pro-user';
-  env.setUsagePayload({ tier: 'pro', universal_stream: false });
+  env.local.vg_auth_token = 'tok-starter-user';
+  env.setUsagePayload({ tier: 'starter', universal_stream: false, universal_stream_mode: 'none' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
-  const resumePro = await send({ type: 'VG_HLS_RESUME', id: rJobId }, extPageSender);
-  assert(resumePro && resumePro.ok === false && resumePro.error === 'tier_required',
-    '[10d] VG_HLS_RESUME refuses non-Team tier');
+  const resumeStarter = await send({ type: 'VG_HLS_RESUME', id: rJobId }, extPageSender);
+  assert(resumeStarter && resumeStarter.ok === false && resumeStarter.error === 'tier_required',
+    '[10d] VG_HLS_RESUME refuses Starter tier with tier_required');
+
+  // Simulate live tab refreshing its signed HLS token while keeping the same episode stream identity
+  sandbox.vgSniffList = async () => [
+    {
+      id: 'ep-hls-1-fresh',
+      kind: 'hls',
+      encryption: 'none',
+      live: false,
+      url: 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_2',
+      title: 'Hành Trình Biển Đông - Tập 01',
+      pageUrl: 'https://cinema.example/watch/ep-01',
+      refererUrl: 'https://player.embed.x/e/1?token=fresh_2',
+    },
+  ];
 
   env.local.vg_auth_token = 'tok-team-user';
-  env.setUsagePayload({ tier: 'team', universal_stream: true });
+  env.setUsagePayload({ tier: 'team', universal_stream: true, universal_stream_mode: 'team' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
   const resumeTeam = await send({ type: 'VG_HLS_RESUME', id: rJobId }, extPageSender);
   assert(
-    resumeTeam && resumeTeam.ok === true && resumeTeam.job && resumeTeam.job.state === 'running' && resumeTeam.job.done === 12,
-    '[10d] VG_HLS_RESUME restarts checkpointed job at done=12 for Team tier',
+    resumeTeam && resumeTeam.ok === true && resumeTeam.rebound === true
+      && resumeTeam.job && resumeTeam.job.state === 'running' && resumeTeam.job.done === 12
+      && resumeTeam.job.url === 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_2',
+    '[10d] VG_HLS_RESUME auto-rebinds fresh signed URL from live tab and restarts checkpointed job at done=12 for Team tier',
+  );
+
+  // 10e: VG_PILL_CLICK routes Team user directly to connected Desktop App, and Pro user to Browser HLS
+  env.posted.length = 0;
+  const tabSender = { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', tab: { id: 3, url: 'https://cinema.example/watch/ep-01' }, origin: 'https://cinema.example', url: 'https://cinema.example/watch/ep-01' };
+  const pillTeam = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
+  env.local.vg_auth_token = 'tok-pro-user';
+  env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const pillPro = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
+  assert(
+    pillTeam && pillTeam.ok === true && pillTeam.via === 'app'
+      && env.posted.some((x) => x.t === 'download' && x.url === 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_2')
+      && pillPro && pillPro.ok === true && pillPro.via === 'browser',
+    '[10e] VG_PILL_CLICK sends stream to Desktop App for Team tier and starts Browser HLS <=1080p for Pro tier',
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

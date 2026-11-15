@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { useLocalePath } from '../i18n';
+import { useLocalePath, useLang } from '../i18n';
 import {
   Download, Layers, History, Wand2, Lock,
   Sparkles, Smartphone, X, Puzzle, Lightbulb, Code, Building2, ArrowRight
@@ -104,6 +104,7 @@ function ModeTabs({ activeTab, onChange, flowLocked, isAdminPreview }) {
 export default function LandingPage() {
   const { t } = useTranslation('landing');
   const lp = useLocalePath();
+  const lang = useLang();
   // Top of the funnel. Without it there is no denominator, so no conversion
   // rate can be computed from any of the steps below it. Empty dep array: once
   // per mount, not once per re-render.
@@ -396,6 +397,45 @@ export default function LandingPage() {
             </a>
           ))}
         </nav>
+
+        {/* New Ecosystem Showcase Callout */}
+        <section aria-labelledby="landing-ecosystem-title" className="w-full mt-10">
+          <div className="p-5 sm:p-6 rounded-2xl bg-surface-2 border border-accent/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-text text-[11px] font-bold">
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                {lang === 'en' ? 'NEW ECOSYSTEM UPGRADE · EXTENSION + WINDOWS APP' : 'NÂNG CẤP HỆ SINH THÁI MỚI · EXTENSION + APP WINDOWS'}
+              </div>
+              <h2 id="landing-ecosystem-title" className="text-base sm:text-lg font-bold text-fg">
+                {lang === 'en'
+                  ? 'More Than Web Links — Capture 4K Movies, Anime, Multi-Audio & Soft-Sub MP4'
+                  : 'Không chỉ dán link trên web — Bắt luồng Phim/Anime 4K, Đa kênh tiếng & Phụ đề chìm MP4'}
+              </h2>
+              <p className="text-xs sm:text-sm text-fg-muted max-w-2xl leading-relaxed">
+                {lang === 'en'
+                  ? 'Hover over web video players for 1-click download, mux toggleable subtitles directly into MP4 on Windows with zero re-encode, auto-resume expired tokens, and clean Reup metadata.'
+                  : 'Hiện nút tải nổi ngay khi rê chuột vào khung phát, nhúng thẳng phụ đề mềm vào MP4 trên Windows không giảm chất lượng, tự nối tải khi hết hạn token và làm sạch video Reup.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+              <a
+                href={lp('/tinh-nang')}
+                onClick={spaLink('/tinh-nang')}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition"
+              >
+                {lang === 'en' ? 'Explore New Features' : 'Khám phá Tính năng mới'}
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </a>
+              <a
+                href={lp('/pricing')}
+                onClick={spaLink('/pricing')}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-line bg-surface text-fg-2 hover:text-fg text-xs font-semibold transition"
+              >
+                {lang === 'en' ? 'Compare Starter / Pro / Team' : 'Xem gói Starter / Pro / Team'}
+              </a>
+            </div>
+          </div>
+        </section>
 
         {/* wording: BA review (whole API section) */}
         <section aria-labelledby="landing-api-title" className="w-full mt-12">

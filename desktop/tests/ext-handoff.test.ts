@@ -152,3 +152,54 @@ test('parseSeriesEpisode & planExtJob: detects anime/series subfolder and saniti
   if (reservedSeries.mode !== 'direct_queue') return;
   assert.equal(reservedSeries.seriesFolder, '_CON');
 });
+
+test('planExtJob: multi-audio track language selector stays within validate::format_id charset', () => {
+  const VALIDATE_FORMAT_ID_RE = /^[A-Za-z0-9+_/.*\[\]<>=:,^-]{1,512}$/;
+
+  const viPlan = planExtJob(
+    {
+      url: 'https://cdn.example/vod/ep01/master.m3u8',
+      title: 'Hành Trình Tập 01',
+      height: 1080,
+      stream: true,
+      audioLang: 'vi-VN',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(viPlan.mode, 'direct_queue');
+  if (viPlan.mode !== 'direct_queue') return;
+  assert.equal(viPlan.audioLang, 'vi');
+  assert.equal(viPlan.formatId, 'bv*[height<=1080]+ba[language^=vi]/bv*[height<=1080]+ba/b[height<=1080]/b');
+  assert.match(viPlan.formatId!, VALIDATE_FORMAT_ID_RE);
+  assert.match(viPlan.formatLabel, /VI/);
+
+  const bestJaPlan = planExtJob(
+    {
+      url: 'https://cdn.example/vod/ep02/master.m3u8',
+      title: 'Hành Trình Tập 02',
+      stream: true,
+      audioLang: 'ja',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(bestJaPlan.mode, 'direct_queue');
+  if (bestJaPlan.mode !== 'direct_queue') return;
+  assert.equal(bestJaPlan.audioLang, 'ja');
+  assert.equal(bestJaPlan.formatId, 'bv*+ba[language^=ja]/bv*+ba/b');
+  assert.match(bestJaPlan.formatId!, VALIDATE_FORMAT_ID_RE);
+
+  const badAudioPlan = planExtJob(
+    {
+      url: 'https://cdn.example/vod/ep03/master.m3u8',
+      title: 'Hành Trình Tập 03',
+      height: 720,
+      stream: true,
+      audioLang: 'vi"; --exec rm',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(badAudioPlan.mode, 'direct_queue');
+  if (badAudioPlan.mode !== 'direct_queue') return;
+  assert.equal(badAudioPlan.audioLang, null);
+  assert.equal(badAudioPlan.formatId, 'bv*[height<=720]+ba/b[height<=720]/b');
+});

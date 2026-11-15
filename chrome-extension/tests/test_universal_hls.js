@@ -873,6 +873,77 @@ https://resume.cdn.example/r3.m4s
     { resDone, lastWritableOpts, lastSeekPos, fetchedUrls },
   );
 
+  console.log('[10] Competitive Upgrades: Retry-After parser, Multi-Audio rendition selector, and Token-Refresh Rebind Resume');
+  assert(
+    typeof H.parseRetryAfterMs === 'function'
+      && H.parseRetryAfterMs('2') === 2000
+      && H.parseRetryAfterMs('0') === 500
+      && H.parseRetryAfterMs('999') === 15000
+      && H.parseRetryAfterMs(null) === 0,
+    'parseRetryAfterMs parses seconds and clamps backoff to [500, 15000] ms',
+  );
+  const sampleRenditions = [
+    { groupId: 'aud', name: 'Japanese', language: 'ja', default: true, url: 'https://a.example/ja.m3u8' },
+    { groupId: 'aud', name: 'Thuyết minh', language: 'vi', default: false, url: 'https://a.example/vi.m3u8' },
+  ];
+  assert(
+    typeof H.selectAudioRendition === 'function'
+      && H.selectAudioRendition(sampleRenditions, { lang: 'vi' }).url === 'https://a.example/vi.m3u8'
+      && H.selectAudioRendition(sampleRenditions, { name: 'Thuyết minh' }).url === 'https://a.example/vi.m3u8'
+      && H.selectAudioRendition(sampleRenditions, null).url === 'https://a.example/ja.m3u8',
+    'selectAudioRendition selects requested audio language/name and falls back to default rendition',
+  );
+
+  // Token-Refresh Rebind Resume: expired old variant URL returns 403, fresh master URL with rebindMaster=true completes from checkpoint!
+  routes.set('https://token.cdn.example/master.m3u8?sig=fresh2', new TextEncoder().encode(`#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1920x1080
+https://token.cdn.example/vod.m3u8?sig=fresh2
+`));
+  routes.set('https://token.cdn.example/vod.m3u8?sig=fresh2', new TextEncoder().encode(`#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4.0,
+https://token.cdn.example/s0.m4s?sig=fresh2
+#EXTINF:4.0,
+https://token.cdn.example/s1.m4s?sig=fresh2
+#EXT-X-ENDLIST
+`));
+  routes.set('https://token.cdn.example/s1.m4s?sig=fresh2', resSeg1);
+  // Seed OPFS with segment 0 already written before token expired
+  opfsFiles.set('hls-rebind-1.mp4', new Uint8Array(resSeg0));
+  swMessages.length = 0;
+  fetchedUrls.length = 0;
+  listener({
+    target: 'offscreen',
+    type: 'HLS_START',
+    job: {
+      id: 'rebind-1',
+      url: 'https://token.cdn.example/master.m3u8?sig=fresh2',
+      title: 'Signed Token Episode',
+      retryBaseMs: 5,
+      resume: {
+        mediaUrl: 'https://token.cdn.example/vod.m3u8?sig=expired1',
+        rebindMaster: true,
+        written: 1,
+        bytes: resSeg0.byteLength,
+        total: 2,
+        seq: 2,
+      },
+    },
+  }, {}, () => {});
+  for (let i = 0; i < 60 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const rebindDone = swMessages.find((m) => m.type === 'HLS_DONE');
+  const rebindBytes = opfsFiles.get('hls-rebind-1.mp4');
+  assert(
+    !!rebindDone
+      && !fetchedUrls.includes('https://token.cdn.example/s0.m4s?sig=fresh2')
+      && fetchedUrls.includes('https://token.cdn.example/s1.m4s?sig=fresh2')
+      && rebindBytes && rebindBytes.byteLength === resSeg0.byteLength + resSeg1.byteLength,
+    'rebindMaster=true re-resolves fresh signed master/variant URLs while preserving OPFS checkpoint bytes',
+    { rebindDone, fetchedUrls, err: swMessages.find((m) => m.type === 'HLS_FAILED') },
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

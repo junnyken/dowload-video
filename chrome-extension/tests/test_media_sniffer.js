@@ -262,6 +262,7 @@ assert(
 
 const multiTrackMaster = S.parseM3U8(`#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-main",NAME="Japanese",LANGUAGE="ja",DEFAULT=YES,URI="audio/ja/prog.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-main",NAME="Thuyết minh",LANGUAGE="vi",DEFAULT=NO,URI="audio/vi/prog.m3u8"
 #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Tiếng Việt",LANGUAGE="vi",DEFAULT=YES,URI="subs/vi/prog.m3u8"
 #EXT-X-STREAM-INF:BANDWIDTH=4200000,RESOLUTION=1920x1080,CODECS="hvc1.1.6.L120.90,mp4a.40.2",AUDIO="aud-main",SUBTITLES="subs"
 video/1080p.m3u8
@@ -270,12 +271,18 @@ assert(
   multiTrackMaster.valid === true
     && multiTrackMaster.videoCodec === 'hevc'
     && multiTrackMaster.hasSeparateAudio === true
+    && Array.isArray(multiTrackMaster.audioRenditions)
+    && multiTrackMaster.audioRenditions.length === 2
+    && multiTrackMaster.audioRenditions[0].lang === 'ja'
+    && multiTrackMaster.audioRenditions[0].default === true
+    && multiTrackMaster.audioRenditions[1].lang === 'vi'
+    && multiTrackMaster.audioRenditions[1].name === 'Thuyết minh'
     && Array.isArray(multiTrackMaster.subtitles)
     && multiTrackMaster.subtitles.length === 1
     && multiTrackMaster.subtitles[0].lang === 'vi'
     && multiTrackMaster.subtitles[0].format === 'hls'
     && multiTrackMaster.subtitles[0].url === 'https://cdn.cinema.example/anime/ep01/subs/vi/prog.m3u8',
-  'parseM3U8 detects HEVC codec, separate #EXT-X-MEDIA:TYPE=AUDIO, and HLS subtitle rendition URL',
+  'parseM3U8 detects HEVC codec, deduplicated audioRenditions (ja + vi), and HLS subtitle rendition URL',
   multiTrackMaster,
 );
 

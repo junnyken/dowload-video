@@ -1,0 +1,155 @@
+{
+  "_note": "wording: BA review — English drafted with AI",
+  "badge": "NEW VIDGRAB ECOSYSTEM · WEB STUDIO + EXTENSION + WINDOWS APP",
+  "heroTitle": "Beyond Pasting Links — The Complete Cinema, Anime & AI Video Ecosystem",
+  "heroSub": "Discover the pro-grade capabilities that put VidGrab ahead of ordinary downloaders: an IDM-style floating video hover button, 4K HLS/DASH stream capture, zero-reencode soft-subtitle MP4 muxing, multi-audio track selection, and AI post-processing.",
+  "ctaPricing": "View Plans & Unlock Now",
+  "ctaWindows": "Download Windows App",
+  "ctaExtension": "Install Chrome / Edge Extension",
+  "pillarsTitle": "3 Seamless Apps Under One Account",
+  "pillarsSub": "Sign in once — your plan benefits sync instantly across Browser Extension, Web Studio, and Windows Desktop.",
+  "pillars": [
+    {
+      "tag": "Pillar 01",
+      "title": "Web Studio & AI Cloud",
+      "desc": "100-link Batch .ZIP downloads, AI Whisper Speech-to-Subtitle (ASR), Batch Bilingual Subtitle Translation, Anti-Detect Reup Cleaner, and Burn-in Hardsub MP4."
+    },
+    {
+      "tag": "Pillar 02",
+      "title": "Browser Extension v5.28",
+      "desc": "Detects active streams in real time, renders a floating download pill on web players, remuxes HLS AES-128/SAMPLE-AES directly to OPFS disk with zero RAM bloat, and resumes interrupted movies."
+    },
+    {
+      "tag": "Pillar 03",
+      "title": "Windows Desktop App v0.22",
+      "desc": "Combines native yt-dlp + ffmpeg speed on your PC: 4K HEVC/AV1 & DASH merging, ephemeral VIP session cookie handoff, and instant mov_text soft-subtitle MP4 muxing."
+    }
+  ],
+  "flagshipTitle": "6 High-Value Upgrades Built for Paid Plans",
+  "flagshipSub": "Engineered for movie & anime collectors, content creators, editors, and media teams.",
+  "cards": [
+    {
+      "tier": "Pro & Team",
+      "tierTone": "pro",
+      "title": "Floating <video> Hover Download Pill",
+      "desc": "Hover over any non-DRM web video player to reveal a sleek ⚡ Download with VidGrab pill showing resolution, multi-audio, and CC indicators. Isolated inside Shadow-DOM with one-click dismiss.",
+      "highlights": [
+        "1-click capture right on the video without opening the popup",
+        "Automatically routes to the Windows App when active (Team plan)",
+        "Strict DRM respect: never appears on DRM-protected players"
+      ]
+    },
+    {
+      "tier": "Team Exclusive",
+      "tierTone": "team",
+      "title": "Embedded Soft-Subtitle (mov_text) MP4 Muxing",
+      "desc": "When downloading via the Windows App, VidGrab automatically fetches companion subtitles (.VTT/.SRT/HLS) and muxes toggleable ISO soft-subtitle tracks directly inside the .MP4 container with zero video re-encoding.",
+      "highlights": [
+        "Toggle CC on/off natively in VLC, PotPlayer, QuickTime, iOS & Smart TVs",
+        "Instant remuxing with 100% original video & audio quality preserved",
+        "Also keeps clean external .SRT files alongside your video"
+      ]
+    },
+    {
+      "tier": "Team Exclusive",
+      "tierTone": "team",
+      "title": "Multi-Audio Track Selector (Dubbed / Voiceover / Original)",
+      "desc": "Parses #EXT-X-MEDIA:TYPE=AUDIO renditions in multi-language cinema & anime streams so you can pick Vietnamese Dub, English, or Original Japanese audio before downloading.",
+      "highlights": [
+        "Clean audio language selector right inside the extension row",
+        "Merges your chosen audio rendition with 1080p/4K video automatically",
+        "Supported across both In-Browser OPFS Muxer and Windows App"
+      ]
+    },
+    {
+      "tier": "Pro (1080p) · Team (4K + Token Rebind)",
+      "tierTone": "pro",
+      "title": "Zero-RAM OPFS HLS Engine + Auto Token-Refresh Resume",
+      "desc": "Streams segments straight to OPFS disk storage with adaptive HTTP 429 Retry-After throttle protection. On Team, resuming a failed download even re-binds a fresh signed token from your open tab without losing a single byte!",
+      "highlights": [
+        "Full support for standard AES-128 & SAMPLE-AES (identity) streams",
+        "Adaptive concurrency scaling prevents CDN 429/503 IP bans",
+        "Never restart a 2GB movie from 0% when CDN tokens expire mid-way"
+      ]
+    },
+    {
+      "tier": "Team Exclusive",
+      "tierTone": "team",
+      "title": "Series Folder Auto-Organizer & Next-Episode Auto-Queue",
+      "desc": "Binge-watching an anime or series? VidGrab detects when the player advances to the next episode, strips noisy site ads from filenames, and organizes episodes into clean series folders.",
+      "highlights": [
+        "Smart title cleaner removes domain watermarks and ad prefixes",
+        "Auto-sorts into VidGrab/<Series Name>/Episode 01, 02...",
+        "Includes real-time Non-DRM Livestream DVR recording to MP4"
+      ]
+    },
+    {
+      "tier": "Starter · Pro · Team",
+      "tierTone": "starter",
+      "title": "AI Subtitle Studio, Anti-Detect Reup & Bulk .ZIP",
+      "desc": "Cloud post-production suite: generate subtitles from speech with AI ASR, batch-translate bilingual .SRT/.VTT files, clean video metadata/MD5/mirror frames, and grab entire channels as .ZIP.",
+      "highlights": [
+        "Starter: 4K social downloads, 20-link Batch (.ZIP), 30m/day AI ASR",
+        "Pro: Anti-Detect Reup Cleaner, Hardsub Burn-in MP4 + 3,000 API calls",
+        "Team: 1,000/day, 15,000 API calls/mo + 5 shared Workspace seats"
+      ]
+    }
+  ],
+  "tierMatrixTitle": "Pick the Right Plan — Clear Advantages at Every Tier",
+  "tierMatrixSub": "Every paid tier unlocks concrete, high-impact capabilities tailored to your workflow.",
+  "tiers": [
+    {
+      "id": "starter",
+      "badge": "Best Entry",
+      "name": "Starter — Creator Mini",
+      "priceHint": "From $1.99 1st month ($2.99 regular)",
+      "who": "Ideal for 4K social video downloads, TikTok/Douyin photo carousels, and everyday AI subtitles.",
+      "perks": [
+        "100 downloads/day · Unlock 4K YouTube/TikTok/Social quality",
+        "20-link Batch downloader & 1-click .ZIP archive",
+        "Full TikTok/Douyin Photo Carousel .ZIP + background MP3",
+        "30 min/day AI Speech-to-Subtitle (ASR) & 2,000 translated cues/day",
+        "Online HD/4K timestamp video clipping up to 2 minutes"
+      ],
+      "cta": "Choose Starter →",
+      "planParam": "starter_month"
+    },
+    {
+      "id": "pro",
+      "badge": "⭐ Best Value",
+      "name": "Pro — Creator & Stream",
+      "priceHint": "From $3.99 1st month ($5.99 regular)",
+      "who": "Built for Full HD web movie viewers, professional Reup creators, and solo developers.",
+      "perks": [
+        "Unlocks Browser Universal Stream Capture on any site (up to 1080p)",
+        "Unlocks Floating <video> Hover Pill + Clean Titles + .SRT Subtitles",
+        "Anti-Detect Reup Cleaner (Metadata, MD5, Mirror) + Hardsub MP4 Burn-in",
+        "300 downloads/day · 100-link Batch (.ZIP) · 120 min/day AI ASR",
+        "Includes 3,000 REST API calls/mo (+500 1st-purchase bonus)"
+      ],
+      "cta": "Upgrade to Pro →",
+      "planParam": "pro_month"
+    },
+    {
+      "id": "team",
+      "badge": "👑 Ultimate Cinema & API",
+      "name": "Team — Cinema, Anime & Studio",
+      "priceHint": "From $11.99 1st month ($15.99 regular)",
+      "who": "Everything unlocked: 4K Cinema/Anime streams, Windows App power handoff, Soft-Sub MP4 & Team seats.",
+      "perks": [
+        "100% 4K/2160p Universal HLS & DASH + Windows Desktop App Handoff",
+        "Embedded Soft-Subtitle (mov_text) MP4 Muxing + VIP Cookie Handoff",
+        "Multi-Audio Track Picker + Series Folder Organizer & Auto-Next Episode",
+        "Non-DRM Livestream Recording + Auto Token-Refresh OPFS Resume",
+        "1,000 downloads/day · 15,000 API calls/mo · 5 Workspace seats"
+      ],
+      "cta": "Unlock Team Plan →",
+      "planParam": "team_month"
+    }
+  ],
+  "complianceNote": "DRM & Copyright Commitment: VidGrab strictly supports public media and non-DRM standard streams (MP4, clear HLS, standard AES-128/SAMPLE-AES identity). Streams protected by Widevine, FairPlay, or PlayReady are automatically detected and blocked.",
+  "bottomTitle": "Ready to Unlock the Full VidGrab Ecosystem?",
+  "bottomSub": "Install the Chrome Extension + Windows App in 30 seconds and upgrade whenever you need more power.",
+  "bottomBtnPricing": "Compare All Plans",
+  "bottomBtnHome": "Try Web Downloader Now"
+}

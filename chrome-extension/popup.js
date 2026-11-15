@@ -2401,12 +2401,18 @@ function vgHasOrigin(pattern) {
 
 let _vgSniffTimer = null;
 let _vgAppFound = false;   // the VidGrab app answers on this computer
-let _vgUniversalGate = { allowed: false, authenticated: false, tier: 'guest' };
+let _vgUniversalGate = { allowed: false, mode: 'none', isTeam: false, authenticated: false, tier: 'guest' };
 
 async function vgRefreshUniversalGate(force = false) {
   const g = await new Promise((r) => chrome.runtime.sendMessage({ type: 'VG_UNIVERSAL_TIER_STATUS', force }, r));
   if (g && typeof g === 'object') {
-    _vgUniversalGate = { allowed: !!g.allowed, authenticated: !!g.authenticated, tier: String(g.tier || 'guest') };
+    _vgUniversalGate = {
+      allowed: !!g.allowed,
+      mode: String(g.mode || (g.isTeam ? 'team' : g.allowed ? 'pro' : 'none')),
+      isTeam: !!g.isTeam,
+      authenticated: !!g.authenticated,
+      tier: String(g.tier || 'guest'),
+    };
   }
   return _vgUniversalGate;
 }
@@ -2484,12 +2490,18 @@ function vgFmtMmSs(sec) {
 function vgSniffReplyText(r, okText, failText) {
   if (r && r.ok) return okText;
   if (r && r.error === 'drm_protected') return t('sniff_drm_friendly', r.drmSystem || 'DRM');
+  if (r && r.error === 'team_required') return t('sniff_teamLockedHint');
   if (r && (r.error === 'tier_required' || r.error === 'signin_required')) return VG_SNIFF_TEXT.tierLockedHint;
   return failText;
 }
 
-function vgSendToApp(tab, it, msg, height = null) {
-  chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id, height }, (r) => {
+function vgSendToApp(tab, it, msg, height = null, audioLang = null) {
+  if (!_vgUniversalGate.isTeam) {
+    if (msg) msg.textContent = t('sniff_teamLockedHint');
+    vgOpenPricing();
+    return;
+  }
+  chrome.runtime.sendMessage({ type: 'VG_APP_SEND', tabId: tab.id, id: it.id, height, audioLang }, (r) => {
     msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.appSent, VG_SNIFF_TEXT.appFailed);
   });
 }
@@ -2602,10 +2614,21 @@ async function renderSniff(tab) {
   if (autoWrap && autoBox) {
     if (_vgUniversalGate.allowed) {
       autoWrap.style.display = 'flex';
-      chrome.runtime.sendMessage({ type: 'VG_SNIFF_AUTO_EP_GET', tabId: tab.id }, (ar) => {
-        autoBox.checked = Boolean(ar && ar.enabled);
-      });
+      if (_vgUniversalGate.isTeam) {
+        chrome.runtime.sendMessage({ type: 'VG_SNIFF_AUTO_EP_GET', tabId: tab.id }, (ar) => {
+          autoBox.checked = Boolean(ar && ar.enabled);
+        });
+      } else {
+        autoBox.checked = false;
+      }
       autoBox.onchange = () => {
+        if (!_vgUniversalGate.isTeam) {
+          autoBox.checked = false;
+          const msgEl = document.getElementById('vg-sniff-msg');
+          if (msgEl) msgEl.textContent = t('sniff_teamLockedHint');
+          vgOpenPricing();
+          return;
+        }
         chrome.runtime.sendMessage({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: tab.id, enabled: autoBox.checked }, (ar) => {
           const msgEl = document.getElementById('vg-sniff-msg');
           if (!ar || !ar.ok) {
@@ -2733,55 +2756,117 @@ function vgSniffRow(tab, it) {
         msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started, VG_SNIFF_TEXT.failed);
       });
     } else if (it.kind === 'hls') {
-      let pick = null;
-      const heights = (it.variants || []).map((v) => v.height).filter(Boolean);
-      if (heights.length > 1) {
-        pick = document.createElement('select');
-        pick.className = 'vg-sniff-quality';
-        pick.style.cssText = 'background:#0f1923;border:1px solid #1e2333;border-radius:8px;color:#e2e8f0;font-size:10px;padding:4px;';
-        [...new Set(heights)].forEach((h) => { const o = document.createElement('option'); o.value = h; o.textContent = vgQ(h); pick.appendChild(o); });
-        actions.appendChild(pick);
-      }
-      const preferDesktopApp = Boolean(_vgAppFound && !it.live
-        && (it.videoCodec === 'hevc' || it.videoCodec === 'av1' || it.hasSeparateAudio));
-      if (preferDesktopApp) {
-        btn.textContent = VG_SNIFF_TEXT.viaApp;
-        btn.classList.add('vg-sniff-app');
-        btn.onclick = () => vgSendToApp(tab, it, msg, pick ? Number(pick.value) : null);
+      if (it.live && !_vgUniversalGate.isTeam) {
+        btn.textContent = t('sniff_teamBadgeBtn');
+        btn.style.background = 'linear-gradient(135deg,#d97706,#6366f1)';
+        btn.onclick = () => {
+          if (msg) msg.textContent = t('sniff_teamLockedHint');
+          vgOpenPricing();
+        };
         actions.appendChild(btn);
-        const browserBtn = document.createElement('button');
-        browserBtn.className = 'vg-sniff-browser';
-        browserBtn.textContent = VG_SNIFF_TEXT.local;
-        browserBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
-        browserBtn.onclick = () => chrome.runtime.sendMessage(
-          { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
-          (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
-        actions.appendChild(browserBtn);
       } else {
-        btn.textContent = it.live ? VG_SNIFF_TEXT.recordLive : VG_SNIFF_TEXT.local;
-        btn.onclick = () => chrome.runtime.sendMessage(
-          { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: pick ? Number(pick.value) : null },
-          (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); });
-        actions.appendChild(btn);
+        let pick = null;
+        let pickAudio = null;
+        const heights = [...new Set((it.variants || []).map((v) => v.height).filter(Boolean))];
+        if (heights.length > 1) {
+          pick = document.createElement('select');
+          pick.className = 'vg-sniff-quality';
+          pick.style.cssText = 'background:#0f1923;border:1px solid #1e2333;border-radius:8px;color:#e2e8f0;font-size:10px;padding:4px;';
+          heights.forEach((h) => {
+            const o = document.createElement('option');
+            o.value = h;
+            o.textContent = (!_vgUniversalGate.isTeam && h > 1080) ? `${vgQ(h)} (Team)` : vgQ(h);
+            pick.appendChild(o);
+          });
+          if (!_vgUniversalGate.isTeam) {
+            const capOpt = heights.filter((h) => h <= 1080).sort((a, b) => b - a)[0];
+            if (capOpt) pick.value = String(capOpt);
+          }
+          actions.appendChild(pick);
+        }
+        const audioRenditions = Array.isArray(it.audioRenditions) ? it.audioRenditions : [];
+        if (audioRenditions.length > 1) {
+          pickAudio = document.createElement('select');
+          pickAudio.className = 'vg-sniff-audio';
+          pickAudio.title = t('sniff_audioTitle');
+          pickAudio.style.cssText = 'max-width:110px;background:#0f1923;border:1px solid #1e2333;border-radius:8px;color:#e2e8f0;font-size:10px;padding:4px;';
+          audioRenditions.forEach((ar, idx) => {
+            const o = document.createElement('option');
+            const isDef = Boolean(ar.default || idx === 0);
+            o.value = isDef ? '' : JSON.stringify({ lang: ar.lang || ar.language || '', name: ar.name || '' });
+            const lbl = ar.label || ar.name || ar.lang || `Audio ${idx + 1}`;
+            o.textContent = `🔊 ${lbl}${(!_vgUniversalGate.isTeam && !isDef) ? ' (Team)' : ''}`;
+            pickAudio.appendChild(o);
+          });
+          actions.appendChild(pickAudio);
+        }
+        const readChosenAudio = () => {
+          if (!pickAudio || !pickAudio.value) return null;
+          try { return JSON.parse(pickAudio.value); } catch { return null; }
+        };
+        const preferDesktopApp = Boolean(_vgUniversalGate.isTeam && _vgAppFound && !it.live
+          && (it.videoCodec === 'hevc' || it.videoCodec === 'av1' || it.hasSeparateAudio));
+        const startBrowserHls = () => {
+          const chosenH = pick ? Number(pick.value) : null;
+          const chosenAudio = readChosenAudio();
+          if (!_vgUniversalGate.isTeam && ((chosenH && chosenH > 1080) || chosenAudio)) {
+            if (msg) msg.textContent = t('sniff_teamLockedHint');
+            vgOpenPricing();
+            return;
+          }
+          chrome.runtime.sendMessage(
+            { type: 'VG_HLS_START', tabId: tab.id, id: it.id, height: chosenH, audioTrack: chosenAudio },
+            (r) => { msg.textContent = vgSniffReplyText(r, VG_SNIFF_TEXT.started2, VG_SNIFF_TEXT.failed); renderHlsJobs(); },
+          );
+        };
+        const sendHlsToApp = () => {
+          const chosenH = pick ? Number(pick.value) : null;
+          const chosenAudio = readChosenAudio();
+          vgSendToApp(tab, it, msg, chosenH, chosenAudio ? (chosenAudio.lang || null) : null);
+        };
+        if (preferDesktopApp) {
+          btn.textContent = VG_SNIFF_TEXT.viaApp;
+          btn.classList.add('vg-sniff-app');
+          btn.onclick = sendHlsToApp;
+          actions.appendChild(btn);
+          const browserBtn = document.createElement('button');
+          browserBtn.className = 'vg-sniff-browser';
+          browserBtn.textContent = VG_SNIFF_TEXT.local;
+          browserBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+          browserBtn.onclick = startBrowserHls;
+          actions.appendChild(browserBtn);
+        } else {
+          btn.textContent = it.live ? VG_SNIFF_TEXT.recordLive : VG_SNIFF_TEXT.local;
+          btn.onclick = startBrowserHls;
+          actions.appendChild(btn);
+        }
+        if (!it.live) {
+          const srv = document.createElement('button');
+          srv.className = 'vg-sniff-server';
+          srv.textContent = VG_SNIFF_TEXT.viaServerShort;
+          srv.title = VG_SNIFF_TEXT.viaServer;
+          srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+          srv.onclick = () => vgSendToServer(it.url);
+          actions.appendChild(srv);
+        }
+        if (_vgAppFound && !preferDesktopApp) {
+          const appBtn = document.createElement('button');
+          appBtn.className = 'vg-sniff-app';
+          appBtn.textContent = _vgUniversalGate.isTeam ? 'App' : 'App 🔒';
+          appBtn.title = _vgUniversalGate.isTeam ? VG_SNIFF_TEXT.viaApp : t('sniff_teamLockedHint');
+          appBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
+          appBtn.onclick = sendHlsToApp;
+          actions.appendChild(appBtn);
+        }
       }
-      if (!it.live) {
-        const srv = document.createElement('button');
-        srv.className = 'vg-sniff-server';
-        srv.textContent = VG_SNIFF_TEXT.viaServerShort;
-        srv.title = VG_SNIFF_TEXT.viaServer;
-        srv.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
-        srv.onclick = () => vgSendToServer(it.url);
-        actions.appendChild(srv);
-      }
-      if (_vgAppFound && !preferDesktopApp) {
-        const appBtn = document.createElement('button');
-        appBtn.className = 'vg-sniff-app';
-        appBtn.textContent = 'App';
-        appBtn.title = VG_SNIFF_TEXT.viaApp;
-        appBtn.style.cssText = 'background:#1e2333;border:1px solid #2d3348;border-radius:8px;padding:5px 8px;color:#cbd5e1;font-size:10px;cursor:pointer;';
-        appBtn.onclick = () => vgSendToApp(tab, it, msg, pick ? Number(pick.value) : null);
-        actions.appendChild(appBtn);
-      }
+    } else if (!_vgUniversalGate.isTeam) {
+      // DASH requires Team tier
+      btn.textContent = t('sniff_teamBadgeBtn');
+      btn.style.background = 'linear-gradient(135deg,#d97706,#6366f1)';
+      btn.onclick = () => {
+        if (msg) msg.textContent = t('sniff_teamLockedHint');
+        vgOpenPricing();
+      };
     } else if (_vgAppFound) {
       // DASH: the app's yt-dlp + ffmpeg join video and audio on this machine
       btn.textContent = VG_SNIFF_TEXT.viaApp;
@@ -2799,7 +2884,7 @@ function vgSniffRow(tab, it) {
       btn.title = VG_SNIFF_TEXT.appHint;
       btn.onclick = () => vgSendToServer(it.url);
     }
-    if (it.kind === 'file' || (it.kind === 'dash' && !_vgAppFound)) actions.appendChild(btn);
+    if (it.kind === 'file' || (it.kind === 'dash' && (!_vgUniversalGate.isTeam || !_vgAppFound))) actions.appendChild(btn);
   }
   const copy = document.createElement('button');
   copy.className = 'vg-sniff-copy';
@@ -2939,6 +3024,16 @@ vgRecRender();
   try { v = (await chrome.storage.sync.get('vg_send_cookies')).vg_send_cookies; } catch { /* default */ }
   box.checked = typeof v === 'boolean' ? v : !storeBuild;
   box.addEventListener('change', () => chrome.storage.sync.set({ vg_send_cookies: box.checked }));
+})();
+
+// 5.28.0: floating in-page video hover pill switch (storage.sync vg_floating_pill, default true).
+(async () => {
+  const box = document.getElementById('settings-floating-pill');
+  if (!box) return;
+  let v;
+  try { v = (await chrome.storage.sync.get('vg_floating_pill')).vg_floating_pill; } catch { /* default */ }
+  box.checked = typeof v === 'boolean' ? v : true;
+  box.addEventListener('change', () => chrome.storage.sync.set({ vg_floating_pill: box.checked }));
 })();
 
 // 5.21.0: the account signed this device out (Free 2 / Pro 5 devices).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Crown, Copy, Loader2, CreditCard, Key, Zap, Globe } from 'lucide-react';
+import { Check, X, Crown, Copy, Loader2, CreditCard, Key, Zap, Globe, Sparkles, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { spaLink } from '../lib/spaLink';
 import { API_BASE } from '../lib/apiBase';
 import { usePlans, formatVnd, formatUsd } from '../lib/usePlans';
 import { buildPlanRows } from '../lib/planRows';
@@ -336,6 +337,19 @@ export default function PricingPage() {
           <p className="text-fg-muted text-sm sm:text-base max-w-xl mx-auto">
             {t('subtitle')}
           </p>
+          <div className="mt-4">
+            <a
+              href={lp('/tinh-nang')}
+              onClick={spaLink('/tinh-nang')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-accent/40 bg-surface-2 hover:bg-accent-soft text-accent-text text-xs font-bold transition"
+            >
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              {lang === 'en'
+                ? 'See What’s New: Floating Video Pill, Soft-Sub MP4, Multi-Audio & Windows App'
+                : 'Khám phá Tính năng mới: Nút tải nổi, Phụ đề chìm MP4, Đa kênh tiếng & App Windows'}
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </a>
+          </div>
         </div>
 
         {!ready && (
@@ -458,7 +472,7 @@ export default function PricingPage() {
                         )}
                         {isTeam && (
                           <span className="px-2 py-0.5 rounded-full bg-surface border border-accent/40 text-accent-text text-[10px] font-bold">
-                            {lang === 'en' ? 'High API Volume' : 'API Doanh nghiệp'}
+                            {lang === 'en' ? '👑 Ultimate Cinema & API' : '👑 Đỉnh cao Phim & API'}
                           </span>
                         )}
                       </div>

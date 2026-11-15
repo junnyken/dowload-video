@@ -1736,15 +1736,15 @@
     "description": "wording: BA review"
   },
   "sniff_tierLockedBtn": {
-    "message": "🔒 Upgrade to Team (Top Plan) to download",
+    "message": "🔒 Upgrade to Pro / Team to capture stream",
     "description": "wording: BA review"
   },
   "sniff_signinLockedBtn": {
-    "message": "🔒 Sign in with Team (Top Plan) to download",
+    "message": "🔒 Sign in with Pro / Team to download",
     "description": "wording: BA review"
   },
   "sniff_tierLockedHint": {
-    "message": "Universal web stream capture is exclusively available on the highest subscription plan (Team).",
+    "message": "Universal web stream capture is available on Pro (up to 1080p) and Team (4K, Multi-Audio, Windows App, Auto-Next Episode).",
     "description": "wording: BA review"
   },
   "sp_album_label": {
@@ -2047,5 +2047,38 @@
         "content": "$2"
       }
     }
+  },
+  "set_pill_title": {
+    "message": "⚡ Floating video button"
+  },
+  "set_pill_label": {
+    "message": "Show floating download button when hovering web videos"
+  },
+  "set_pill_hint": {
+    "message": "Displays a quick-download pill in the top-right corner of non-DRM web players (requires Pro or Team plan)."
+  },
+  "sniff_teamLockedHint": {
+    "message": "4K streams, Multi-Audio tracks, Windows Desktop App handoff (with embedded soft-subs), Auto-Next Episode, and Live Recording require the Team plan."
+  },
+  "sniff_teamBadgeBtn": {
+    "message": "🔒 Unlock with Team"
+  },
+  "sniff_audioTitle": {
+    "message": "Select audio track / language"
+  },
+  "pill_btn_label": {
+    "message": "Download with VidGrab"
+  },
+  "pill_started_browser": {
+    "message": "✓ Downloading in browser"
+  },
+  "pill_sent_app": {
+    "message": "✓ Sent to Windows App"
+  },
+  "pill_locked_toast": {
+    "message": "🔒 Pro / Team required"
+  },
+  "pill_team_only_toast": {
+    "message": "🔒 Team plan required"
   }
 }

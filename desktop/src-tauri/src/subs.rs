@@ -217,7 +217,127 @@ pub fn write_companion(media: &Path, lang: &str, ext: &str, content: &str) -> Re
     Err("subtitle file already exists".into())
 }
 
-#[cfg(test)]
+/// Maps common BCP-47 / ISO-639-1 subtitle language tags to ISO-639-2/B codes
+/// recognized by QuickTime, VLC, MPC-HC, and Windows Media Player for `mov_text`.
+pub fn iso639_2_lang(tag: &str) -> &'static str {
+    let primary = tag
+        .trim()
+        .split(['-', '_'])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match primary.as_str() {
+        "vi" | "vie" => "vie",
+        "en" | "eng" => "eng",
+        "ja" | "jp" | "jpn" => "jpn",
+        "ko" | "kor" => "kor",
+        "zh" | "chi" | "zho" | "cn" => "chi",
+        "th" | "tha" => "tha",
+        "id" | "ind" => "ind",
+        "ms" | "may" | "msa" => "may",
+        "fr" | "fre" | "fra" => "fre",
+        "de" | "ger" | "deu" => "ger",
+        "es" | "spa" => "spa",
+        "pt" | "por" => "por",
+        "ru" | "rus" => "rus",
+        "it" | "ita" => "ita",
+        "ar" | "ara" => "ara",
+        "hi" | "hin" => "hin",
+        _ => "und",
+    }
+}
+
+/// Muxes up to 4 UTF-8 `.srt` tracks directly into `media_mp4` as selectable `mov_text`
+/// soft-subtitle streams using bundled `ffmpeg` (`-c copy -c:s mov_text`, zero video/audio re-encode).
+/// External `.srt` files remain untouched beside the `.mp4`.
+pub fn mux_soft_subs_mp4(
+    ffmpeg: &Path,
+    media_mp4: &Path,
+    srt_tracks: &[(PathBuf, String)],
+) -> Result<bool, String> {
+    if srt_tracks.is_empty() {
+        return Ok(false);
+    }
+    if !media_mp4
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("m4v"))
+    {
+        return Ok(false);
+    }
+    let orig_size = fs::metadata(media_mp4).map_err(|e| e.to_string())?.len();
+    if orig_size == 0 {
+        return Err("empty media file".into());
+    }
+    let valid_tracks: Vec<&(PathBuf, String)> = srt_tracks
+        .iter()
+        .filter(|(p, _)| p.is_file() && fs::metadata(p).is_ok_and(|m| m.len() > 0 && m.len() <= 2 * MAX_BYTES))
+        .take(4)
+        .collect();
+    if valid_tracks.is_empty() {
+        return Ok(false);
+    }
+    let (dir, stem) = stem_and_dir(media_mp4).ok_or("invalid media path")?;
+    let tmp_out = dir.join(format!("{stem}.vg-submux-{}.mp4", std::process::id()));
+    let _ = fs::remove_file(&tmp_out);
+
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
+        .arg(media_mp4);
+    for (srt_path, _) in &valid_tracks {
+        cmd.args(["-sub_charenc", "UTF-8", "-i"]).arg(srt_path);
+    }
+    cmd.args(["-map", "0:v", "-map", "0:a?"]);
+    for idx in 0..valid_tracks.len() {
+        cmd.arg("-map").arg(format!("{}:0", idx + 1));
+    }
+    cmd.args(["-c", "copy", "-c:s", "mov_text", "-movflags", "+faststart"]);
+    for (idx, (_, lang)) in valid_tracks.iter().enumerate() {
+        let iso = iso639_2_lang(lang);
+        cmd.arg(format!("-metadata:s:s:{idx}"))
+            .arg(format!("language={iso}"));
+        cmd.arg(format!("-metadata:s:s:{idx}"))
+            .arg(format!("title={}", lang.to_uppercase()));
+        if idx == 0 {
+            cmd.arg("-disposition:s:0").arg("default");
+        }
+    }
+    cmd.arg(&tmp_out)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+
+    let (mut child, tree) = crate::proc::spawn_tree(cmd).map_err(|e| e.to_string())?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let ok = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s.success(),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            _ => {
+                let _ = tree.kill();
+                let _ = child.wait();
+                break false;
+            }
+        }
+    };
+    if !ok {
+        let _ = fs::remove_file(&tmp_out);
+        return Err("ffmpeg soft-sub mux failed".into());
+    }
+    let muxed_size = fs::metadata(&tmp_out).map(|m| m.len()).unwrap_or(0);
+    if muxed_size < orig_size.saturating_mul(9) / 10 {
+        let _ = fs::remove_file(&tmp_out);
+        return Err("muxed mp4 unexpectedly smaller than source".into());
+    }
+    if let Err(e) = fs::rename(&tmp_out, media_mp4) {
+        let _ = fs::remove_file(&tmp_out);
+        return Err(e.to_string());
+    }
+    Ok(true)
+}
+
+#[cfg(test)]]
 mod tests {
     use super::*;
 
@@ -288,6 +408,23 @@ mod tests {
         assert_eq!(p2, d.join("Episode 01 [ab12cd34].vi-2.srt"));
         assert_eq!(p3, d.join("Episode 01 [ab12cd34].ja.ass"));
         assert!(write_companion(&media, "vi", "exe", &srt).is_err());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn maps_iso639_2_and_guards_soft_sub_mux() {
+        assert_eq!(iso639_2_lang("vi-VN"), "vie");
+        assert_eq!(iso639_2_lang("ja"), "jpn");
+        assert_eq!(iso639_2_lang("en_US"), "eng");
+        assert_eq!(iso639_2_lang("zh-Hans"), "chi");
+        assert_eq!(iso639_2_lang("sub"), "und");
+
+        let d = dir();
+        let non_mp4 = d.join("movie.mkv");
+        fs::write(&non_mp4, b"dummy").unwrap();
+        let srt = d.join("movie.vi.srt");
+        fs::write(&srt, "1\n00:00:00,000 --> 00:00:01,000\nXin chào\n").unwrap();
+        assert_eq!(mux_soft_subs_mp4(Path::new("ffmpeg"), &non_mp4, &[(srt, "vi".into())]).unwrap(), false);
         fs::remove_dir_all(d).unwrap();
     }
 }

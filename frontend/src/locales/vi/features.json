@@ -1,0 +1,154 @@
+{
+  "badge": "RA MẮT HỆ SINH THÁI VIDGRAB MỚI · WEB + EXTENSION + WINDOWS APP",
+  "heroTitle": "Không chỉ dán link trên web — Trọn bộ Hệ sinh thái Tải Phim, Anime & Studio AI",
+  "heroSub": "Khám phá loạt vũ khí độc quyền giúp VidGrab vượt xa công cụ tải thông thường: Nút tải nổi ngay trên khung video, giải mã luồng HLS/DASH 4K, ghép phụ đề chìm vào MP4 không giảm nét, chọn đa kênh âm thanh và xử lý AI tự động.",
+  "ctaPricing": "Xem Bảng giá & Mở khóa ngay",
+  "ctaWindows": "Tải App Windows miễn phí",
+  "ctaExtension": "Cài Tiện ích Chrome / Edge",
+  "pillarsTitle": "3 mảnh ghép khép kín trên cùng 1 tài khoản",
+  "pillarsSub": "Đăng nhập một lần — đồng bộ quyền lợi tức thì giữa Trình duyệt, Web Studio và Ứng dụng máy tính.",
+  "pillars": [
+    {
+      "tag": "Mảnh ghép 01",
+      "title": "Web Studio & AI Cloud",
+      "desc": "Tải hàng loạt 100 link nén .ZIP, Phiên âm giọng nói AI (Whisper ASR), Dịch phụ đề song ngữ, Xóa thông tin gốc Reup & Nung cứng Hardsub MP4 ngay trên mây."
+    },
+    {
+      "tag": "Mảnh ghép 02",
+      "title": "Tiện ích Trình duyệt v5.28",
+      "desc": "Tự động bắt luồng video đang phát, hiện nút tải nổi góc phải khung hình, giải mã HLS AES-128/SAMPLE-AES thẳng xuống ổ cứng OPFS không tốn RAM và tự nối tải khi đứt mạng."
+    },
+    {
+      "tag": "Mảnh ghép 03",
+      "title": "Ứng dụng Windows v0.22",
+      "desc": "Kết hợp sức mạnh yt-dlp + ffmpeg ngay trên máy: tải 4K HEVC/AV1 tốc độ tối đa, nhận Cookie phiên đăng nhập an toàn và nhúng thẳng phụ đề mềm vào MP4."
+    }
+  ],
+  "flagshipTitle": "6 Tính năng Đáng tiền Mới nhất dành cho Gói Trả phí",
+  "flagshipSub": "Được thiết kế từ nhu cầu thực chiến của người cày phim, sưu tầm Anime, nhà sáng tạo nội dung Reup và đội ngũ sản xuất media.",
+  "cards": [
+    {
+      "tier": "Pro & Team",
+      "tierTone": "pro",
+      "title": "Nút tải nổi thông minh ngay trên khung <video>",
+      "desc": "Rê chuột vào khung phát trên web là hiện ngay nút ⚡ Tải với VidGrab kèm nhãn độ phân giải, đa âm thanh và phụ đề. Cô lập bằng Shadow-DOM siêu nhẹ, có nút tắt nhanh và tự ẩn hoàn toàn trên trang có DRM.",
+      "highlights": [
+        "1 chạm tải ngay không cần mở popup tiện ích",
+        "Tự động chuyển sang App Windows nếu đang bật (gói Team)",
+        "Tôn trọng bản quyền: không bao giờ hiện trên luồng DRM"
+      ]
+    },
+    {
+      "tier": "Team Độc quyền",
+      "tierTone": "team",
+      "title": "Nhúng Phụ đề Chìm (Soft-Sub mov_text) thẳng vào MP4",
+      "desc": "Khi tải qua App Windows, VidGrab tự động tải phụ đề đi kèm (.VTT/.SRT/HLS) và đóng gói luồng phụ đề mềm chuẩn ISO vào bên trong file .MP4 mà không cần encode lại video.",
+      "highlights": [
+        "Bật / tắt phụ đề tùy ý trong VLC, PotPlayer, iPhone, Smart TV",
+        "Tốc độ ghép tức thì (remux 0% hao hụt chất lượng hình ảnh)",
+        "Vẫn lưu kèm file .SRT rời bên cạnh để dễ chỉnh sửa"
+      ]
+    },
+    {
+      "tier": "Team Độc quyền",
+      "tierTone": "team",
+      "title": "Chọn Đa kênh Âm thanh (Thuyết minh / Lồng tiếng / Gốc)",
+      "desc": "Tự động bóc tách các nhánh #EXT-X-MEDIA:TYPE=AUDIO trong luồng phim & Anime đa ngôn ngữ, cho phép bạn chọn đúng bản Thuyết minh Việt, Lồng tiếng hoặc âm thanh gốc Nhật/Anh trước khi tải.",
+      "highlights": [
+        "Hiển thị menu chọn kênh tiếng ngay trong tiện ích",
+        "Tự ghép chuẩn xác kênh tiếng đã chọn với luồng hình 1080p/4K",
+        "Hỗ trợ đồng bộ cả trên Trình duyệt lẫn App Windows"
+      ]
+    },
+    {
+      "tier": "Pro (1080p) · Team (4K + Token Rebind)",
+      "tierTone": "pro",
+      "title": "Tải Luồng HLS OPFS Siêu Bền + Tự làm mới Token hết hạn",
+      "desc": "Ghi trực tiếp từng phân đoạn vào bộ nhớ đĩa OPFS (tải phim dài 2–3 giờ không tràn RAM) kết hợp lá chắn chống nghẽn CDN (HTTP 429 Retry-After). Đặc biệt gói Team tự cấp lại link chữ ký mới từ tab đang mở để tải tiếp từ đúng % bị đứt!",
+      "highlights": [
+        "Giải mã chuẩn AES-128 & SAMPLE-AES (identity) hợp lệ",
+        "Tự động điều tiết luồng tải song song chống chặn IP (429/503)",
+        "Không bao giờ phải tải lại từ 0% khi link CDN hết hạn giữa chừng"
+      ]
+    },
+    {
+      "tier": "Team Độc quyền",
+      "tierTone": "team",
+      "title": "Tự gom Thư mục Phim bộ & Tự động bắt Tập tiếp theo",
+      "desc": "Xem hết tập 1 chuyển sang tập 2 trên web? VidGrab tự nhận diện tập mới, đặt lại tên file sạch gọn và xếp gọn từng bộ Anime / Series vào đúng thư mục riêng trên máy tính.",
+      "highlights": [
+        "Tự lọc sạch tên rác quảng cáo của trang web khỏi tên file",
+        "Tự tạo thư mục VidGrab/<Tên Bộ Phim>/Tập 01, 02...",
+        "Ghi trực tiếp Livestream không khóa DRM thành MP4 chuẩn"
+      ]
+    },
+    {
+      "tier": "Starter · Pro · Team",
+      "tierTone": "starter",
+      "title": "Studio Phụ đề AI, Xóa dấu vết Reup & Kho Batch .ZIP",
+      "desc": "Bộ công cụ hậu kỳ ngay trên trình duyệt cho Creator: tạo phụ đề từ giọng nói bằng AI, dịch hàng loạt sang song ngữ, làm sạch Metadata/MD5/Lật khung hình và tải trọn kênh nén .ZIP.",
+      "highlights": [
+        "Starter: Mở khóa 4K MXH, Batch 20 link (.ZIP), ASR 30 phút/ngày",
+        "Pro: Làm sạch Reup chuyên sâu, Nung cứng Hardsub MP4 + 3.000 API",
+        "Team: 1.000 lượt/ngày, 15.000 API/tháng + 5 ghế làm việc nhóm"
+      ]
+    }
+  ],
+  "tierMatrixTitle": "Chọn đúng Gói — Tối đa lợi thế cho nhu cầu của bạn",
+  "tierMatrixSub": "Mỗi cấp độ trả phí được thiết kế để mở khóa đúng nhóm công nghệ bạn cần, không lãng phí chi phí.",
+  "tiers": [
+    {
+      "id": "starter",
+      "badge": "Khởi đầu tiết kiệm",
+      "name": "Starter — Creator Mini",
+      "priceHint": "Chỉ từ $1.99 tháng đầu (49.000đ)",
+      "who": "Dành cho người tải video mạng xã hội 4K, gom ảnh TikTok/Douyin và cần phụ đề AI cơ bản.",
+      "perks": [
+        "100 lượt tải/ngày · Mở khóa 4K YouTube/TikTok/MXH",
+        "Tải hàng loạt 20 link/lần & nén trọn bộ .ZIP",
+        "Tải trọn bộ Album ảnh trượt TikTok/Douyin kèm nhạc (.ZIP)",
+        "Phiên âm AI (ASR) 30 phút/ngày & Dịch 2.000 dòng sub/ngày",
+        "Cắt clip trực tuyến độ nét cao tới 2 phút"
+      ],
+      "cta": "Chọn Gói Starter →",
+      "planParam": "starter_month"
+    },
+    {
+      "id": "pro",
+      "badge": "⭐ Đáng mua nhất",
+      "name": "Pro — Creator & Stream",
+      "priceHint": "Chỉ từ $3.99 tháng đầu (99.000đ)",
+      "who": "Dành cho người xem phim web Full HD, nhà sáng tạo Reup chuyên nghiệp và lập trình viên cá nhân.",
+      "perks": [
+        "Mở khóa Bắt luồng video mọi trang web trên Trình duyệt (tới 1080p)",
+        "Mở khóa Nút tải nổi thông minh trên khung <video> + Phụ đề .SRT",
+        "Làm sạch Reup (Xóa Metadata, Đổi MD5, Lật gương) + Nung Hardsub MP4",
+        "300 lượt tải/ngày · Batch 100 link (.ZIP) · ASR 120 phút/ngày",
+        "Tặng 3.000 lượt gọi REST API/tháng (+500 lượt thưởng lần đầu)"
+      ],
+      "cta": "Nâng cấp Gói Pro →",
+      "planParam": "pro_month"
+    },
+    {
+      "id": "team",
+      "badge": "👑 Đỉnh cao Phim, Anime & Studio",
+      "name": "Team — Ultimate Cinema & API",
+      "priceHint": "Chỉ từ $11.99 tháng đầu (279.000đ)",
+      "who": "Trọn bộ vũ khí mạnh nhất: Phim/Anime 4K, App Windows tốc độ tối đa, Phụ đề chìm MP4 & Đội nhóm.",
+      "perks": [
+        "Mở khóa 100% Luồng 4K HLS & DASH + Kết nối thẳng App Windows",
+        "Nhúng Phụ đề Chìm (Soft-Sub mov_text) vào MP4 + Handoff Cookie VIP",
+        "Chọn Đa kênh Âm thanh (Thuyết minh/Gốc) + Tự gom thư mục & Tải tập kế",
+        "Ghi Livestream không DRM + Tự cấp lại Token nối tải OPFS khi hết hạn",
+        "1.000 lượt/ngày · 15.000 API/tháng · 5 thành viên Workspace"
+      ],
+      "cta": "Mở khóa Gói Team →",
+      "planParam": "team_month"
+    }
+  ],
+  "complianceNote": "Cam kết tuân thủ bản quyền: VidGrab chỉ hỗ trợ các luồng phát công khai hoặc luồng chuẩn không khóa DRM (như MP4, HLS chuẩn/AES-128 identity). Mọi nội dung bảo vệ bởi Widevine, FairPlay, PlayReady (Netflix, Disney+, Spotify DRM…) đều được nhận diện và từ chối tải tự động.",
+  "bottomTitle": "Sẵn sàng trải nghiệm trọn bộ sức mạnh VidGrab?",
+  "bottomSub": "Cài đặt Tiện ích Chrome + Ứng dụng Windows chỉ mất 30 giây và nâng cấp gói phù hợp bất cứ lúc nào.",
+  "bottomBtnPricing": "So sánh chi tiết Bảng giá",
+  "bottomBtnHome": "Thử tải ngay trên Web"
+}
