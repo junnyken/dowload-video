@@ -203,3 +203,22 @@ test('planExtJob: multi-audio track language selector stays within validate::for
   assert.equal(badAudioPlan.audioLang, null);
   assert.equal(badAudioPlan.formatId, 'bv*[height<=720]+ba/b[height<=720]/b');
 });
+
+test('cleanMediaTitle & parseSeriesEpisode handle hashtag chains, [Server VIP], SS2 EP14, OVA, and [08/24]', () => {
+  assert.equal(
+    cleanMediaTitle('[Server VIP]【高清】Dune Part Two #fyp #xuhuong #movie 复制打开抖音 https://v.douyin.com/x/'),
+    'Dune Part Two',
+  );
+  assert.deepEqual(parseSeriesEpisode('Attack on Titan SS2 EP14'), {
+    seriesTitle: 'Attack on Titan',
+    episodeLabel: 'S02E14',
+  });
+  assert.deepEqual(parseSeriesEpisode('Hellsing Ultimate OVA 2'), {
+    seriesTitle: 'Hellsing Ultimate',
+    episodeLabel: 'OVA02',
+  });
+  assert.deepEqual(parseSeriesEpisode('Solo Leveling [08/24]'), {
+    seriesTitle: 'Solo Leveling',
+    episodeLabel: 'E08',
+  });
+});

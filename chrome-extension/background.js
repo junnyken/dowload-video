@@ -644,6 +644,61 @@ function vgCleanStreamTitle(item) {
   return cleaned || String(raw || 'video').trim() || 'video';
 }
 
+const _vgAiTitleCache = new Map();
+
+async function vgRefineStreamTitleAi(item) {
+  const localClean = vgCleanStreamTitle(item);
+  if (!item || !item.title || localClean === 'video' || localClean.length < 6) return localClean;
+  const tok = await getAuthToken();
+  if (!tok) return localClean;
+  const cacheKey = `${item.pageUrl || ''}|${localClean}`;
+  if (_vgAiTitleCache.has(cacheKey)) return _vgAiTitleCache.get(cacheKey);
+  try {
+    const base = await getApiBase();
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 700) : null;
+    const resp = await fetch(`${base}/api/v1/smart-metadata/clean`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({
+        title: String(item.title).slice(0, 300),
+        platform: '',
+        uploader: '',
+      }),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+    }).finally(() => { if (timer) clearTimeout(timer); });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const d = await resp.json();
+    const cleanMedia = self.VGSniff && typeof self.VGSniff.cleanMediaTitle === 'function'
+      ? self.VGSniff.cleanMediaTitle
+      : null;
+    const parseEp = self.VGSniff && typeof self.VGSniff.parseSeriesEpisode === 'function'
+      ? self.VGSniff.parseSeriesEpisode
+      : null;
+    const rawAiTitle = d && (d.filename_cleaned || d.clean_title);
+    let aiTitle = rawAiTitle
+      ? (cleanMedia ? cleanMedia(rawAiTitle, item.pageUrl) : String(rawAiTitle).trim())
+      : '';
+    if (aiTitle && aiTitle.length >= 3) {
+      if (parseEp && !parseEp(aiTitle)) {
+        const localEp = parseEp(localClean);
+        if (localEp && localEp.episodeLabel) {
+          aiTitle = `${aiTitle} - ${localEp.episodeLabel}`;
+        } else if (d.episode_tag && typeof d.episode_tag === 'string' && d.episode_tag.trim()) {
+          aiTitle = `${aiTitle} - ${d.episode_tag.trim()}`;
+        }
+      }
+      if (_vgAiTitleCache.size >= 100) {
+        const firstKey = _vgAiTitleCache.keys().next().value;
+        if (firstKey !== undefined) _vgAiTitleCache.delete(firstKey);
+      }
+      _vgAiTitleCache.set(cacheKey, aiTitle);
+      return aiTitle;
+    }
+  } catch { /* timeout/offline fallback */ }
+  return localClean;
+}
+
 const UNIVERSAL_STREAM_TIERS = new Set(['team', 'enterprise', 'admin']);
 const UNIVERSAL_PRO_TIERS = new Set(['pro', 'growth']);
 let _vgUniversalTierCache = { token: '', at: 0, res: null };
@@ -734,7 +789,7 @@ async function hlsStart(item, height, opts = {}) {
     if (Number.isInteger(n) && n >= 1 && n <= 20) maxEmptyPolls = n;
   } catch { /* default 3 */ }
   const id = `h${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const cleanTitle = vgCleanStreamTitle(item);
+  const cleanTitle = await vgRefineStreamTitleAi(item);
   const now = Date.now();
   const isLive = !!item.live;
   const isTeam = opts.isTeam !== false;
@@ -1758,7 +1813,7 @@ async function vgSendToApp(item, height, audioLang) {
   const cleanAudioLang = typeof audioLang === 'string' && /^[a-z0-9_-]{1,16}$/i.test(audioLang.trim())
     ? audioLang.trim()
     : undefined;
-  const cleanTitle = item.title ? vgCleanStreamTitle(item) : '';
+  const cleanTitle = item.title ? await vgRefineStreamTitleAi(item) : '';
   const isStream = Boolean(item.kind);
   const cookieJar = isStream ? await vgGetStreamCookieJar(item.url, referer).catch(() => undefined) : undefined;
   const subtitles = (isStream && Array.isArray(item.subtitles) && item.subtitles.length)
@@ -2325,7 +2380,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const base = await getApiBase();
       const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
         || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-      const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item), '', gate.isTeam);
+      const refinedTitle = await vgRefineStreamTitleAi(item);
+      const { safeName, subDir, relBase } = vgStreamPaths(refinedTitle, '', gate.isTeam);
       smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
       if (Array.isArray(item.subtitles) && item.subtitles.length) {
         void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);
@@ -2417,7 +2473,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const base = await getApiBase();
         const ext = (item.url.split('?')[0].match(/\.(mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav)$/i) || [])[1]
           || (/^audio\//.test(item.mime || '') ? 'm4a' : 'mp4');
-        const { safeName, subDir, relBase } = vgStreamPaths(vgCleanStreamTitle(item), '', gate.isTeam);
+        const refinedTitle = await vgRefineStreamTitleAi(item);
+        const { safeName, subDir, relBase } = vgStreamPaths(refinedTitle, '', gate.isTeam);
         smartDownload({ rawUrl: item.url, base, safeName, finalExt: ext.toLowerCase(), saveAs: false, subDir });
         if (Array.isArray(item.subtitles) && item.subtitles.length) {
           void vgSaveCompanionSubtitles(item.subtitles, relBase, ref);

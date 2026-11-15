@@ -302,9 +302,23 @@ https://fmp4.cdn.example/part1.jpeg
     await new Promise((r) => setTimeout(r, 25));
   }
   const doneMsg2 = swMessages.find((m) => m.type === 'HLS_DONE');
-  assert(!!doneMsg2 && pushedChunks.length === 0 && writtenParts.length === 2,
-    'disguised .jpeg fMP4 segments write directly to OPFS MP4 without mux.js TS transmuxer',
-    { done: !!doneMsg2, muxPushes: pushedChunks.length, opfsWrites: writtenParts.length });
+  const totalFmp4Bytes = writtenParts.reduce((s, p) => s + p.byteLength, 0);
+  const fmp4Merged = new Uint8Array(totalFmp4Bytes);
+  {
+    let off = 0;
+    for (const part of writtenParts) { fmp4Merged.set(part, off); off += part.byteLength; }
+  }
+  const fmp4Expected = new Uint8Array(fmp4Seg0.byteLength + fmp4Seg1.byteLength);
+  fmp4Expected.set(fmp4Seg0, 0);
+  fmp4Expected.set(fmp4Seg1, fmp4Seg0.byteLength);
+  assert(
+    !!doneMsg2
+      && pushedChunks.length === 0
+      && writtenParts.length >= 1
+      && Buffer.compare(Buffer.from(fmp4Merged), Buffer.from(fmp4Expected)) === 0,
+    'disguised .jpeg fMP4 segments write directly to OPFS MP4 without mux.js TS transmuxer (batched byte-exact)',
+    { done: !!doneMsg2, muxPushes: pushedChunks.length, opfsWrites: writtenParts.length, totalFmp4Bytes },
+  );
 
   console.log('[6] SAMPLE-AES (KEYFORMAT="identity") MPEG-TS H.264 RBSP + ADTS AAC + PMT CRC32 decryption & E2E');
   function encryptAes128CbcRaw(plainU8, keyU8, ivU8) {
@@ -943,6 +957,87 @@ https://token.cdn.example/s1.m4s?sig=fresh2
     'rebindMaster=true re-resolves fresh signed master/variant URLs while preserving OPFS checkpoint bytes',
     { rebindDone, fetchedUrls, err: swMessages.find((m) => m.type === 'HLS_FAILED') },
   );
+
+  console.log('[11] opfsWriter 1 MiB RAM batching (sync .bytes, auto-flush >= 1 MiB, flush on close/sealPartial)');
+  const batchWrites = [];
+  let batchClosed = false;
+  let storedFile = new Uint8Array(0);
+  const sbOpfs = {
+    crypto: crypto.webcrypto,
+    TextDecoder, TextEncoder, Uint8Array, Promise, Map, Set, Error, Object, Number, String, Math, Array, RegExp,
+    Date, Boolean, parseInt, parseFloat, isFinite, setTimeout, clearTimeout, URL,
+    navigator: {
+      storage: {
+        getDirectory: async () => ({
+          async *entries() {},
+          removeEntry: async () => { storedFile = new Uint8Array(0); },
+          getFileHandle: async () => ({
+            createWritable: async () => {
+              const chunks = [];
+              return {
+                write: async (u8) => {
+                  const copy = new Uint8Array(u8);
+                  batchWrites.push(copy);
+                  chunks.push(copy);
+                },
+                close: async () => {
+                  batchClosed = true;
+                  const total = chunks.reduce((s, c) => s + c.byteLength, 0);
+                  storedFile = new Uint8Array(total);
+                  let o = 0;
+                  for (const c of chunks) { storedFile.set(c, o); o += c.byteLength; }
+                },
+                abort: async () => {},
+              };
+            },
+            getFile: async () => ({ size: storedFile.byteLength, data: storedFile }),
+          }),
+        }),
+      },
+    },
+  };
+  sbOpfs.self = sbOpfs;
+  sbOpfs.globalThis = sbOpfs;
+  vm.createContext(sbOpfs);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'hls-downloader.js'), 'utf8'), sbOpfs);
+  const w = await sbOpfs.__vgHls.opfsWriter('batch-test.mp4', 0);
+  const c1 = new Uint8Array(1024).fill(0x11);
+  const c2 = new Uint8Array(2048).fill(0x22);
+  const c3 = new Uint8Array(4096).fill(0x33);
+  await w.write(c1);
+  await w.write(c2);
+  await w.write(c3);
+  assert(w.bytes === 7168 && batchWrites.length === 0,
+    '3 small chunks (< 1 MiB) stay buffered in RAM with exact sync w.bytes and 0 disk writes',
+    { bytes: w.bytes, writes: batchWrites.length });
+
+  const big = new Uint8Array(1024 * 1024).fill(0x44);
+  await w.write(big);
+  assert(batchWrites.length === 1 && w.bytes === 7168 + 1024 * 1024,
+    'crossing 1 MiB threshold triggers automatic single batched OPFS write',
+    { bytes: w.bytes, writes: batchWrites.length });
+
+  const tail = new Uint8Array(512).fill(0x55);
+  await w.write(tail);
+  assert(batchWrites.length === 1 && w.bytes === 7168 + 1024 * 1024 + 512,
+    'trailing small write remains buffered until close()',
+    { bytes: w.bytes, writes: batchWrites.length });
+  const fClosed = await w.close();
+  assert(batchClosed && batchWrites.length === 2 && fClosed.size === 7168 + 1024 * 1024 + 512,
+    'close() flushes tail buffer cleanly with exact byte size',
+    { batchClosed, writes: batchWrites.length, size: fClosed.size });
+
+  batchWrites.length = 0;
+  batchClosed = false;
+  storedFile = new Uint8Array(0);
+  const w2 = await sbOpfs.__vgHls.opfsWriter('seal-test.mp4', 0);
+  await w2.write(new Uint8Array([1, 2, 3, 4]));
+  await w2.write(new Uint8Array([5, 6]));
+  assert(w2.bytes === 6 && batchWrites.length === 0, 'sealPartial test pre-flush buffered');
+  const fSealed = await w2.sealPartial();
+  assert(batchClosed && batchWrites.length === 1 && fSealed.size === 6 && Buffer.compare(Buffer.from(fSealed.data), Buffer.from([1, 2, 3, 4, 5, 6])) === 0,
+    'sealPartial() flushes pending RAM buffer cleanly with exact bytes',
+    { batchClosed, writes: batchWrites.length, size: fSealed.size });
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

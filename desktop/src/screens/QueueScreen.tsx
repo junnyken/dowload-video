@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, FolderOpen, ListChecks, Pause, Play, RotateCw, Trash2, X, ExternalLink } from 'lucide-react';
-import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, ScreenHeader, Tabs, Thumb, Toggle } from '../components/ui';
+import { AlertCircle, CheckCircle2, Clock, FolderOpen, Languages, ListChecks, Pause, Play, RotateCw, Trash2, X, ExternalLink } from 'lucide-react';
+import { Badge, Button, EmptyState, IconButton, PlatformBadge, ProgressBar, ScreenHeader, Spinner, Tabs, Thumb, Toggle } from '../components/ui';
 import { QuotaBadge, QuotaNotice } from '../components/QuotaBadge';
 import { cancel, clearFinished, pause, pump, queue, removeItem, resume, retry, type QueueItem } from '../lib/queue';
 import { schedule, setShutdownArmed, setStartAt } from '../lib/schedule';
@@ -8,9 +8,10 @@ import { nextAt } from '../lib/schedule-core';
 import { formatBytes, formatEta, formatSpeed } from '../lib/format';
 import { errorAction, errorMessage } from '../lib/errors';
 import { api } from '../lib/tauri';
-import { confirmDialog, go, toast } from '../lib/ui';
+import { confirmDialog, go, openSignIn, toast } from '../lib/ui';
 import { routeLabel, type RouteId } from '../lib/routes-core';
 import { needsModernPlayer } from '../lib/media';
+import { canTranslate, SubtransError, translateToVi } from '../lib/subtrans';
 
 /** Route step of the card; queue items saved by 0.7.x only have the old route name. */
 function stepOfItem(it: QueueItem): RouteId | undefined {
@@ -30,7 +31,15 @@ async function openFile(path: string | null) {
   try { await api.openPath(path); } catch { toast('error', 'Không mở được tệp. Có thể tệp đã bị di chuyển hoặc xoá.'); }
 }
 
-function Row({ it }: { it: QueueItem }) {
+function Row({
+  it,
+  subPct,
+  onTranslate,
+}: {
+  it: QueueItem;
+  subPct: number | undefined;
+  onTranslate: (it: QueueItem) => void;
+}) {
   const running = it.state === 'running';
   const stage = it.stage ? STAGE[it.stage] : 'Đang tải';
   const indeterminate = running && (it.stage !== 'downloading' || it.percent == null);
@@ -87,6 +96,11 @@ function Row({ it }: { it: QueueItem }) {
         {it.state === 'completed' && (
           <>
             <Button size="sm" icon={<FolderOpen size={14} />} disabled={!it.filePath} onClick={() => void reveal(it.filePath)}>Mở thư mục</Button>
+            {canTranslate(it.filePath) && (
+              subPct !== undefined
+                ? <span className="flex h-8 items-center gap-1 px-1.5 text-xs text-fg-muted" aria-live="polite"><Spinner />{subPct > 0 ? `${Math.round(subPct)}%` : ''}</span>
+                : <IconButton label="Dịch phụ đề sang tiếng Việt" onClick={() => onTranslate(it)}><Languages size={16} /></IconButton>
+            )}
             <IconButton label="Mở tệp" disabled={!it.filePath} onClick={() => void openFile(it.filePath)}><ExternalLink size={16} /></IconButton>
           </>
         )}
@@ -100,6 +114,7 @@ function Row({ it }: { it: QueueItem }) {
 export function QueueScreen() {
   const items = queue.use();
   const [tab, setTab] = useState<Tab>('active');
+  const [translating, setTranslating] = useState<Record<string, number>>({});
   const groups: Record<Tab, QueueItem[]> = {
     active: items.filter((i) => i.state === 'queued' || i.state === 'running' || i.state === 'paused'),
     done: items.filter((i) => i.state === 'completed'),
@@ -108,6 +123,24 @@ export function QueueScreen() {
   const list = groups[tab];
   const finished = groups.done.length + groups.failed.length;
   const empty = { active: 'Không có tải xuống nào đang chạy', done: 'Chưa có video nào tải xong', failed: 'Không có lỗi nào' }[tab];
+
+  async function handleTranslate(it: QueueItem) {
+    if (!it.filePath || it.id in translating) return;
+    setTranslating((t) => ({ ...t, [it.id]: 0 }));
+    toast('info', 'Đang dịch phụ đề sang tiếng Việt…');
+    try {
+      await translateToVi(it.filePath, (pct) => setTranslating((t) => (it.id in t ? { ...t, [it.id]: pct } : t)));
+      const isMp4 = /\.(mp4|m4v)$/i.test(it.filePath);
+      toast('success', isMp4
+        ? 'Đã lưu phụ đề tiếng Việt (.vi.srt) và gắn trực tiếp vào video MP4.'
+        : 'Đã lưu phụ đề tiếng Việt (.vi.srt) cạnh video.');
+    } catch (e) {
+      if (e instanceof SubtransError && e.code === 'login') openSignIn();
+      toast('error', e instanceof SubtransError ? e.message : 'Không dịch được phụ đề. Có thể tệp đã bị di chuyển hoặc xoá.');
+    } finally {
+      setTranslating(({ [it.id]: _, ...rest }) => rest);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -131,7 +164,7 @@ export function QueueScreen() {
             {tab === 'active' && <Button variant="primary" onClick={() => go('download')}>Đến trang Tải xuống</Button>}
           </EmptyState>
         ) : (
-          <ul className="flex flex-col gap-2.5">{list.map((it) => <Row key={it.id} it={it} />)}</ul>
+          <ul className="flex flex-col gap-2.5">{list.map((it) => <Row key={it.id} it={it} subPct={translating[it.id]} onTranslate={handleTranslate} />)}</ul>
         )}
       </div>
     </div>

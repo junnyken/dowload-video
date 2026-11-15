@@ -191,6 +191,16 @@ pub fn download_args(
             // (MP4 too) and that was not testable here.
             "--embed-metadata",
             "--embed-chapters",
+            "--retries",
+            "5",
+            "--fragment-retries",
+            "10",
+            "--retry-sleep",
+            "fragment:exp=1:8",
+            "--file-access-retries",
+            "3",
+            "--socket-timeout",
+            "20",
             "--merge-output-format",
             "mp4/mkv",
             "-o",
@@ -223,10 +233,10 @@ pub fn download_args(
             }
         }
     } else if cookies.is_none() {
-        // Multi-segment HLS/DASH downloads run 4x faster without touching
+        // Multi-segment HLS/DASH downloads run 8x faster without touching
         // cookie-authenticated runs (which pace requests sequentially via SLEEP).
         a.push("--concurrent-fragments".into());
-        a.push("4".into());
+        a.push("8".into());
     }
     // Each header is its own argv item (`Name:Value`); validate::download_header
     // already limited names to Referer / Origin / User-Agent and refused control chars.
@@ -428,7 +438,9 @@ mod tests {
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "Referer:https://www.douyin.com/"));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "Origin:https://www.douyin.com"));
         assert!(s.windows(2).any(|w| w[0] == "--add-header" && w[1] == "User-Agent:Mozilla/5.0 X"));
-        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "4"));
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "8"));
+        assert!(s.windows(2).any(|w| w[0] == "--fragment-retries" && w[1] == "10"));
+        assert!(s.windows(2).any(|w| w[0] == "--socket-timeout" && w[1] == "20"));
         assert_eq!(s[s.len() - 2], "--");
         assert_eq!(s[s.len() - 1], "https://cdn/x.mp4");
         assert!(s.iter().position(|a| a == "--add-header").unwrap() < s.len() - 2);
@@ -603,7 +615,8 @@ mod tests {
         add_unpaced_cookies(&mut a, Path::new("/tmp/ck-ephemeral.txt"));
         let s = strs(&a);
         assert!(s.windows(2).any(|w| w[0] == "--cookies" && w[1] == "/tmp/ck-ephemeral.txt"));
-        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "4"));
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "8"));
+        assert!(s.windows(2).any(|w| w[0] == "--fragment-retries" && w[1] == "10"));
         assert!(!s.iter().any(|x| x == "--sleep-interval" || x == "--max-sleep-interval"));
         assert_eq!(after_dashdash(&s), vec!["--", "https://cdn.example/hls/master.m3u8"]);
     }

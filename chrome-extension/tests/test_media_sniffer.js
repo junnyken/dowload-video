@@ -286,5 +286,155 @@ assert(
   multiTrackMaster,
 );
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+console.log('cleanMediaTitle + parseSeriesEpisode');
+assert(
+  S.cleanMediaTitle('[Server VIP 1] [FHD] [Vietsub] Hành Trình Huyền Thoại【高清】 - Xem phim online | PhimHay.vn', 'https://phimhay.vn/xem') === 'Hành Trình Huyền Thoại',
+  'cleanMediaTitle strips [Server], [FHD], 【高清】, site suffix, and watch boilerplate',
+  S.cleanMediaTitle('[Server VIP 1] [FHD] [Vietsub] Hành Trình Huyền Thoại【高清】 - Xem phim online | PhimHay.vn', 'https://phimhay.vn/xem'),
+);
+assert(
+  S.cleanMediaTitle('Clip nấu ăn ngon 复制打开抖音，查看主页 https://v.douyin.com/abc #fyp #viral #xuhuong', 'https://www.douyin.com/video/1') === 'Clip nấu ăn ngon',
+  'cleanMediaTitle strips Douyin share copy noise, short URLs, and trailing viral hashtag chains',
+  S.cleanMediaTitle('Clip nấu ăn ngon 复制打开抖音，查看主页 https://v.douyin.com/abc #fyp #viral #xuhuong', 'https://www.douyin.com/video/1'),
+);
+const epSe = S.parseSeriesEpisode('Solo Leveling SS2 EP14');
+assert(epSe && epSe.seriesTitle === 'Solo Leveling' && epSe.episodeLabel === 'S02E14',
+  'parseSeriesEpisode parses SS2 EP14 -> S02E14', epSe);
+const epSeLong = S.parseSeriesEpisode('Attack on Titan Season 3 Episode 5');
+assert(epSeLong && epSeLong.seriesTitle === 'Attack on Titan' && epSeLong.episodeLabel === 'S03E05',
+  'parseSeriesEpisode parses Season 3 Episode 5 -> S03E05', epSeLong);
+const epOva = S.parseSeriesEpisode('Oshi no Ko OVA 2');
+assert(epOva && epOva.seriesTitle === 'Oshi no Ko' && epOva.episodeLabel === 'OVA02',
+  'parseSeriesEpisode parses OVA 2 -> OVA02', epOva);
+const epSlash = S.parseSeriesEpisode('Frieren [08/24]');
+assert(epSlash && epSlash.seriesTitle === 'Frieren' && epSlash.episodeLabel === 'E08',
+  'parseSeriesEpisode parses [08/24] -> E08', epSlash);
+
+(async () => {
+  console.log('probeTab (ISOLATED + MAIN world + DRM gate)');
+  const fs = require('fs');
+  const vm = require('vm');
+  const sessionStore = new Map();
+  const makeSandbox = (execHandler) => {
+    const sb = {
+      URL, TextDecoder, TextEncoder, Uint8Array, Promise, Map, Set, Error, Object, Number, String, Math, Array, RegExp, Date, Boolean, JSON,
+      parseInt, parseFloat, isFinite, setTimeout, clearTimeout, console,
+      fetch: async (url) => {
+        if (String(url).endsWith('.m3u8')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => '#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg0.ts\n#EXT-X-ENDLIST\n',
+          };
+        }
+        return { ok: false, status: 404 };
+      },
+      chrome: {
+        storage: {
+          session: {
+            get: async (k) => ({ [k]: sessionStore.get(k) }),
+            set: async (obj) => { for (const [k, v] of Object.entries(obj)) sessionStore.set(k, v); },
+            remove: async (k) => { sessionStore.delete(k); },
+          },
+        },
+        webRequest: {
+          onResponseStarted: { addListener: () => {} },
+          onBeforeRequest: { addListener: () => {} },
+        },
+        tabs: {
+          onRemoved: { addListener: () => {} },
+          get: async (tabId) => ({ id: tabId, url: 'https://cinema.example/watch/1', title: 'Movie One - Watch Online' }),
+        },
+        scripting: {
+          executeScript: execHandler,
+        },
+      },
+    };
+    sb.self = sb;
+    sb.globalThis = sb;
+    vm.createContext(sb);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'media-sniffer.js'), 'utf8'), sb);
+    return sb;
+  };
+
+  sessionStore.clear();
+  const sbMain = makeSandbox(async (opts) => {
+    if (opts && opts.world === 'MAIN') {
+      return [{
+        frameId: 2,
+        result: {
+          frameUrl: 'https://embed.example/player/1',
+          urls: ['https://cdn.example/jw/stream.m3u8'],
+          tracks: [{ url: 'https://cdn.example/subs/vi.vtt', lang: 'vi', label: 'Tiếng Việt' }],
+          hasDrm: false,
+        },
+      }];
+    }
+    return [{
+      frameId: 0,
+      result: {
+        frameUrl: 'https://cinema.example/watch/1',
+        isTop: true,
+        docTitle: 'Movie One - Watch Online',
+        ogTitle: 'Movie One',
+        h1Title: '',
+        videos: [],
+        tracks: [],
+        extraUrls: ['https://cdn.example/og/video.mp4'],
+        resources: [],
+      },
+    }];
+  });
+  const resClear = await sbMain.vgSniffProbe(11);
+  await new Promise((r) => setTimeout(r, 30));
+  const listedClear = await sbMain.vgSniffList(11);
+  const jwItem = listedClear.find((x) => x.url === 'https://cdn.example/jw/stream.m3u8');
+  const ogItem = listedClear.find((x) => x.url === 'https://cdn.example/og/video.mp4');
+  assert(
+    resClear && !!jwItem && jwItem.kind === 'hls' && jwItem.encryption === 'none'
+      && Array.isArray(jwItem.subtitles) && jwItem.subtitles.some((t) => t.url === 'https://cdn.example/subs/vi.vtt' && t.lang === 'vi')
+      && !!ogItem && ogItem.kind === 'file',
+    'probeTab merges ISOLATED extraUrls + MAIN-world JWPlayer stream and VTT subtitles',
+    listedClear,
+  );
+
+  sessionStore.clear();
+  const sbDrm = makeSandbox(async (opts) => {
+    if (opts && opts.world === 'MAIN') {
+      return [{
+        frameId: 3,
+        result: {
+          frameUrl: 'https://drm.example/player',
+          urls: ['https://cdn.example/drm/fallback.mp4'],
+          tracks: [],
+          hasDrm: true,
+        },
+      }];
+    }
+    return [{
+      frameId: 0,
+      result: {
+        frameUrl: 'https://drm.example/player',
+        isTop: true,
+        docTitle: 'DRM Test',
+        ogTitle: 'DRM Test',
+        h1Title: '',
+        videos: [],
+        tracks: [],
+        extraUrls: ['https://cdn.example/drm/other.m3u8'],
+        resources: [],
+      },
+    }];
+  });
+  const resDrm = await sbDrm.vgSniffProbe(12);
+  await new Promise((r) => setTimeout(r, 30));
+  const listedDrm = await sbDrm.vgSniffList(12);
+  assert(
+    resDrm && listedDrm.length > 0 && listedDrm.every((x) => x.encryption === 'drm' && x.emeDrm === true),
+    'probeTab propagates MAIN-world hasDrm to mark all items on DRM frame as encryption=drm',
+    listedDrm,
+  );
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

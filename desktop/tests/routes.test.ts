@@ -222,3 +222,22 @@ test('fetch-link direct link keeps the server string and its vgToken (PLAN-32E P
   const none = parseFetchLink(200, { success: true, direct_mp4_url: raw }, { apiBase: API, audioOnly: false, fallbackTitle: 'T' });
   assert.equal(none.kind === 'ok' && 'vgToken' in none, false);
 });
+
+test('platformOf supports extended cross-platform short links and video hosts', () => {
+  const extended: [string, string][] = [
+    ['https://fb.gg/v/12345', 'facebook'],
+    ['https://vm.tiktok.com/ZM8xyz/', 'tiktok'],
+    ['https://dai.ly/x8abcde', 'dailymotion'],
+    ['https://www.dailymotion.com/video/x8abcde', 'dailymotion'],
+    ['https://clips.twitch.tv/FunClip', 'twitch'],
+    ['https://vkvideo.ru/video-1_2', 'vk'],
+    ['https://rumble.com/v5abc-demo.html', 'rumble'],
+    ['https://odysee.com/@chan/vid', 'odysee'],
+    ['https://www.lemon8-app.com/u/1', 'lemon8'],
+    ['https://www.snapchat.com/spotlight/W7', 'snapchat'],
+  ];
+  for (const [u, slug] of extended) {
+    assert.equal(platformOf(u), slug, u);
+    assert.ok(PLATFORM_SLUGS.includes(slug), slug);
+  }
+});

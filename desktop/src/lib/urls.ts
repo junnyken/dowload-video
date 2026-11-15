@@ -91,23 +91,52 @@ export function douyinVideoId(raw: string): string | null {
   return modal && /^\d{15,25}$/.test(modal) ? modal : null;
 }
 
-/** Links in pasted text, one per line or separated by spaces/commas. */
+function stripTrailingUrlPunct(raw: string): string {
+  let u = raw.trim();
+  // Trim trailing sentence/bracket punctuation, preserving balanced `)` inside paths.
+  while (u.length > 0 && /[.,;!?'"\]}>，。！？；：】》」』）]/.test(u[u.length - 1])) {
+    u = u.slice(0, -1);
+  }
+  while (u.endsWith(')')) {
+    const opens = (u.match(/\(/g) || []).length;
+    const closes = (u.match(/\)/g) || []).length;
+    if (closes > opens) u = u.slice(0, -1);
+    else break;
+  }
+  return u;
+}
+
+/** Links in pasted text, including Douyin/Xiaohongshu/Bilibili/Zalo share text with glued CJK punctuation. */
 export function parseUrls(text: string): { valid: string[]; invalid: string[] } {
   const valid: string[] = [];
   const invalid: string[] = [];
   for (const raw of text.split(/[\s,;]+/)) {
     const t = raw.trim();
     if (!t) continue;
-    let ok = false;
-    try {
-      const u = new URL(t);
-      ok = (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.includes('.');
-    } catch { /* not a URL */ }
-    if (ok) { if (!valid.includes(t)) valid.push(t); } else invalid.push(t);
+    const embedded = t.match(
+      /https?:\/\/[^\s<>"'`\u3000\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u3010\u3011\u300a\u300b\u300c\u300d\u300e\u300f\uff08\uff09]+/gi,
+    );
+    if (embedded && embedded.length > 0) {
+      let anyOk = false;
+      for (const piece of embedded) {
+        const clean = stripTrailingUrlPunct(piece);
+        let ok = false;
+        try {
+          const u = new URL(clean);
+          ok = (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.includes('.');
+        } catch { /* not a URL */ }
+        if (ok) {
+          anyOk = true;
+          if (!valid.includes(clean)) valid.push(clean);
+        }
+      }
+      if (!anyOk) invalid.push(t);
+    } else {
+      invalid.push(t);
+    }
   }
-  // Share text from Douyin/TikTok apps ("7.97 V@L.Jv 06/03 reO:/ 《…》 https://v.douyin.com/x/ 复制此链接…")
-  // wraps the link in words. When at least one link was found, only report
-  // pieces that look like a broken link, not the words around it (owner test 2026-10-07).
+  // Share text from Douyin/TikTok/Bilibili apps wraps the link in words.
+  // When at least one link was found, only report pieces that look like a broken link.
   if (valid.length > 0) {
     return { valid, invalid: invalid.filter((t) => /^(https?:|www\.)/i.test(t)) };
   }

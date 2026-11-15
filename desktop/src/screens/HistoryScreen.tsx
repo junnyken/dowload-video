@@ -54,7 +54,10 @@ function LocalTab() {
     toast('info', 'Đang dịch phụ đề sang tiếng Việt…');
     try {
       await translateToVi(h.filePath, (pct) => setTranslating((t) => (h.id in t ? { ...t, [h.id]: pct } : t)));
-      toast('success', 'Đã lưu phụ đề tiếng Việt (.vi.srt) cạnh video.');
+      const isMp4 = /\.(mp4|m4v)$/i.test(h.filePath);
+      toast('success', isMp4
+        ? 'Đã lưu phụ đề tiếng Việt (.vi.srt) và gắn trực tiếp vào video MP4.'
+        : 'Đã lưu phụ đề tiếng Việt (.vi.srt) cạnh video.');
     } catch (e) {
       if (e instanceof SubtransError && e.code === 'login') openSignIn();
       toast('error', e instanceof SubtransError ? e.message : 'Không dịch được phụ đề. Có thể tệp đã bị di chuyển hoặc xoá.');

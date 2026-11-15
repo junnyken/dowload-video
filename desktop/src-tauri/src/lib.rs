@@ -964,14 +964,38 @@ fn fetch_and_save_companion_subs(
             if seg_urls.is_empty() {
                 continue;
             }
+            let total_bytes = std::sync::atomic::AtomicUsize::new(0);
+            let next_idx = std::sync::atomic::AtomicUsize::new(0);
+            let slots: Mutex<Vec<Option<String>>> = Mutex::new(vec![None; seg_urls.len()]);
+            let workers = seg_urls.len().clamp(1, 6);
+            std::thread::scope(|s| {
+                for _ in 0..workers {
+                    s.spawn(|| loop {
+                        let i = next_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if i >= seg_urls.len()
+                            || total_bytes.load(std::sync::atomic::Ordering::Relaxed) as u64 > subs::MAX_BYTES
+                        {
+                            break;
+                        }
+                        if let Some(st) = fetch_sub_text(&agent, &seg_urls[i], headers) {
+                            total_bytes.fetch_add(st.len(), std::sync::atomic::Ordering::Relaxed);
+                            if let Ok(mut guard) = slots.lock() {
+                                guard[i] = Some(st);
+                            }
+                        }
+                    });
+                }
+            });
             let mut parts = Vec::new();
-            let mut total_bytes = 0usize;
-            for u in seg_urls {
-                if let Some(st) = fetch_sub_text(&agent, &u, headers) {
-                    total_bytes += st.len();
-                    parts.push(st);
-                    if total_bytes as u64 > subs::MAX_BYTES {
-                        break;
+            let mut acc_bytes = 0usize;
+            if let Ok(mut guard) = slots.lock() {
+                for slot in guard.iter_mut() {
+                    if let Some(st) = slot.take() {
+                        acc_bytes += st.len();
+                        parts.push(st);
+                        if acc_bytes as u64 > subs::MAX_BYTES {
+                            break;
+                        }
                     }
                 }
             }
@@ -995,7 +1019,9 @@ fn fetch_and_save_companion_subs(
     }
     if !written_srts.is_empty() {
         if let Some(ff) = ffmpeg {
-            let _ = subs::mux_soft_subs_mp4(ff, &media_display, &written_srts);
+            let all_srts = subs::collect_companion_srts_vi_first(&media_display);
+            let tracks = if all_srts.is_empty() { &written_srts } else { &all_srts };
+            let _ = subs::mux_soft_subs_mp4(ff, &media_display, tracks);
         }
     }
 }
@@ -1340,27 +1366,99 @@ async fn open_path(store: State<'_, Store>, path: String) -> CmdResult<()> {
         .map_err(|e| CommandError::unknown(format!("cannot open file: {e}")))
 }
 
-/// 0.22.0: subtitle languages written beside a finished download (subs.rs).
+/// 0.22.6: subtitle languages beside OR embedded inside a finished download (subs.rs).
 #[tauri::command]
-fn subtitle_list(store: State<'_, Store>, path: String) -> CmdResult<Vec<String>> {
+async fn subtitle_list(store: State<'_, Store>, path: String) -> CmdResult<Vec<String>> {
     let canon = produced_or_refuse(&store, &path, true)?;
-    Ok(subs::list(&paths::display_form(&canon)))
+    let media_display = paths::display_form(&canon);
+    let mut langs = subs::list(&media_display);
+    let media_probe = media_display.clone();
+    if let Ok(Some(embedded)) = tauri::async_runtime::spawn_blocking(move || {
+        checksum::verify("ffprobe")
+            .ok()
+            .map(|ffprobe| subs::probe_embedded_text_subs(&ffprobe, &media_probe))
+    })
+    .await
+    {
+        for (_, lang) in embedded {
+            if subs::valid_lang(&lang) && !langs.iter().any(|existing| existing == &lang) {
+                langs.push(lang);
+            }
+        }
+        langs.sort();
+    }
+    Ok(langs)
 }
 
 #[tauri::command]
-fn subtitle_read(store: State<'_, Store>, path: String, lang: String) -> CmdResult<String> {
+async fn subtitle_read(store: State<'_, Store>, path: String, lang: String) -> CmdResult<String> {
     let canon = produced_or_refuse(&store, &path, true)?;
-    subs::read(&paths::display_form(&canon), &lang).map_err(CommandError::unknown)
+    let media_display = paths::display_form(&canon);
+    if let Ok(existing) = subs::read(&media_display, &lang) {
+        return Ok(existing);
+    }
+    if !subs::valid_lang(&lang) {
+        return Err(CommandError::unknown("invalid subtitle language"));
+    }
+    let media_clone = media_display.clone();
+    let want = lang.clone();
+    let (srt, written) = tauri::async_runtime::spawn_blocking(move || -> CmdResult<(String, Option<PathBuf>)> {
+        let ffmpeg = checksum::verify("ffmpeg")?;
+        let ffprobe = checksum::verify("ffprobe")?;
+        let embedded = subs::probe_embedded_text_subs(&ffprobe, &media_clone);
+        let want_base = want.split(['-', '_']).next().unwrap_or(&want);
+        let matched = embedded
+            .iter()
+            .find(|(_, l)| l.eq_ignore_ascii_case(&want))
+            .or_else(|| {
+                embedded.iter().find(|(_, l)| {
+                    l.split(['-', '_'])
+                        .next()
+                        .is_some_and(|b| b.eq_ignore_ascii_case(want_base))
+                })
+            })
+            .ok_or_else(|| CommandError::unknown("subtitle file not found"))?;
+        let text = subs::extract_embedded_srt(&ffmpeg, &media_clone, matched.0).map_err(CommandError::unknown)?;
+        let saved = subs::write_companion(&media_clone, &want, "srt", &text).ok();
+        Ok((text, saved))
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))??;
+    if let Some(w) = written {
+        if let Ok(c) = paths::canonical(&w) {
+            if let Ok(db) = store.db() {
+                let _ = db.add_produced(&c, "subtitle");
+            }
+        }
+    }
+    Ok(srt)
 }
 
-/// Saves a translation as `<stem>.<lang>.srt` (never over an existing file);
-/// the new file counts as produced so Open/Reveal accept it.
+/// Saves a translation as `<stem>.<lang>.srt` (never over an existing file) and,
+/// when the video is an `.mp4`/`.m4v`, soft-muxes it (with `vi` as default track)
+/// so the new subtitle counts as produced for Open/Reveal and plays offline in VLC/WMP.
 #[tauri::command]
-fn subtitle_write(store: State<'_, Store>, path: String, lang: String, content: String) -> CmdResult<String> {
+async fn subtitle_write(store: State<'_, Store>, path: String, lang: String, content: String) -> CmdResult<String> {
     let canon = produced_or_refuse(&store, &path, true)?;
-    let written = subs::write(&paths::display_form(&canon), &lang, &content).map_err(CommandError::unknown)?;
+    let media_display = paths::display_form(&canon);
+    let written = subs::write(&media_display, &lang, &content).map_err(CommandError::unknown)?;
     if let Ok(c) = paths::canonical(&written) {
         let _ = store.db()?.add_produced(&c, "subtitle");
+    }
+    let is_mp4 = media_display
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("m4v"));
+    if is_mp4 {
+        let media_mux = media_display.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            if let Ok(ffmpeg) = checksum::verify("ffmpeg") {
+                let tracks = subs::collect_companion_srts_vi_first(&media_mux);
+                if !tracks.is_empty() {
+                    let _ = subs::mux_soft_subs_mp4(&ffmpeg, &media_mux, &tracks);
+                }
+            }
+        })
+        .await;
     }
     Ok(written.to_string_lossy().into_owned())
 }

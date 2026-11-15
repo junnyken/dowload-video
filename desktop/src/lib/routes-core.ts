@@ -28,9 +28,9 @@ function hostIs(host: string, domains: readonly string[]): boolean {
 // slug in CLIENT_SERVER_FALLBACK_PLATFORMS (client_api.SERVER_FALLBACK_SLUGS).
 const HOSTS: readonly (readonly [string, readonly string[]])[] = [
   ['youtube', ['youtube.com', 'youtu.be']],
-  ['tiktok', ['tiktok.com']],
+  ['tiktok', ['tiktok.com', 'vt.tiktok.com', 'vm.tiktok.com']],
   ['instagram', ['instagram.com']],
-  ['facebook', ['facebook.com', 'fb.watch']],
+  ['facebook', ['facebook.com', 'fb.watch', 'fb.gg']],
   ['douyin', ['douyin.com', 'iesdouyin.com']],
   ['threads', ['threads.net', 'threads.com']],
   ['spotify', ['spotify.com']],
@@ -46,6 +46,13 @@ const HOSTS: readonly (readonly [string, readonly string[]])[] = [
   ['pinterest', ['pinterest.com', 'pin.it']],
   ['vimeo', ['vimeo.com']],
   ['soundcloud', ['soundcloud.com']],
+  ['dailymotion', ['dailymotion.com', 'dai.ly']],
+  ['twitch', ['twitch.tv', 'clips.twitch.tv']],
+  ['vk', ['vk.com', 'vkvideo.ru']],
+  ['rumble', ['rumble.com']],
+  ['odysee', ['odysee.com']],
+  ['lemon8', ['lemon8-app.com', 'lemon8.app']],
+  ['snapchat', ['snapchat.com']],
 ];
 
 export const PLATFORM_SLUGS: readonly string[] = [...HOSTS.map(([s]) => s), 'other'];
@@ -88,6 +95,13 @@ const ORDER: Record<string, readonly RouteId[]> = {
   iqiyi: ['S0'],
   youku: ['L0', 'S0'],
   mgtv: ['L0', 'S0'],
+  dailymotion: ['L0', 'S0'],
+  twitch: ['L0', 'S0'],
+  vk: ['L0', 'S0'],
+  rumble: ['L0', 'S0'],
+  odysee: ['L0', 'S0'],
+  lemon8: ['L0', 'L1', 'S0'],
+  snapchat: ['L0', 'S0'],
 };
 const DEFAULT_ORDER: readonly RouteId[] = ['L0', 'L1', 'S0'];
 

@@ -138,6 +138,56 @@ def _get_metadata_utils():
         return clean_filename, suggest_tags
 
 
+def _extract_series_meta(title: str) -> dict[str, str]:
+    try:
+        from app.services.smart_metadata import extract_series_episode  # noqa: PLC0415
+        return extract_series_episode(title)
+    except ImportError:
+        return {"series_name": "", "episode_tag": ""}
+
+
+async def _maybe_ai_refine_title(raw_title: str, deterministic: str, platform: str = "") -> str | None:
+    """Fast (<650ms) Gemini Flash refinement for long/hashtag-heavy social captions; returns None on fallback."""
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not api_key:
+        return None
+    if len(raw_title) <= 70 and raw_title.count("#") < 2:
+        return None
+    try:
+        import re
+        import httpx  # noqa: PLC0415
+
+        prompt = (
+            "Extract a concise, clean video file title (max 80 characters, preserve episode/season numbers if present, "
+            "no hashtags, no quotes, no URLs, same language as source). Reply with ONLY the clean title.\n"
+            f"Platform: {platform or 'web'}\n"
+            f"Raw title: {raw_title[:320]}"
+        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 48},
+        }
+        async with httpx.AsyncClient(timeout=0.65) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        text = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        cleaned = re.sub(r'[\r\n"<>:/\\|?*#]+', " ", str(text or "")).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" .-")
+        if 3 <= len(cleaned) <= 90 and cleaned != deterministic:
+            return cleaned
+    except Exception:
+        return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Auth helper (optional user)
 # ---------------------------------------------------------------------------
@@ -726,12 +776,18 @@ async def clean_metadata(body: MetadataCleanRequest):
         # Some implementations don't accept metadata kwarg
         filename_cleaned = clean_filename_fn(body.title)
 
+    ai_title = await _maybe_ai_refine_title(body.title, filename_cleaned, body.platform)
+    if ai_title:
+        filename_cleaned = ai_title
+
+    series_meta = _extract_series_meta(filename_cleaned or body.title)
+
     try:
         tags = suggest_tags_fn(body.title, platform=body.platform, description=body.description)
-        confidence = 0.8 if tags else 0.3
+        confidence = 0.9 if ai_title else (0.8 if tags else 0.3)
     except TypeError:
         tags = suggest_tags_fn(body.title)
-        confidence = 0.7 if tags else 0.3
+        confidence = 0.9 if ai_title else (0.7 if tags else 0.3)
 
     # Template variants for common export naming patterns
     uploader_slug = body.uploader.strip().replace(" ", "_")[:30] if body.uploader else "unknown"
@@ -747,6 +803,8 @@ async def clean_metadata(body: MetadataCleanRequest):
 
     return {
         "filename_cleaned": filename_cleaned,
+        "series_name": series_meta["series_name"],
+        "episode_tag": series_meta["episode_tag"],
         "tags": tags,
         "confidence": confidence,
         "template_variants": template_variants,

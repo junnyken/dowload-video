@@ -337,7 +337,177 @@ pub fn mux_soft_subs_mp4(
     Ok(true)
 }
 
-#[cfg(test)]]
+/// Maps ISO-639-2/B/T or BCP-47 tags (e.g. from `ffprobe` stream metadata) to concise
+/// ISO-639-1 subtitle codes so UI and companion `.srt` naming stay consistent.
+pub fn iso639_1_from_tag(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "sub".into();
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower == "und" || lower == "unknown" || lower == "unk" {
+        return "sub".into();
+    }
+    if lower == "zh-hans" || lower == "chs" {
+        return "zh-Hans".into();
+    }
+    if lower == "zh-hant" || lower == "cht" {
+        return "zh-Hant".into();
+    }
+    let primary = lower.split(['-', '_']).next().unwrap_or("");
+    match primary {
+        "vi" | "vie" => "vi".into(),
+        "en" | "eng" => "en".into(),
+        "ja" | "jp" | "jpn" => "ja".into(),
+        "ko" | "kor" => "ko".into(),
+        "zh" | "chi" | "zho" | "cmn" | "cn" => "zh".into(),
+        "th" | "tha" => "th".into(),
+        "id" | "ind" => "id".into(),
+        "ms" | "may" | "msa" => "ms".into(),
+        "fr" | "fre" | "fra" => "fr".into(),
+        "de" | "ger" | "deu" => "de".into(),
+        "es" | "spa" => "es".into(),
+        "pt" | "por" => "pt".into(),
+        "ru" | "rus" => "ru".into(),
+        "it" | "ita" => "it".into(),
+        "ar" | "ara" => "ar".into(),
+        "hi" | "hin" => "hi".into(),
+        _ if valid_lang(trimmed) => trimmed.to_string(),
+        _ => "sub".into(),
+    }
+}
+
+/// Collects existing `<stem>.<lang>.srt` companion tracks beside `media`, ordering
+/// Vietnamese (`vi` / `vi-*`) first so it becomes track 0 (`disposition: default`) in `.mp4`.
+pub fn collect_companion_srts_vi_first(media: &Path) -> Vec<(PathBuf, String)> {
+    let mut tracks: Vec<(PathBuf, String)> = Vec::new();
+    for lang in list(media) {
+        if let Some(p) = srt_path(media, &lang) {
+            if p.is_file() {
+                tracks.push((p, lang));
+            }
+        }
+    }
+    tracks.sort_by_key(|(_, lang)| {
+        let low = lang.to_ascii_lowercase();
+        let is_vi = low == "vi" || low.starts_with("vi-") || low.starts_with("vi_");
+        (!is_vi, low)
+    });
+    tracks.truncate(4);
+    tracks
+}
+
+fn run_tree_capture(mut cmd: std::process::Command, max_bytes: u64, timeout: std::time::Duration) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let (mut child, tree) = crate::proc::spawn_tree(cmd).map_err(|e| e.to_string())?;
+    let stdout = child.stdout.take().ok_or("failed to open stdout pipe")?;
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.take(max_bytes.saturating_add(1)).read_to_end(&mut buf);
+        buf
+    });
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Ok(s),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(30));
+            }
+            _ => {
+                let _ = tree.kill();
+                let _ = child.wait();
+                break Err("sidecar timed out".to_string());
+            }
+        }
+    };
+    let out = reader.join().unwrap_or_default();
+    let status = status?;
+    if !status.success() {
+        return Err("sidecar exited with non-zero status".into());
+    }
+    Ok(out)
+}
+
+/// Inspects embedded subtitle streams inside `media` via bundled `ffprobe`, returning
+/// `(sub_stream_pos, normalized_lang)` for text-based codecs extractable to SRT.
+pub fn probe_embedded_text_subs(ffprobe: &Path, media: &Path) -> Vec<(usize, String)> {
+    if !media.is_file() {
+        return Vec::new();
+    }
+    let mut cmd = std::process::Command::new(ffprobe);
+    cmd.args([
+        "-v",
+        "error",
+        "-select_streams",
+        "s",
+        "-show_entries",
+        "stream=codec_name:stream_tags=language",
+        "-of",
+        "json",
+        "--",
+    ])
+    .arg(media);
+    let Ok(bytes) = run_tree_capture(cmd, 256 * 1024, std::time::Duration::from_secs(10)) else {
+        return Vec::new();
+    };
+    let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Vec::new();
+    };
+    let Some(streams) = val.get("streams").and_then(|s| s.as_array()) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(usize, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (sub_pos, stream) in streams.iter().enumerate() {
+        let codec = stream
+            .get("codec_name")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !matches!(
+            codec.as_str(),
+            "subrip" | "srt" | "ass" | "ssa" | "mov_text" | "webvtt" | "text"
+        ) {
+            continue;
+        }
+        let raw_lang = stream
+            .get("tags")
+            .and_then(|t| t.get("language"))
+            .and_then(|l| l.as_str())
+            .unwrap_or("");
+        let lang = iso639_1_from_tag(raw_lang);
+        if valid_lang(&lang) && seen.insert(lang.clone()) {
+            out.push((sub_pos, lang));
+        }
+    }
+    out
+}
+
+/// Extracts embedded subtitle stream `0:s:<sub_pos>` from `media` as UTF-8 SubRip (`.srt`).
+pub fn extract_embedded_srt(ffmpeg: &Path, media: &Path, sub_pos: usize) -> Result<String, String> {
+    if !media.is_file() {
+        return Err("media file not found".into());
+    }
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-loglevel", "error", "-nostdin", "-i"])
+        .arg(media)
+        .args(["-map", &format!("0:s:{sub_pos}"), "-f", "srt", "-"]);
+    let bytes = run_tree_capture(cmd, MAX_BYTES, std::time::Duration::from_secs(30))?;
+    if bytes.len() as u64 > MAX_BYTES {
+        return Err("embedded subtitle is larger than 2 MB".into());
+    }
+    let text = String::from_utf8(bytes).map_err(|_| "embedded subtitle is not UTF-8")?;
+    let clean = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    if clean.contains('\0') || clean.trim().is_empty() {
+        return Err("embedded subtitle is empty".into());
+    }
+    Ok(clean.to_string())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -425,6 +595,26 @@ mod tests {
         let srt = d.join("movie.vi.srt");
         fs::write(&srt, "1\n00:00:00,000 --> 00:00:01,000\nXin chào\n").unwrap();
         assert_eq!(mux_soft_subs_mp4(Path::new("ffmpeg"), &non_mp4, &[(srt, "vi".into())]).unwrap(), false);
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn maps_iso639_1_and_prioritizes_vi_first() {
+        assert_eq!(iso639_1_from_tag("eng"), "en");
+        assert_eq!(iso639_1_from_tag("jpn"), "ja");
+        assert_eq!(iso639_1_from_tag("vie"), "vi");
+        assert_eq!(iso639_1_from_tag("chi"), "zh");
+        assert_eq!(iso639_1_from_tag("zho"), "zh");
+        assert_eq!(iso639_1_from_tag("und"), "sub");
+
+        let d = dir();
+        let media = d.join("anime.mp4");
+        fs::write(&media, b"mp4").unwrap();
+        for lang in ["ja", "en", "vi"] {
+            fs::write(d.join(format!("anime.{lang}.srt")), "1\n00:00:01,000 --> 00:00:02,000\nhi\n").unwrap();
+        }
+        let ordered: Vec<String> = collect_companion_srts_vi_first(&media).into_iter().map(|(_, l)| l).collect();
+        assert_eq!(ordered, vec!["vi", "en", "ja"]);
         fs::remove_dir_all(d).unwrap();
     }
 }

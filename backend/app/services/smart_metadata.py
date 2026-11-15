@@ -21,7 +21,42 @@ FILENAME_JUNK_PATTERNS: list[str] = [
     r"\s*\(?(?:HD|HQ|4K|1080p|720p|480p)\)?\s*$",
     r"\[\s*(?:Official|Music|Lyric|Full)\s*\w*\s*\]",
     r"\(\s*(?:Official\s+)?(?:Video|Audio|Audio Only|Music Video|Lyric|HD|HQ|4K|720p|1080p|480p)\s*\)",
+    r"\[\s*(?:Server\s*[^\]]*|VIP|FHD|Full\s*HD|Vietsub|Thuyết\s*Minh|Lồng\s*Tiếng)\s*\]",
+    r"【\s*(?:高清|超清|蓝光|中字|生肉|熟肉|完整版)\s*】",
 ]
+
+_SHARE_NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"复制打开抖音.*$"),
+    re.compile(r"长按复制此条消息.*$"),
+    re.compile(r"https?://\S+"),
+    re.compile(r"^\s*\d+(?:\.\d+)?\s+[A-Za-z0-9@._-]{2,12}\s+\d{2}/\d{2}\s+[A-Za-z]{2,5}:/\s*"),
+)
+_HASHTAG_CHAIN_RE = re.compile(r"(?:\s+#[\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+){2,}\s*$")
+_TRAILING_VIRAL_TAG_RE = re.compile(
+    r"(?:\s+#(?:fyp|foryou|foryoupage|xuhuong|viral|trending|tiktok|douyin|reels|shorts)\b)+\s*$",
+    re.IGNORECASE,
+)
+_SINGLE_HASHTAG_MARK_RE = re.compile(r"#([\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+)")
+_SERIES_EP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"^(.+?)(?:\s*[-–—:|•]\s*|\s+)"
+        r"(?:(?:s|ss)\s*(\d{1,2})\s*(?:[-–—:|•\s]*)(?:ep?\.?)\s*(\d{1,4}))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(.+?)(?:\s*[-–—:|•]\s*|\s+)"
+        r"(?:season\s*(\d{1,2})\s*[-–—:|•\s]*(?:episode|ep\.?)\s*(\d{1,4}))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(.+?)(?:\s*[-–—:|•]\s*|\s+)"
+        r"((?:(?:phần|phan|mùa|mua|season)\s*\d+\s*[-–—:|•]?\s*)?(?:tập|tap|episode|ep\.?)\s*\d+(?:\.\d+)?(?:\s*(?:end|cuối|cuoi|final))?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^(.+?)(?:\s*[-–—:|•]\s*|\s+)(ova\s*\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    re.compile(r"^(.+?)(?:\s*[-–—:|•]\s*|\s+)(第\s*\d+(?:\.\d+)?\s*[話话集])"),
+    re.compile(r"^(.+?)\s*\[(\d{1,3})\s*/\s*\d{1,3}\](?:\s|$)"),
+)
 
 _FEAT_PATTERN = re.compile(
     r"\s*(ft\.?|feat\.?)\s+", re.IGNORECASE
@@ -44,6 +79,37 @@ _STOP_WORDS = _STOP_WORDS_EN | _STOP_WORDS_VI
 # Filename cleaning
 # ---------------------------------------------------------------------------
 
+def extract_series_episode(title: str) -> dict[str, str]:
+    """Extracts normalized series name and episode tag when title clearly belongs to a series."""
+    cleaned = re.sub(r"\s+", " ", (title or "").strip())
+    if len(cleaned) < 5:
+        return {"series_name": "", "episode_tag": ""}
+
+    for idx, pat in enumerate(_SERIES_EP_PATTERNS):
+        m = pat.match(cleaned)
+        if not m:
+            continue
+        series = re.sub(r"[\s\-–—:|•(\[{/]+$", "", m.group(1)).strip()
+        series = _UNSAFE_CHARS.sub(" ", series)
+        series = _MULTI_SPACES.sub(" ", series).strip()
+        if len(series) < 2 or len(series) > 90 or series.isdigit():
+            continue
+        if idx in (0, 1):
+            season_num = int(m.group(2))
+            ep_num = int(m.group(3))
+            ep_tag = f"S{season_num:02d}E{ep_num:02d}"
+        elif idx == 3:
+            num = re.sub(r"^ova\s*", "", m.group(2), flags=re.IGNORECASE).strip()
+            ep_tag = f"OVA{num.zfill(2)}" if num.isdigit() else m.group(2).upper()
+        elif idx == 5:
+            ep_tag = f"E{m.group(2).zfill(2)}"
+        else:
+            ep_tag = _MULTI_SPACES.sub(" ", m.group(2)).strip()
+        return {"series_name": series, "episode_tag": ep_tag}
+
+    return {"series_name": "", "episode_tag": ""}
+
+
 def clean_filename(
     raw: str,
     template: str = "{title}",
@@ -56,6 +122,8 @@ def clean_filename(
         {
             "filename": str,
             "title_cleaned": str,
+            "series_name": str,
+            "episode_tag": str,
             "confidence": float,
             "changes_made": list[str],
         }
@@ -71,6 +139,28 @@ def clean_filename(
     if decoded != title:
         changes.append("html_entities_decoded")
         title = decoded
+
+    # Step 1b: Remove social share boilerplate / copy prompts / hashtags
+    for share_re in _SHARE_NOISE_PATTERNS:
+        updated = share_re.sub("", title).strip()
+        if updated and updated != title:
+            changes.append("share_boilerplate_removed")
+            title = updated
+
+    no_chain = _HASHTAG_CHAIN_RE.sub("", title).strip()
+    if no_chain and no_chain != title:
+        changes.append("hashtag_chain_removed")
+        title = no_chain
+
+    no_viral = _TRAILING_VIRAL_TAG_RE.sub("", title).strip()
+    if no_viral and no_viral != title:
+        changes.append("viral_hashtags_removed")
+        title = no_viral
+
+    unhashed = _SINGLE_HASHTAG_MARK_RE.sub(r"\1", title).strip()
+    if unhashed and unhashed != title:
+        changes.append("hashtag_symbols_stripped")
+        title = unhashed
 
     # Step 2: Strip leading/trailing whitespace + normalize internal spaces
     stripped = title.strip()
@@ -153,9 +243,13 @@ def clean_filename(
     else:
         confidence = 0.70
 
+    series_info = extract_series_episode(title_cleaned)
+
     return {
         "filename": filename,
         "title_cleaned": title_cleaned,
+        "series_name": series_info["series_name"],
+        "episode_tag": series_info["episode_tag"],
         "confidence": confidence,
         "changes_made": changes,
     }

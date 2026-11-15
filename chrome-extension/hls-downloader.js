@@ -1050,7 +1050,9 @@
     return { url: v.url, text: await fetchText(v.url, job, state), height: v.height, audioMedia };
   }
 
-  /** Writes chunks in order to an OPFS file, optionally resuming at `resumeBytes`. */
+  const OPFS_FLUSH_BYTES = 1024 * 1024;
+
+  /** Writes chunks in 1 MiB RAM-batched blocks to an OPFS file, optionally resuming at `resumeBytes`. */
   async function opfsWriter(name, resumeBytes = 0) {
     const dir = await navigator.storage.getDirectory();
     const handle = await dir.getFileHandle(name, { create: true });
@@ -1060,11 +1062,46 @@
       await w.seek(resumeBytes);
     }
     let bytes = keep ? resumeBytes : 0;
+    let bufParts = [];
+    let bufLen = 0;
+
+    async function flush() {
+      if (!bufLen) return;
+      let block;
+      if (bufParts.length === 1) {
+        block = bufParts[0];
+      } else {
+        block = new Uint8Array(bufLen);
+        let offset = 0;
+        for (let i = 0; i < bufParts.length; i++) {
+          block.set(bufParts[i], offset);
+          offset += bufParts[i].byteLength;
+        }
+      }
+      bufParts = [];
+      bufLen = 0;
+      await w.write(block);
+    }
+
     return {
-      async write(u8) { if (u8 && u8.byteLength) { await w.write(u8); bytes += u8.byteLength; } },
-      async close() { await w.close(); return handle.getFile(); },
-      async abort() { try { await w.abort(); } catch { /* closed */ } try { await dir.removeEntry(name); } catch { /* gone */ } },
-      async sealPartial() { await w.close(); return handle.getFile(); },
+      async write(u8) {
+        if (!u8 || !u8.byteLength) return;
+        const view = u8 instanceof Uint8Array ? u8.slice() : new Uint8Array(u8);
+        bufParts.push(view);
+        bufLen += view.byteLength;
+        bytes += view.byteLength;
+        if (bufLen >= OPFS_FLUSH_BYTES) {
+          await flush();
+        }
+      },
+      async close() { await flush(); await w.close(); return handle.getFile(); },
+      async abort() {
+        bufParts = [];
+        bufLen = 0;
+        try { await w.abort(); } catch { /* closed */ }
+        try { await dir.removeEntry(name); } catch { /* gone */ }
+      },
+      async sealPartial() { await flush(); await w.close(); return handle.getFile(); },
       get bytes() { return bytes; },
     };
   }
@@ -1532,7 +1569,7 @@
   const exported = {
     mediaPlan, byterange, seqToIv, parseHexIv, parseKeyAttr, parseRetryAfterMs, selectAudioRendition,
     decryptSegment, decryptAesCbcRaw, decryptSampleAesTs, mpeg2Crc32,
-    stripDisguisedTsPrefix, isIsoBmffSegment, mergeMp4InitSegments, rewriteMoofTrackId,
+    stripDisguisedTsPrefix, isIsoBmffSegment, mergeMp4InitSegments, rewriteMoofTrackId, opfsWriter,
   };
   root.__vgHls = exported;
   if (typeof module !== 'undefined' && module.exports) module.exports = exported;

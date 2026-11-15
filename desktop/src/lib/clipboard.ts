@@ -6,6 +6,7 @@
 // auto → the link is analysed and queued with the default quality at once.
 // off  → Rust stops reading the clipboard.
 import { decide, normalize } from './clipboard-core';
+import { API_BASE } from './config';
 import { planExtJob } from './ext-handoff-core';
 import { joinPath } from './watch-core';
 import { api, onClipboardLink, onExtDownload, type ExtJob } from './tauri';
@@ -19,6 +20,42 @@ import { enqueue } from './queue';
 import { findDuplicate } from './dedupe';
 import { auth } from './auth';
 import { quota, refreshQuota } from './quota';
+
+const aiTitleCache = new Map<string, string>();
+
+async function refineTitleWithAi(rawTitle: string, platform: string): Promise<string | null> {
+  const raw = rawTitle.trim();
+  if (!raw || (raw.length <= 65 && !raw.includes('#') && !/复制|打开|长按/.test(raw))) {
+    return null;
+  }
+  const key = `${platform}|${raw}`;
+  const cached = aiTitleCache.get(key);
+  if (cached) return cached;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 700);
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/smart-metadata/clean`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: raw.slice(0, 320), platform }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json() as { filename_cleaned?: string };
+    const cleaned = typeof j?.filename_cleaned === 'string' ? j.filename_cleaned.trim() : '';
+    if (cleaned.length >= 3 && cleaned.length <= 140) {
+      if (aiTitleCache.size >= 100) {
+        const oldest = aiTitleCache.keys().next().value;
+        if (oldest !== undefined) aiTitleCache.delete(oldest);
+      }
+      aiTitleCache.set(key, cleaned);
+      return cleaned;
+    }
+  } catch { /* offline or timeout: 0ms fallback */ } finally {
+    clearTimeout(timer);
+  }
+  return null;
+}
 
 export type ClipOffer = { url: string; platform: string };
 export const clipOffer = createStore<ClipOffer | null>(null);
@@ -85,10 +122,10 @@ function apply() {
 // this machine — not on the VidGrab server.
 async function handleExtDownload(job: ExtJob) {
   const st = settings.get();
-  const plan = planExtJob(job, { defaultQuality: st.defaultQuality, guest: auth.get().status !== 'in' });
-  if (plan.mode === 'probe') {
+  const prePlan = planExtJob(job, { defaultQuality: st.defaultQuality, guest: auth.get().status !== 'in' });
+  if (prePlan.mode === 'probe') {
     const name = (job.title || '').trim() || 'video từ trình duyệt';
-    downloadNow(plan.url, plan.platform);
+    downloadNow(prePlan.url, prePlan.platform);
     if (document.hidden) void api.notify('VidGrab', `Đang tải "${name.slice(0, 60)}" do tiện ích gửi sang.`).catch(() => {});
     else toast('info', `Tiện ích VidGrab đã gửi "${name.slice(0, 60)}" sang app — đang phân tích để tải.`);
     return;
@@ -111,6 +148,16 @@ async function handleExtDownload(job: ExtJob) {
     toast('error', msg);
     return;
   }
+
+  const aiRefined = job.title ? await refineTitleWithAi(job.title, prePlan.platform) : null;
+  let plan = prePlan;
+  if (aiRefined) {
+    const candidate = planExtJob({ ...job, title: aiRefined }, { defaultQuality: st.defaultQuality, guest: false });
+    if (candidate.mode === 'direct_queue' && (!prePlan.seriesFolder || candidate.seriesFolder)) {
+      plan = candidate;
+    }
+  }
+  if (plan.mode !== 'direct_queue') return;
 
   const outDir = (await ensureOutDir()) || st.outDir;
   if (!outDir) {

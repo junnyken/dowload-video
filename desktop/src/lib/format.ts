@@ -43,6 +43,9 @@ export function platformLabel(p: string): string {
     youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook',
     twitter: 'X / Twitter', x: 'X / Twitter', threads: 'Threads', reddit: 'Reddit',
     vimeo: 'Vimeo', bilibili: 'Bilibili', douyin: 'Douyin', soundcloud: 'SoundCloud',
+    dailymotion: 'Dailymotion', twitch: 'Twitch', vk: 'VK Video', rumble: 'Rumble',
+    odysee: 'Odysee', lemon8: 'Lemon8', snapchat: 'Snapchat', xiaohongshu: 'Xiaohongshu',
+    kuaishou: 'Kuaishou', iqiyi: 'iQIYI', youku: 'Youku', mgtv: 'Mango TV', pinterest: 'Pinterest',
   };
   const k = (p || '').toLowerCase();
   return map[k] ?? (p ? p.charAt(0).toUpperCase() + p.slice(1) : 'Khác');

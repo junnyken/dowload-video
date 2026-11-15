@@ -83,3 +83,15 @@ test('Xiaohongshu / RedNote profile links go to the server listing', () => {
     'https://www.douyin.com/user/MS4wLjABAAAAabc',
   ]) assert.equal(isXhsProfileUrl(u), false, u);
 });
+
+test('parseUrls extracts embedded links glued to CJK punctuation and parentheses', async () => {
+  const { parseUrls } = await import('../src/lib/urls.ts');
+  const mixed = '【新视频】https://b23.tv/BV1abc，复制打开！ (https://vt.tiktok.com/ZSx99/). https://en.wikipedia.org/wiki/Pilot_(film)';
+  const res = parseUrls(mixed);
+  assert.deepEqual(res.valid, [
+    'https://b23.tv/BV1abc',
+    'https://vt.tiktok.com/ZSx99/',
+    'https://en.wikipedia.org/wiki/Pilot_(film)',
+  ]);
+  assert.deepEqual(res.invalid, []);
+});

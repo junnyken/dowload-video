@@ -513,6 +513,45 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     '[10e] VG_PILL_CLICK sends stream to Desktop App for Team tier and starts Browser HLS <=1080p for Pro tier',
   );
 
+  // 10f: vgRefineStreamTitleAi matches MetadataCleanRequest ({ title }) & response ({ filename_cleaned, episode_tag })
+  let aiSchemaSeen = null;
+  const savedFetch10f = sandbox.fetch;
+  sandbox.fetch = async (url, init = {}) => {
+    const s = String(url);
+    if (s.endsWith('/api/v1/smart-metadata/clean')) {
+      const parsed = JSON.parse(init.body || '{}');
+      aiSchemaSeen = parsed;
+      if (typeof parsed.title !== 'string') {
+        return { ok: false, status: 422, json: async () => ({ detail: 'title required' }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          filename_cleaned: 'Solo Leveling',
+          series_name: 'Solo Leveling',
+          episode_tag: 'S02E14',
+        }),
+      };
+    }
+    return savedFetch10f(url, init);
+  };
+  let refined10f = '';
+  try {
+    env.local.vg_auth_token = 'tok-team-user';
+    refined10f = await vm.runInContext(
+      'vgRefineStreamTitleAi({ title: "[Server VIP] Solo Leveling SS2 EP14 #fyp", pageUrl: "https://cinema.example/watch/14" })',
+      sandbox,
+    );
+  } finally {
+    sandbox.fetch = savedFetch10f;
+  }
+  assert(
+    aiSchemaSeen && typeof aiSchemaSeen.title === 'string' && refined10f === 'Solo Leveling - S02E14',
+    '[10f] vgRefineStreamTitleAi sends { title }, parses { filename_cleaned, episode_tag }, and preserves episode label',
+    { aiSchemaSeen, refined10f },
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

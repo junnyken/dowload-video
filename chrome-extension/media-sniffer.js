@@ -48,6 +48,11 @@
   const GENERIC_TRAIL_RE = /^(?:watch(?:\s+online)?(?:\s+free)?(?:\s+hd)?|free\s+(?:hd|videos?|movies?|streaming)|full\s+hd(?:\s+online)?|stream(?:ing)?\s+online|xem\s+phim(?:\s+online)?(?:\s+(?:hd|miễn\s+phí|mới(?:\s+nhất)?|nhanh|vietsub))?|phim\s+(?:hd|mới(?:\s+nhất)?|hay|lẻ|bộ)|trang\s+chủ|home)$/i;
   const DOMAIN_TOKEN_RE = /\b[a-z0-9-]{2,}\.(?:com|net|org|io|vn|ws|tv|to|me|cc|co|xyz|pro|vip|club|top|site|online|stream|watch|live|today|one|fun|info|biz|asia|gg|la|sh|bz|su|icu|cyou|click|shop|lol|cfd)\b/i;
   const EPISODE_OR_CODE_RE = /(?:\b(?:tập|tap|ep(?:isode)?)\s*\d+|\b[a-z]{2,6}-\d{2,5}\b)/i;
+  const BRACKET_SERVER_NOISE_RE = /\[\s*(?:server\s*[^\]]*|vip|fhd|full\s*hd|vietsub|thuyết\s*minh|lồng\s*tiếng)\s*\]/gi;
+  const CJK_BRACKET_NOISE_RE = /【\s*(?:高清|超清|蓝光|中字|生肉|熟肉|完整版)\s*】/g;
+  const SHARE_COPY_NOISE_RE = /(?:复制打开抖音.*$|长按复制此条消息.*$|https?:\/\/\S+)/gu;
+  const HASHTAG_CHAIN_RE = /(?:\s+#[\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+){2,}\s*$/u;
+  const VIRAL_HASHTAG_RE = /(?:\s+#(?:fyp|foryou|foryoupage|xuhuong|viral|trending|tiktok|douyin|reels|shorts)\b)+\s*$/gi;
 
   function pathOf(url) {
     try { return new URL(url).pathname.toLowerCase(); } catch { return ''; }
@@ -112,6 +117,11 @@
     let s = String(raw || '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim();
     if (!s || /^https?:\/\//i.test(s)) return '';
     s = s.replace(/^(?:\(\d+\)\s*|▶\s*)+/, '').trim();
+    s = s.replace(SHARE_COPY_NOISE_RE, '').trim();
+    s = s.replace(BRACKET_SERVER_NOISE_RE, ' ').replace(CJK_BRACKET_NOISE_RE, ' ').trim();
+    const withoutHashtagChain = s.replace(HASHTAG_CHAIN_RE, '').replace(VIRAL_HASHTAG_RE, '').trim();
+    if (withoutHashtagChain.length >= 3) s = withoutHashtagChain;
+    s = s.replace(/#([\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+)/gu, '$1').trim();
     if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
 
     const sepRe = /\s+(?:\||::|—|–|•|»|-)\s+/;
@@ -164,18 +174,55 @@
    * e.g. `"Lên Đường Nhậm Chức - Tập 01"` -> `{ seriesTitle: "Lên Đường Nhậm Chức", episodeLabel: "Tập 01" }`.
    * Returns `null` when the title is a standalone movie or lacks a series name.
    */
+  function normalizeSeriesName(raw) {
+    return String(raw || '')
+      .replace(/[\s\-–—:|•([{\/]+$/g, '')
+      .replace(/[<>:"/\\|?*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function parseSeriesEpisode(rawTitle) {
     const t = String(rawTitle || '').replace(/\s+/g, ' ').trim();
     if (!t || t.length < 5) return null;
+
+    const seRe = /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(?:ss?|season\s*)(\d{1,2})\s*[-–—:|•\s]*(?:episode|ep\.?|e)\s*(\d{1,4})\b/i;
+    const seMatch = seRe.exec(t);
+    if (seMatch) {
+      const series = normalizeSeriesName(seMatch[1]);
+      if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+        const epNum = seMatch[3].length < 2 ? seMatch[3].padStart(2, '0') : seMatch[3];
+        return { seriesTitle: series, episodeLabel: `S${String(Number(seMatch[2])).padStart(2, '0')}E${epNum}` };
+      }
+    }
+
+    const ovaRe = /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(ova)\s*(\d{1,3}(?:\.\d+)?)\b/i;
+    const ovaMatch = ovaRe.exec(t);
+    if (ovaMatch) {
+      const series = normalizeSeriesName(ovaMatch[1]);
+      if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+        const ovaNum = ovaMatch[3].length < 2 ? ovaMatch[3].padStart(2, '0') : ovaMatch[3];
+        return { seriesTitle: series, episodeLabel: `OVA${ovaNum}` };
+      }
+    }
+
+    const slashRe = /^(.+?)\s*\[(\d{1,3})\s*\/\s*\d{1,3}\](?:\s|$)/;
+    const slashMatch = slashRe.exec(t);
+    if (slashMatch) {
+      const series = normalizeSeriesName(slashMatch[1]);
+      if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+        return { seriesTitle: series, episodeLabel: `E${slashMatch[2].padStart(2, '0')}` };
+      }
+    }
+
     const patterns = [
       /^(.+?)(?:\s*[-–—:|•]\s*|\s+)((?:(?:phần|phan|mùa|mua|season)\s*\d+\s*[-–—:|•]?\s*)?(?:tập|tap|episode|ep\.?)\s*\d+(?:\.\d+)?(?:\s*(?:end|cuối|cuoi|final))?)\b/i,
-      /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(s\d{1,2}\s*e\d{1,4})\b/i,
       /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(第\s*\d+(?:\.\d+)?\s*[話话集])/u,
     ];
     for (const re of patterns) {
       const m = re.exec(t);
       if (!m) continue;
-      const series = m[1].replace(/[\s\-–—:|•([{\/]+$/g, '').replace(/[<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const series = normalizeSeriesName(m[1]);
       const ep = m[2].replace(/\s+/g, ' ').trim();
       if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
         return { seriesTitle: series, episodeLabel: ep };
@@ -1020,13 +1067,47 @@
             h1Title: '',
             videos: [],
             tracks: [],
+            extraUrls: [],
             resources: [],
+          };
+          const pushExtra = (raw) => {
+            if (!raw || out.extraUrls.length >= 16) return;
+            const u = String(raw).trim();
+            if (/^https?:\/\//i.test(u) && !out.extraUrls.includes(u)) out.extraUrls.push(u);
           };
           if (out.isTop) {
             const og = document.querySelector('meta[property="og:title"], meta[name="twitter:title"]');
             out.ogTitle = og ? String(og.getAttribute('content') || '').slice(0, 240) : '';
             const h1 = document.querySelector('h1');
             out.h1Title = h1 ? String(h1.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+          }
+          const metaStreams = document.querySelectorAll(
+            'meta[property="og:video"], meta[property="og:video:url"], meta[property="og:video:secure_url"], meta[name="twitter:player:stream"]',
+          );
+          for (let i = 0; i < metaStreams.length && out.extraUrls.length < 16; i++) {
+            pushExtra(metaStreams[i].getAttribute('content') || '');
+          }
+          const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+          const scanLdNode = (node, depth) => {
+            if (!node || typeof node !== 'object' || depth > 5 || out.extraUrls.length >= 16) return;
+            if (Array.isArray(node)) {
+              for (let i = 0; i < node.length && out.extraUrls.length < 16; i++) scanLdNode(node[i], depth + 1);
+              return;
+            }
+            const t = String(node['@type'] || '');
+            if (/(?:^|\b)VideoObject\b/i.test(t) && typeof node.contentUrl === 'string') {
+              pushExtra(node.contentUrl);
+            } else if (typeof node.contentUrl === 'string' && /\.(?:m3u8|mpd|mp4|webm|mov)(?:\?|$)/i.test(node.contentUrl)) {
+              pushExtra(node.contentUrl);
+            }
+            if (Array.isArray(node['@graph'])) scanLdNode(node['@graph'], depth + 1);
+            if (node.video) scanLdNode(node.video, depth + 1);
+          };
+          for (let i = 0; i < ldScripts.length && out.extraUrls.length < 16; i++) {
+            try {
+              const rawJson = (ldScripts[i].textContent || '').trim();
+              if (rawJson && rawJson.length <= 200000) scanLdNode(JSON.parse(rawJson), 0);
+            } catch { /* invalid ld+json */ }
           }
           const vids = document.querySelectorAll('video');
           for (let i = 0; i < vids.length && out.videos.length < 6; i++) {
@@ -1039,6 +1120,10 @@
               height: v.videoHeight || 0,
               duration: Number.isFinite(v.duration) && v.duration > 0 ? Math.round(v.duration) : 0,
             });
+            const srcEls = v.querySelectorAll('source[src]');
+            for (let k = 0; k < srcEls.length && k < 8; k++) {
+              pushExtra(srcEls[k].src || srcEls[k].getAttribute('src') || '');
+            }
             const trs = v.querySelectorAll('track');
             for (let j = 0; j < trs.length && out.tracks.length < 12; j++) {
               const tr = trs[j];
@@ -1056,7 +1141,7 @@
           }
           try {
             const entries = performance.getEntriesByType('resource') || [];
-            for (let i = entries.length - 1; i >= 0 && out.resources.length < 35; i--) {
+            for (let i = entries.length - 1; i >= 0 && out.resources.length < 80; i--) {
               const e = entries[i];
               const name = String((e && e.name) || '');
               if (!/^https?:\/\//i.test(name)) continue;
@@ -1079,9 +1164,126 @@
       return { items: visible(items), playing: null };
     }
 
+    let mainResults = [];
+    try {
+      mainResults = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        world: 'MAIN',
+        func: () => {
+          const out = { frameUrl: String(location.href || ''), urls: [], tracks: [], hasDrm: false };
+          const pushUrl = (raw) => {
+            if (typeof raw !== 'string' || out.urls.length >= 24) return;
+            const u = raw.trim();
+            if (/^https?:\/\//i.test(u) && !out.urls.includes(u)) out.urls.push(u);
+          };
+          const pushTrack = (raw, lang, label) => {
+            if (typeof raw !== 'string' || out.tracks.length >= 12) return;
+            const u = raw.trim();
+            if (!/^https?:\/\//i.test(u) || out.tracks.some((t) => t.url === u)) return;
+            out.tracks.push({
+              url: u,
+              lang: String(lang || '').slice(0, 16),
+              label: String(label || '').slice(0, 32),
+            });
+          };
+          try {
+            if (typeof window.jwplayer === 'function') {
+              for (let i = 0; i < 4; i++) {
+                let p = null;
+                try { p = window.jwplayer(i); } catch { p = null; }
+                if (!p || typeof p.getPlaylist !== 'function') continue;
+                const pl = p.getPlaylist() || [];
+                for (let k = 0; k < pl.length && k < 4; k++) {
+                  const it = pl[k];
+                  if (!it || typeof it !== 'object') continue;
+                  const itemDrm = Boolean(it.drm);
+                  if (itemDrm) out.hasDrm = true;
+                  const srcs = Array.isArray(it.sources) ? it.sources : [];
+                  for (const s of srcs) {
+                    if (!s || typeof s !== 'object') continue;
+                    if (s.drm) { out.hasDrm = true; continue; }
+                    if (!itemDrm) pushUrl(s.file || s.src || '');
+                  }
+                  if (!itemDrm && typeof it.file === 'string') pushUrl(it.file);
+                  const trs = Array.isArray(it.tracks) ? it.tracks : [];
+                  for (const tr of trs) {
+                    if (!tr || typeof tr !== 'object') continue;
+                    const kind = String(tr.kind || tr.type || 'captions').toLowerCase();
+                    if (kind === 'captions' || kind === 'subtitles' || kind === '') {
+                      pushTrack(tr.file || tr.src || '', tr.language || tr.srclang || '', tr.label || '');
+                    }
+                  }
+                }
+              }
+            }
+          } catch { /* ignore jwplayer probe error */ }
+          try {
+            const players = window.videojs && window.videojs.players ? Object.values(window.videojs.players) : [];
+            for (const vp of players) {
+              if (!vp || typeof vp !== 'object') continue;
+              let hasKs = false;
+              const srcs = typeof vp.currentSources === 'function' ? (vp.currentSources() || []) : [];
+              for (const s of srcs) {
+                if (s && s.keySystems) { out.hasDrm = true; hasKs = true; continue; }
+                if (s && s.src) pushUrl(s.src);
+              }
+              if (!hasKs && typeof vp.currentSrc === 'function') pushUrl(vp.currentSrc());
+            }
+          } catch { /* ignore videojs probe error */ }
+          try {
+            const arts = window.Artplayer && Array.isArray(window.Artplayer.instances) ? window.Artplayer.instances : [];
+            for (const ap of arts) {
+              if (!ap || !ap.option) continue;
+              pushUrl(ap.option.url || '');
+              if (ap.option.subtitle && ap.option.subtitle.url) {
+                pushTrack(ap.option.subtitle.url, '', '');
+              }
+            }
+          } catch { /* ignore Artplayer probe error */ }
+          try {
+            const vids = document.querySelectorAll('video');
+            for (let i = 0; i < vids.length && i < 6; i++) {
+              const v = vids[i];
+              if (v.mediaKeys) out.hasDrm = true;
+              if (v.hls && typeof v.hls.url === 'string') pushUrl(v.hls.url);
+              if (v.player && typeof v.player.currentSrc === 'function') pushUrl(v.player.currentSrc());
+              if (v.dashjs && typeof v.dashjs.getSource === 'function') pushUrl(v.dashjs.getSource());
+            }
+          } catch { /* ignore video JS refs */ }
+          try {
+            if (window.__NEXT_DATA__ && out.urls.length < 24) {
+              const json = JSON.stringify(window.__NEXT_DATA__).slice(0, 200000);
+              const re = /https?:\/\/[^"'\s\\]+?\.(?:m3u8|mpd|mp4)(?:\?[^"'\s\\]*)?/gi;
+              let m;
+              while ((m = re.exec(json)) !== null && out.urls.length < 24) {
+                pushUrl(m[0]);
+              }
+            }
+          } catch { /* ignore NEXT_DATA stringify error */ }
+          return out;
+        },
+      });
+    } catch { /* world MAIN unsupported or blocked */ }
+
     let topFrame = null;
     let playing = null;
     const emeFrameUrls = new Set();
+    for (const entry of mainResults || []) {
+      const mr = entry && entry.result;
+      if (!mr) continue;
+      if (mr.hasDrm && mr.frameUrl) emeFrameUrls.add(mr.frameUrl);
+      for (const tr of mr.tracks || []) {
+        if (!isBlockedStream(tr.url)) {
+          const lang = inferSubtitleLang(tr.url, tr.lang, tr.label);
+          recordSubtitle(tabId, {
+            url: tr.url,
+            lang,
+            label: tr.label || lang.toUpperCase(),
+            format: subtitleFormatOf(tr.url, ''),
+          });
+        }
+      }
+    }
     for (const entry of results || []) {
       const r = entry && entry.result;
       if (!r) continue;
@@ -1182,6 +1384,9 @@
       const r = entry && entry.result;
       if (!r) continue;
       const fid = entry.frameId || 0;
+      for (const u of r.extraUrls || []) {
+        ingestUrl(u, '', null, fid, r.frameUrl);
+      }
       for (const v of r.videos || []) {
         if (v.src) ingestUrl(v.src, /\.(m3u8)(\?|$)/i.test(v.src) ? 'hls' : /\.(mpd)(\?|$)/i.test(v.src) ? 'dash' : 'file', null, fid, r.frameUrl);
       }
@@ -1195,6 +1400,14 @@
         }
         const k = res.initiatorType === 'video' && !/\.(m3u8|mpd)(\?|$)/i.test(res.url) ? 'file' : '';
         ingestUrl(res.url, k, res.size || null, fid, r.frameUrl);
+      }
+    }
+    for (const entry of mainResults || []) {
+      const mr = entry && entry.result;
+      if (!mr) continue;
+      const fid = entry.frameId || 0;
+      for (const u of mr.urls || []) {
+        ingestUrl(u, '', null, fid, mr.frameUrl);
       }
     }
 

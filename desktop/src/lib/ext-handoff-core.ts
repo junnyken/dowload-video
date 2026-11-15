@@ -58,6 +58,11 @@ const JUNK_TITLE_RE = /^(?:just a moment\.{0,3}|attention required!?.*|(?:video\
 const FILE_LIKE_TITLE_RE = /^[a-z0-9_-]+\.(?:m3u8?|mpd|mp4|ts|txt|html?|php)$/i;
 const GENERIC_TRAIL_RE = /^(?:watch(?:\s+online)?(?:\s+free)?(?:\s+hd)?|free\s+(?:hd|videos?|movies?|streaming)|full\s+hd(?:\s+online)?|stream(?:ing)?\s+online|xem\s+phim(?:\s+online)?(?:\s+(?:hd|miễn\s+phí|mới(?:\s+nhất)?|nhanh|vietsub))?|phim\s+(?:hd|mới(?:\s+nhất)?|hay|lẻ|bộ)|trang\s+chủ|home)$/i;
 const DOMAIN_TOKEN_RE = /\b[a-z0-9-]{2,}\.(?:com|net|org|io|vn|ws|tv|to|me|cc|co|xyz|pro|vip|club|top|site|online|stream|watch|live|today|one|fun|info|biz|asia|gg|la|sh|bz|su|icu|cyou|click|shop|lol|cfd)\b/i;
+const BRACKET_SERVER_NOISE_RE = /\[\s*(?:server\s*[^\]]*|vip|fhd|full\s*hd|vietsub|thuyết\s*minh|lồng\s*tiếng)\s*\]/gi;
+const CJK_BRACKET_NOISE_RE = /【\s*(?:高清|超清|蓝光|中字|生肉|熟肉|完整版)\s*】/g;
+const SHARE_COPY_NOISE_RE = /(?:复制打开抖音.*$|长按复制此条消息.*$|https?:\/\/\S+)/gu;
+const HASHTAG_CHAIN_RE = /(?:\s+#[\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+){2,}\s*$/u;
+const VIRAL_HASHTAG_RE = /(?:\s+#(?:fyp|foryou|foryoupage|xuhuong|viral|trending|tiktok|douyin|reels|shorts)\b)+\s*$/gi;
 
 function fnv1aHex(input: string, seed: number): string {
   let h = seed >>> 0;
@@ -118,11 +123,16 @@ function isSiteSuffixSegment(seg: string, stems: string[]): boolean {
   return false;
 }
 
-/** Strips notification counters, domain suffixes, and generic watch-online spam while keeping movie codes & episodes. */
+/** Strips notification counters, domain suffixes, hashtag chains, and server spam while keeping movie codes & episodes. */
 export function cleanMediaTitle(raw: string | null | undefined, pageUrl?: string | null): string {
-  let s = cleanLine(raw, 240);
+  let s = cleanLine(raw, 280);
   if (!s || /^https?:\/\//i.test(s)) return '';
   s = s.replace(/^(?:\(\d+\)\s*|▶\s*)+/, '').trim();
+  s = s.replace(SHARE_COPY_NOISE_RE, '').trim();
+  s = s.replace(BRACKET_SERVER_NOISE_RE, ' ').replace(CJK_BRACKET_NOISE_RE, ' ').trim();
+  const withoutHashtagChain = s.replace(HASHTAG_CHAIN_RE, '').replace(VIRAL_HASHTAG_RE, '').trim();
+  if (withoutHashtagChain.length >= 3) s = withoutHashtagChain;
+  s = s.replace(/#([\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+)/gu, '$1').trim();
   if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
 
   const stems = hostStems(pageUrl);
@@ -147,23 +157,55 @@ export function cleanMediaTitle(raw: string | null | undefined, pageUrl?: string
 const WIN_RESERVED_STEM = /^(CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])$/i;
 const SUB_LANG_RE = /^[a-z0-9_-]{1,16}$/i;
 
+function normalizeSeriesName(raw: string): string {
+  return raw
+    .replace(/[\s\-–—:|•([{/]+$/g, '')
+    .replace(/[<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Splits a multi-episode anime/series title into `{ seriesTitle, episodeLabel }` (`null` for standalone movies). */
 export function parseSeriesEpisode(rawTitle: string | null | undefined): { seriesTitle: string; episodeLabel: string } | null {
   const t = String(rawTitle || '').replace(/\s+/g, ' ').trim();
   if (!t || t.length < 5) return null;
+
+  const seRe = /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(?:ss?|season\s*)(\d{1,2})\s*[-–—:|•\s]*(?:episode|ep\.?|e)\s*(\d{1,4})\b/i;
+  const seMatch = seRe.exec(t);
+  if (seMatch) {
+    const series = normalizeSeriesName(seMatch[1]);
+    if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+      const epLabel = `S${String(Number(seMatch[2])).padStart(2, '0')}E${seMatch[3].length < 2 ? seMatch[3].padStart(2, '0') : seMatch[3]}`;
+      return { seriesTitle: series, episodeLabel: epLabel };
+    }
+  }
+
+  const ovaRe = /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(ova)\s*(\d{1,3}(?:\.\d+)?)\b/i;
+  const ovaMatch = ovaRe.exec(t);
+  if (ovaMatch) {
+    const series = normalizeSeriesName(ovaMatch[1]);
+    if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+      return { seriesTitle: series, episodeLabel: `OVA${ovaMatch[3].length < 2 ? ovaMatch[3].padStart(2, '0') : ovaMatch[3]}` };
+    }
+  }
+
+  const slashRe = /^(.+?)\s*\[(\d{1,3})\s*\/\s*\d{1,3}\](?:\s|$)/;
+  const slashMatch = slashRe.exec(t);
+  if (slashMatch) {
+    const series = normalizeSeriesName(slashMatch[1]);
+    if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
+      return { seriesTitle: series, episodeLabel: `E${slashMatch[2].padStart(2, '0')}` };
+    }
+  }
+
   const patterns = [
     /^(.+?)(?:\s*[-–—:|•]\s*|\s+)((?:(?:phần|phan|mùa|mua|season)\s*\d+\s*[-–—:|•]?\s*)?(?:tập|tap|episode|ep\.?)\s*\d+(?:\.\d+)?(?:\s*(?:end|cuối|cuoi|final))?)\b/i,
-    /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(s\d{1,2}\s*e\d{1,4})\b/i,
     /^(.+?)(?:\s*[-–—:|•]\s*|\s+)(第\s*\d+(?:\.\d+)?\s*[話话集])/u,
   ];
   for (const re of patterns) {
     const m = re.exec(t);
     if (!m) continue;
-    const series = m[1]
-      .replace(/[\s\-–—:|•([{/]+$/g, '')
-      .replace(/[<>:"/\\|?*]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const series = normalizeSeriesName(m[1]);
     const ep = m[2].replace(/\s+/g, ' ').trim();
     if (series.length >= 2 && series.length <= 90 && !/^\d+$/.test(series) && !DOMAIN_TOKEN_RE.test(series)) {
       return { seriesTitle: series, episodeLabel: ep };
