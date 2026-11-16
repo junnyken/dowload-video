@@ -60,17 +60,32 @@ function setDisabled() {
 
 type Answer = { status: number; data: unknown };
 
-/** Network failure -> status 0. A 401 with a token is retried once with a refreshed token. */
-async function call(path: string, method: 'GET' | 'POST', body?: unknown, headers?: Record<string, string>): Promise<Answer> {
+const QUOTA_TIMEOUT_MS = 4_500;
+const OFFLINE_COOLDOWN_MS = 30_000;
+let offlineUntil = 0;
+
+/** Network failure -> status 0 (with 30s cooldown circuit breaker). A 401 with a token is retried once with a refreshed token. */
+async function call(
+  path: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+  headers?: Record<string, string>,
+  bypassCooldown = false,
+): Promise<Answer> {
+  if (!bypassCooldown && Date.now() < offlineUntil) {
+    return { status: 0, data: null };
+  }
   try {
     let token = await getAccessToken();
-    let r = await apiFetch(path, { method, body, token, headers });
+    let r = await apiFetch(path, { method, body, token, headers, timeoutMs: QUOTA_TIMEOUT_MS });
     if (r.status === 401 && token) {
       token = await getAccessToken(true);
-      r = await apiFetch(path, { method, body, token, headers });
+      r = await apiFetch(path, { method, body, token, headers, timeoutMs: QUOTA_TIMEOUT_MS });
     }
+    offlineUntil = 0;
     return { status: r.status, data: r.data };
   } catch {
+    offlineUntil = Date.now() + OFFLINE_COOLDOWN_MS;
     return { status: 0, data: null };
   }
 }
@@ -85,7 +100,7 @@ let refreshing: Promise<void> | null = null;
 /** GET /client/quota: app start, after sign-in/out, after each settle. Also flushes the offline ledger. */
 export function refreshQuota(): Promise<void> {
   refreshing ??= (async () => {
-    const r = await call('/api/v1/client/quota', 'GET', undefined, await nameHeaders());
+    const r = await call('/api/v1/client/quota', 'GET', undefined, await nameHeaders(), true);
     if (r.status === 200) {
       const s = parseSnapshot(r.data);
       if (s) { setSnap(s); void flushOffline(); }

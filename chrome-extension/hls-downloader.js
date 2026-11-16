@@ -97,13 +97,21 @@
     await ensureHostReferer(url, job);
     const maxRetries = Math.max(1, Number(job && job.retries) || RETRIES);
     const baseDelay = Math.max(5, Number(job && job.retryBaseMs) || 400);
+    const segTimeoutMs = Math.max(500, Number(job && job.segmentTimeoutMs) || 25_000);
     let lastErr;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       if (job && job.cancelled) throw new JobError('cancelled');
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), segTimeoutMs) : null;
       try {
         const t0 = Date.now();
         const headers = range ? { Range: `bytes=${range[0]}-${range[0] + range[1] - 1}` } : {};
-        const r = await fetch(url, { credentials: 'include', headers, cache: 'no-store' });
+        const r = await fetch(url, {
+          credentials: 'include',
+          headers,
+          cache: 'no-store',
+          ...(ctrl ? { signal: ctrl.signal } : {}),
+        });
         if (r.status === 429 || r.status === 503) {
           const raHeader = r.headers && typeof r.headers.get === 'function' ? r.headers.get('retry-after') : '';
           const raMs = parseRetryAfterMs(raHeader);
@@ -113,12 +121,24 @@
           throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, retryAfterMs: raMs });
         }
         if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
-        const bytes = new Uint8Array(await r.arrayBuffer());
+        const ab = await (ctrl ? new Promise((resolveBuf, rejectBuf) => {
+          if (ctrl.signal.aborted) { rejectBuf(new Error('segment timeout')); return; }
+          const onAbort = () => rejectBuf(new Error('segment timeout'));
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+          r.arrayBuffer().then(
+            (buf) => { ctrl.signal.removeEventListener('abort', onAbort); resolveBuf(buf); },
+            (err) => { ctrl.signal.removeEventListener('abort', onAbort); rejectBuf(err); },
+          );
+        }) : r.arrayBuffer());
+        if (job && job.cancelled) throw new JobError('cancelled');
+        const bytes = new Uint8Array(ab);
         if (attempt === 0 && state && typeof state.onCleanSegment === 'function') {
           state.onCleanSegment(Date.now() - t0, bytes.byteLength);
         }
         return bytes;
       } catch (e) {
+        if (job && job.cancelled) throw new JobError('cancelled');
+        if (e instanceof JobError && e.reason === 'cancelled') throw e;
         lastErr = e;
         if (attempt === 0 && !(e && e.retryAfterMs) && state && typeof state.onSegmentRetry === 'function') {
           state.onSegmentRetry((e && e.status) || 0);
@@ -128,6 +148,8 @@
           await interruptibleWait(waitMs, state);
           if (state && state.stopAndSave) break;
         }
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
     throw new JobError('segment_failed', String((lastErr && lastErr.message) || lastErr), {

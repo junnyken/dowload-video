@@ -30,10 +30,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Generator, Optional
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # ---------------------------------------------------------------------------
 # Context variables — propagated automatically inside asyncio tasks / threads
@@ -407,59 +404,68 @@ def log_duration(
 # FastAPI middleware
 # ---------------------------------------------------------------------------
 
-class StructuredLoggingMiddleware(BaseHTTPMiddleware):
+class StructuredLoggingMiddleware:
     """
-    FastAPI / Starlette middleware that:
-    1. Extracts ``request.state.request_id`` set upstream by CorrelationIDMiddleware.
+    Pure ASGI middleware that:
+    1. Extracts ``state.request_id`` set upstream by CorrelationIDMiddleware.
     2. Populates structured-log context vars for the request lifetime.
-    3. On response: emits an ``http_request`` log line with method, path,
-       status_code, and duration_ms.
-    4. Clears context vars after the response, even on exception.
+    3. On response start: captures status_code without buffering response bodies.
+    4. Emits an ``http_request`` log line with duration_ms and always clears context.
     """
 
     def __init__(self, app: ASGIApp) -> None:
-        super().__init__(app)
+        self.app = app
         self._logger = get_logger("vidgrab.http")
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
-        correlation_id: Optional[str] = getattr(request.state, "request_id", None)
-        # Optional: extract tenant / user from auth headers / JWT if present
-        user_id: Optional[str] = None
-        tenant_id: Optional[str] = None
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
+        state = scope.get("state") or {}
+        correlation_id: Optional[str] = state.get("request_id")
         set_request_context(
             correlation_id=correlation_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
+            user_id=None,
+            tenant_id=None,
         )
 
+        method = scope.get("method", "GET")
+        path = scope.get("path", "")
+        status_code = 500
         start = time.perf_counter()
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message.get("status", 200))
+            await send(message)
+
         try:
-            response: Response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
         except Exception:
             elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
             self._logger.error(
                 "http_request",
                 extra={
-                    "method": request.method,
-                    "path": request.url.path,
+                    "method": method,
+                    "path": path,
                     "status_code": 500,
                     "duration_ms": elapsed_ms,
                 },
                 exc_info=True,
             )
-            clear_context()
             raise
         else:
             elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
             self._logger.info(
                 "http_request",
                 extra={
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": response.status_code,
+                    "method": method,
+                    "path": path,
+                    "status_code": status_code,
                     "duration_ms": elapsed_ms,
                 },
             )
+        finally:
             clear_context()
-            return response

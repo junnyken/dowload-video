@@ -5,17 +5,20 @@ import { noteApiAnswer } from './update';
 
 export type HttpResult<T = unknown> = { status: number; data: T | null };
 
-/** JSON request to the VidGrab API. Throws { code: 'network' } when unreachable. */
+const DEFAULT_TIMEOUT_MS = 12_000;
+
+/** JSON request to the VidGrab API. Throws { code: 'network' } when unreachable or timed out. */
 export async function apiFetch<T = unknown>(
   path: string,
   opts: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown; token?: string | null; headers?: Record<string, string>; timeoutMs?: number } = {},
 ): Promise<HttpResult<T>> {
   if (mockMode) return (await loadMock()).mockApi<T>(path, opts);
   const vg = await vgHeaders(); // X-VG-Device / X-VG-Client on every call (PLAN-32D §4)
-  // Optional cap: a host that accepts the connection but never answers would
-  // otherwise leave the caller spinning (13/10/2026: vibe1 host overloaded).
-  const ctl = opts.timeoutMs ? new AbortController() : null;
-  const tm = ctl ? setTimeout(() => ctl.abort(), opts.timeoutMs) : null;
+  // Always cap HTTP waits (13/10/2026: vibe1 host overloaded) so stalled
+  // sockets abort cleanly instead of leaving UI actions spinning forever.
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const ctl = timeoutMs > 0 ? new AbortController() : null;
+  const tm = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
   try {
     const res = await fetch(API_BASE + path, {
       signal: ctl?.signal,

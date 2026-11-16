@@ -91,16 +91,18 @@ run_once "timeout 150 python -m app.core.ytdlp_channel boot" || \
 # background probes never block active user downloads.
 run_bg "while true; do celery -A app.core.celery_app worker \
     -Q downloads,bulk,media,analysis \
-    --concurrency=${CELERY_CONCURRENCY:-4} \
+    --concurrency=${CELERY_CONCURRENCY:-2} \
     --max-tasks-per-child=40 \
+    --max-memory-per-child=450000 \
     --loglevel=info; echo '[entrypoint] celery worker exited — restarting in 3s'; sleep 3; done"
 
 # Partner API + background maintenance worker: handles partner queue plus
 # light/celery periodic probes so they never steal slots from bulk downloads.
 run_bg "while true; do celery -A app.core.celery_app worker \
     -Q partner,light,celery -n partner@%h \
-    --concurrency=${PARTNER_WORKER_CONCURRENCY:-2} \
+    --concurrency=${PARTNER_WORKER_CONCURRENCY:-1} \
     --max-tasks-per-child=40 \
+    --max-memory-per-child=350000 \
     --loglevel=info; echo '[entrypoint] partner worker exited — restarting in 3s'; sleep 3; done"
 
 run_bg "celery -A app.core.celery_app beat --loglevel=info"
@@ -117,4 +119,4 @@ run_bg "celery -A app.core.celery_app beat --loglevel=info"
 # 2 uvicorn workers + concurrency=2 celery balances throughput against this
 # single container also loading yt-dlp/ffmpeg per process. Re-tune again if RAM
 # pressure or crash-looping (repeated "Child process died" in logs) returns.
-run_fg "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips '*'"
+run_fg "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --timeout-keep-alive 15 --limit-concurrency 120 --proxy-headers --forwarded-allow-ips '*'"

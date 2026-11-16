@@ -435,6 +435,46 @@ assert(epSlash && epSlash.seriesTitle === 'Frieren' && epSlash.episodeLabel === 
     listedDrm,
   );
 
+  sessionStore.clear();
+  let oversizedCancelled = false;
+  let oversizedReaderUsed = false;
+  let oversizedTextUsed = false;
+  const sbOversized = makeSandbox(async (opts) => {
+    if (opts && opts.world === 'MAIN') return [{ frameId: 0, result: { frameUrl: 'https://huge.example/watch', urls: [], tracks: [], hasDrm: false } }];
+    return [{
+      frameId: 0,
+      result: {
+        frameUrl: 'https://huge.example/watch',
+        isTop: true,
+        docTitle: 'Oversized Manifest Guard',
+        ogTitle: 'Oversized Manifest Guard',
+        h1Title: '',
+        videos: [],
+        tracks: [],
+        extraUrls: ['https://cdn.example/huge/fake.m3u8'],
+        resources: [],
+      },
+    }];
+  });
+  sbOversized.AbortController = AbortController;
+  sbOversized.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k) => (String(k).toLowerCase() === 'content-length' ? String(50 * 1024 * 1024) : '') },
+    body: {
+      cancel: async () => { oversizedCancelled = true; },
+      getReader: () => { oversizedReaderUsed = true; return { read: async () => ({ done: true }), cancel: async () => {} }; },
+    },
+    text: async () => { oversizedTextUsed = true; return '#EXTM3U\n'; },
+  });
+  await sbOversized.vgSniffProbe(13);
+  await new Promise((r) => setTimeout(r, 30));
+  assert(
+    oversizedCancelled && !oversizedReaderUsed && !oversizedTextUsed,
+    'enrich fetchText aborts oversized 50 MB Content-Length manifest without buffering body into RAM',
+    { oversizedCancelled, oversizedReaderUsed, oversizedTextUsed },
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

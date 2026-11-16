@@ -863,10 +863,55 @@
     if (refererUrl && typeof root.vgEnsureStreamReferer === 'function') {
       await root.vgEnsureStreamReferer(url, refererUrl).catch(() => {});
     }
-    const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const text = await r.text();
-    return text.length > MAX_MANIFEST_BYTES ? text.slice(0, MAX_MANIFEST_BYTES) : text;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 8_000) : null;
+    try {
+      const r = await fetch(url, {
+        credentials: 'include',
+        cache: 'no-store',
+        ...(ctrl ? { signal: ctrl.signal } : {}),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const cl = r.headers && typeof r.headers.get === 'function'
+        ? Number(r.headers.get('content-length') || 0)
+        : 0;
+      if (Number.isFinite(cl) && cl > MAX_MANIFEST_BYTES * 4) {
+        if (r.body && typeof r.body.cancel === 'function') {
+          await r.body.cancel().catch(() => {});
+        }
+        throw new Error('manifest too large');
+      }
+      if (r.body && typeof r.body.getReader === 'function') {
+        const reader = r.body.getReader();
+        const chunks = [];
+        let total = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || !value.byteLength) continue;
+          const remaining = MAX_MANIFEST_BYTES - total;
+          if (value.byteLength >= remaining) {
+            chunks.push(value.subarray(0, remaining));
+            total += remaining;
+            await reader.cancel().catch(() => {});
+            break;
+          }
+          chunks.push(value);
+          total += value.byteLength;
+        }
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          merged.set(chunks[i], offset);
+          offset += chunks[i].byteLength;
+        }
+        return new TextDecoder().decode(merged);
+      }
+      const text = await r.text();
+      return text.length > MAX_MANIFEST_BYTES ? text.slice(0, MAX_MANIFEST_BYTES) : text;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   function hideChildren(tabId, items) {

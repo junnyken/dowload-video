@@ -22,6 +22,7 @@ import { auth } from './auth';
 import { quota, refreshQuota } from './quota';
 
 const aiTitleCache = new Map<string, string>();
+let aiDownUntil = 0;
 
 async function refineTitleWithAi(rawTitle: string, platform: string): Promise<string | null> {
   const raw = rawTitle.trim();
@@ -31,6 +32,7 @@ async function refineTitleWithAi(rawTitle: string, platform: string): Promise<st
   const key = `${platform}|${raw}`;
   const cached = aiTitleCache.get(key);
   if (cached) return cached;
+  if (Date.now() < aiDownUntil) return null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 700);
   try {
@@ -40,6 +42,7 @@ async function refineTitleWithAi(rawTitle: string, platform: string): Promise<st
       body: JSON.stringify({ title: raw.slice(0, 320), platform }),
       signal: ctrl.signal,
     });
+    aiDownUntil = 0;
     if (!resp.ok) return null;
     const j = await resp.json() as { filename_cleaned?: string };
     const cleaned = typeof j?.filename_cleaned === 'string' ? j.filename_cleaned.trim() : '';
@@ -51,7 +54,9 @@ async function refineTitleWithAi(rawTitle: string, platform: string): Promise<st
       aiTitleCache.set(key, cleaned);
       return cleaned;
     }
-  } catch { /* offline or timeout: 0ms fallback */ } finally {
+  } catch {
+    aiDownUntil = Date.now() + 45_000;
+  } finally {
     clearTimeout(timer);
   }
   return null;

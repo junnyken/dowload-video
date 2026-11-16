@@ -18,7 +18,23 @@ export function translateToVi(filePath: string, onProgress?: (pct: number) => vo
     read: api.subtitleRead,
     write: api.subtitleWrite,
     token: () => getAccessToken(),
-    fetch: async (path, init) => fetch(API_BASE + path, { ...init, headers: { ...(await vgHeaders()), ...(init.headers as Record<string, string>) } }),
+    fetch: async (path, init) => {
+      const ctl = new AbortController();
+      if (init?.signal) {
+        if (init.signal.aborted) ctl.abort();
+        else init.signal.addEventListener('abort', () => ctl.abort(), { once: true });
+      }
+      const tm = setTimeout(() => ctl.abort(), 20_000);
+      try {
+        return await fetch(API_BASE + path, {
+          ...init,
+          signal: ctl.signal,
+          headers: { ...(await vgHeaders()), ...(init.headers as Record<string, string>) },
+        });
+      } finally {
+        clearTimeout(tm);
+      }
+    },
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     onProgress,
   });

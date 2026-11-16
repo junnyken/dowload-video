@@ -2,6 +2,20 @@ const DEFAULT_API_BASE = 'https://dvid-api.vibe1.tinhgon.xyz';
 const WEB_BASE = 'https://dowloadvideo.io.vn'; // 5.22.4 (owner 27/10): the site's own domain; dvid.vibe1 stays trusted
 let API_BASE = DEFAULT_API_BASE;
 
+async function vgPopupFetch(url, init = {}, timeoutMs = 4500) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  if (ctrl && init.signal) {
+    if (init.signal.aborted) ctrl.abort();
+    else init.signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  }
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    return await fetch(url, { ...init, ...(ctrl ? { signal: ctrl.signal } : {}) });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ── i18n (Chrome built-in: _locales/vi + _locales/en, default_locale "en") ──
 // t(key, ...subs): one full sentence per message, "$1"-style placeholders.
 const t = (key, ...subs) => {
@@ -308,7 +322,7 @@ async function vgFetchUpdateInfo(now = Date.now()) {
   } catch { /* fall through to network */ }
   try {
     const base = await vgApiBase();
-    const r = await fetch(`${base}/api/v1/extension/version`, { headers: await vgAuthHeaders(), cache: 'no-store' });
+    const r = await vgPopupFetch(`${base}/api/v1/extension/version`, { headers: await vgAuthHeaders(), cache: 'no-store' });
     if (!r.ok) return null;
     const d = await r.json();
     const info = { at: now, version: d.version || null, minSupported: d.minSupported || null };
@@ -569,7 +583,7 @@ async function initWatchFollow(pageUrl) {
   const base = await vgApiBase();
   let st = null;
   try {
-    const r = await fetch(`${base}/api/v1/watch/status`, { headers: await vgAuthHeaders(), cache: 'no-store' });
+    const r = await vgPopupFetch(`${base}/api/v1/watch/status`, { headers: await vgAuthHeaders(), cache: 'no-store' });
     if (!r.ok) return;   // 404 watch_disabled / 401 / 5xx: the feature is not there for this user
     st = await r.json();
   } catch { return; }
@@ -1811,7 +1825,7 @@ async function loadTierQuota() {
       return;
     }
     try {
-      const r = await fetch(`${base}/api/v1/user/usage`, {
+      const r = await vgPopupFetch(`${base}/api/v1/user/usage`, {
         headers: await vgAuthHeaders(),
       });
       if (!r.ok) throw new Error();

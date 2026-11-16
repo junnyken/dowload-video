@@ -16,7 +16,7 @@ export function noteApiAnswer(status: number, data: unknown) {
 export async function checkUpdate(): Promise<UpdateInfo> {
   const [{ apiFetch }, { appVersion }] = await Promise.all([import('./http'), import('./device')]);
   try {
-    const r = await apiFetch('/api/v1/client/version');
+    const r = await apiFetch('/api/v1/client/version', { timeoutMs: 5_000 });
     if (r.status === 200) {
       const u = fromVersionInfo(await appVersion(), r.data);
       updateGate.set(u);

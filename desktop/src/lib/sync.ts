@@ -78,11 +78,11 @@ export async function syncNow(): Promise<void> {
           // filePath is deliberately NOT sent.
         })),
       };
-      let res = await apiFetch<{ ids?: string[] }>('/api/v1/client/history', { method: 'POST', body, token });
+      let res = await apiFetch<{ ids?: string[] }>('/api/v1/client/history', { method: 'POST', body, token, timeoutMs: 10_000 });
       if (res.status === 401) {
         token = await getAccessToken(true);
         if (!token) { syncState.set((s) => ({ ...s, status: 'signedout' })); return; }
-        res = await apiFetch('/api/v1/client/history', { method: 'POST', body, token });
+        res = await apiFetch('/api/v1/client/history', { method: 'POST', body, token, timeoutMs: 10_000 });
       }
       if (res.status === 503) {
         syncState.set((s) => ({ ...s, status: 'disabled' }));

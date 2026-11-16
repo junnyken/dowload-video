@@ -200,12 +200,20 @@ struct ToolVersions {
 
 // ---------------------------------------------------------------- helpers
 
-/// Hashes all sidecars (off the async runtime; ffmpeg alone is ~100 MB).
+/// Hashes all sidecars concurrently (off the async runtime; ~330 MB across 4 binaries).
 /// Every spawn goes through this, so a swapped binary is never executed.
 async fn verified_sidecars() -> CmdResult<Vec<PathBuf>> {
-    tauri::async_runtime::spawn_blocking(|| SIDECARS.iter().map(|n| checksum::verify(n)).collect::<Result<Vec<_>, _>>())
-        .await
-        .map_err(|e| CommandError::unknown(e.to_string()))?
+    tauri::async_runtime::spawn_blocking(|| {
+        std::thread::scope(|s| {
+            let handles: Vec<_> = SIDECARS.iter().map(|&n| s.spawn(move || checksum::verify(n))).collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap_or_else(|_| Err(CommandError::unknown("sidecar checksum thread panicked"))))
+                .collect::<Result<Vec<_>, _>>()
+        })
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?
 }
 
 /// The yt-dlp for one run (task #6333): the server-approved download when a

@@ -519,12 +519,28 @@ function vgStreamPaths(title, suffix = '', allowSeriesFolder = true) {
   };
 }
 
+async function vgFetchSubUrl(url, refererUrl, timeoutMs = 8000) {
+  if (!url || !/^https?:/i.test(url)) return null;
+  if (refererUrl) await vgEnsureStreamReferer(url, refererUrl).catch(() => {});
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const resp = await fetch(url, {
+      credentials: 'include',
+      cache: 'no-store',
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+    });
+    if (!resp || !resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function vgFetchSubtitleContent(sub, refererUrl) {
-  if (!sub || !sub.url || !/^https?:/i.test(sub.url)) return null;
-  if (refererUrl) await vgEnsureStreamReferer(sub.url, refererUrl).catch(() => {});
-  const resp = await fetch(sub.url, { credentials: 'include', cache: 'no-store' });
-  if (!resp.ok) return null;
-  const text = await resp.text();
+  const text = await vgFetchSubUrl(sub && sub.url, refererUrl, 8000);
   if (!text || text.length > 2 * 1024 * 1024) return null;
   if (sub.format === 'hls' || /^\s*#EXTM3U/m.test(text)) {
     const segUrls = [];
@@ -539,14 +555,16 @@ async function vgFetchSubtitleContent(sub, refererUrl) {
     if (!segUrls.length) return null;
     const parts = [];
     let totalChars = 0;
-    for (const u of segUrls) {
-      if (refererUrl) await vgEnsureStreamReferer(u, refererUrl).catch(() => {});
-      const sr = await fetch(u, { credentials: 'include', cache: 'no-store' }).catch(() => null);
-      if (!sr || !sr.ok) continue;
-      const st = await sr.text().catch(() => '');
-      totalChars += st.length;
-      if (totalChars > 2 * 1024 * 1024) break;
-      parts.push(st);
+    const SUB_BATCH = 6;
+    for (let i = 0; i < segUrls.length && totalChars <= 2 * 1024 * 1024; i += SUB_BATCH) {
+      const batch = segUrls.slice(i, i + SUB_BATCH);
+      const texts = await Promise.all(batch.map((u) => vgFetchSubUrl(u, refererUrl, 8000)));
+      for (const st of texts) {
+        if (!st) continue;
+        totalChars += st.length;
+        if (totalChars > 2 * 1024 * 1024) break;
+        parts.push(st);
+      }
     }
     const srt = self.VGSniff && typeof self.VGSniff.vttToSrt === 'function'
       ? self.VGSniff.vttToSrt(parts.join('\n\n'))
@@ -644,6 +662,10 @@ function vgCleanStreamTitle(item) {
   return cleaned || String(raw || 'video').trim() || 'video';
 }
 
+let _vgApiDownUntil = 0;
+function vgNoteApiDown(ms = 30_000) { _vgApiDownUntil = Date.now() + ms; }
+function vgNoteApiUp() { _vgApiDownUntil = 0; }
+
 const _vgAiTitleCache = new Map();
 
 async function vgRefineStreamTitleAi(item) {
@@ -653,6 +675,7 @@ async function vgRefineStreamTitleAi(item) {
   if (!tok) return localClean;
   const cacheKey = `${item.pageUrl || ''}|${localClean}`;
   if (_vgAiTitleCache.has(cacheKey)) return _vgAiTitleCache.get(cacheKey);
+  if (Date.now() < _vgApiDownUntil) return localClean;
   try {
     const base = await getApiBase();
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -667,6 +690,7 @@ async function vgRefineStreamTitleAi(item) {
       }),
       ...(ctrl ? { signal: ctrl.signal } : {}),
     }).finally(() => { if (timer) clearTimeout(timer); });
+    vgNoteApiUp();
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const d = await resp.json();
     const cleanMedia = self.VGSniff && typeof self.VGSniff.cleanMediaTitle === 'function'
@@ -695,7 +719,7 @@ async function vgRefineStreamTitleAi(item) {
       _vgAiTitleCache.set(cacheKey, aiTitle);
       return aiTitle;
     }
-  } catch { /* timeout/offline fallback */ }
+  } catch { vgNoteApiDown(45_000); }
   return localClean;
 }
 
@@ -728,11 +752,12 @@ async function vgCheckUniversalStreamTier(force = false) {
   try {
     const base = await getApiBase();
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 6000) : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 3500) : null;
     const r = await fetch(`${base}/api/v1/user/usage`, {
       headers: await authHeaders(),
       ...(ctrl ? { signal: ctrl.signal } : {}),
     }).finally(() => { if (timer) clearTimeout(timer); });
+    vgNoteApiUp();
     if (r.status === 401 || r.status === 403) {
       const denied = { allowed: false, mode: 'none', isTeam: false, authenticated: false, tier: 'guest', error: 'signin_required' };
       _vgUniversalTierCache = { token, at: Date.now(), res: denied };
@@ -754,6 +779,7 @@ async function vgCheckUniversalStreamTier(force = false) {
     }).catch(() => {});
     return res;
   } catch {
+    vgNoteApiDown(30_000);
     try {
       const c = await chrome.storage.local.get(['vg_cached_tier', 'vg_cached_universal', 'vg_cached_universal_mode', 'vg_cached_tier_tok']);
       if (c && c.vg_cached_tier_tok === token.slice(0, 16)) {
@@ -762,7 +788,9 @@ async function vgCheckUniversalStreamTier(force = false) {
           ? c.vg_cached_universal_mode
           : (c.vg_cached_universal && UNIVERSAL_STREAM_TIERS.has(tier) ? 'team' : (UNIVERSAL_PRO_TIERS.has(tier) ? 'pro' : 'none'));
         const allowed = mode === 'pro' || mode === 'team';
-        return { allowed, mode, isTeam: mode === 'team', authenticated: true, tier, error: allowed ? null : 'tier_required' };
+        const res = { allowed, mode, isTeam: mode === 'team', authenticated: true, tier, error: allowed ? null : 'tier_required' };
+        _vgUniversalTierCache = { token, at: Date.now() - 60_000, res };
+        return res;
       }
     } catch { /* ignore */ }
     return { allowed: false, mode: 'none', isTeam: false, authenticated: true, tier: 'free', error: 'tier_required' };
@@ -1343,13 +1371,18 @@ vgRenewSession();
 // cannot, hand the claim back and let the server do it (vgFetchAndSave).
 
 async function vgClaim(url) {
+  if (Date.now() < _vgApiDownUntil) return null;
   const base = await getApiBase();
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
   try {
     const r = await fetch(`${base}/api/v1/client/quota/claim`, {
       method: 'POST',
       headers: await authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ url, route: 'local', clientVersion: `ext-${chrome.runtime.getManifest().version}` }),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
     });
+    vgNoteApiUp();
     const d = await r.json().catch(() => null);
     if (r.status === 503 && d && d.error_code === 'client_quota_disabled') return { allowed: true, claimId: null };
     if (!r.ok || !d || d.allowed === false) {
@@ -1357,19 +1390,28 @@ async function vgClaim(url) {
     }
     return { allowed: true, claimId: d.claimId || null };
   } catch {
+    vgNoteApiDown(30_000);
     return null; // server unreachable: the direct download may still go (counted later by nobody — rare)
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
 async function vgSettle(claimId, outcome) {
   if (!claimId) return;
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
   try {
     const base = await getApiBase();
     await fetch(`${base}/api/v1/client/quota/settle`, {
-      method: 'POST', headers: await authHeaders({ 'Content-Type': 'application/json' }),
+      method: 'POST',
+      headers: await authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ claimId, outcome }),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
     });
-  } catch { /* the claim simply stays counted */ }
+  } catch { /* the claim simply stays counted */ } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // Each video opened for a list / bulk gets its OWN minimised window (closed

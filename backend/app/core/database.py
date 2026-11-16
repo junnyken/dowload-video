@@ -40,7 +40,7 @@ def _pg_client():
     def supabase_for_auth():
         _validate_credentials()
         return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY or SUPABASE_KEY)
-    return PgClient(_postgres_dsn(), maxconn=int(os.getenv("APP_DB_POOL_MAX", "8")),
+    return PgClient(_postgres_dsn(), maxconn=int(os.getenv("APP_DB_POOL_MAX", "5")),
                     supabase_factory=supabase_for_auth)
 
 

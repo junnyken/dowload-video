@@ -200,7 +200,7 @@ https://seg.cdn-d.example/chunk1.png
     crypto: crypto.webcrypto,
     TextDecoder, TextEncoder, Uint8Array, Promise, Map, Set, Error, Object, Number, String, Math, Array, RegExp,
     Date, Boolean, parseInt, parseFloat, isFinite,
-    setTimeout, clearTimeout,
+    setTimeout, clearTimeout, AbortController,
     URL: Object.assign(function (u, b) { return new URL(u, b); }, {
       createObjectURL: () => 'blob:chrome-extension://id/mock-mp4',
       revokeObjectURL: () => {},
@@ -1038,6 +1038,68 @@ https://token.cdn.example/s1.m4s?sig=fresh2
   assert(batchClosed && batchWrites.length === 1 && fSealed.size === 6 && Buffer.compare(Buffer.from(fSealed.data), Buffer.from([1, 2, 3, 4, 5, 6])) === 0,
     'sealPartial() flushes pending RAM buffer cleanly with exact bytes',
     { batchClosed, writes: batchWrites.length, size: fSealed.size });
+
+  console.log('[12] fetchBytes segmentTimeoutMs aborts stalled CDN fetch and recovers cleanly on retry');
+  const timeoutSeg = new Uint8Array([0x00, 0x00, 0x00, 0x10, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0]);
+  routes.set('https://timeout.cdn.example/vod.m3u8', new TextEncoder().encode(`#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4.0,
+https://timeout.cdn.example/stall0.m4s
+#EXT-X-ENDLIST
+`));
+  let stallAttempts = 0;
+  let abortedCount = 0;
+  const savedFetch12 = sandbox.fetch;
+  sandbox.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u === 'https://timeout.cdn.example/stall0.m4s') {
+      stallAttempts++;
+      if (stallAttempts === 1) {
+        return new Promise((_resolve, reject) => {
+          if (init && init.signal) {
+            const onAbort = () => { abortedCount++; reject(new Error('aborted')); };
+            if (init.signal.aborted) onAbort();
+            else init.signal.addEventListener('abort', onAbort, { once: true });
+          }
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => '' },
+        arrayBuffer: async () => timeoutSeg.buffer.slice(timeoutSeg.byteOffset, timeoutSeg.byteOffset + timeoutSeg.byteLength),
+      };
+    }
+    return savedFetch12(url, init);
+  };
+  try {
+    swMessages.length = 0;
+    listener({
+      target: 'offscreen',
+      type: 'HLS_START',
+      job: {
+        id: 'timeout-retry-1',
+        url: 'https://timeout.cdn.example/vod.m3u8',
+        title: 'Timeout Recovery Test',
+        retryBaseMs: 5,
+        retries: 2,
+        segmentTimeoutMs: 500,
+      },
+    }, {}, () => {});
+    for (let i = 0; i < 80 && !swMessages.some((m) => m.type === 'HLS_DONE' || m.type === 'HLS_FAILED'); i++) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    const timeoutDone = swMessages.find((m) => m.type === 'HLS_DONE');
+    const savedTimeout = opfsFiles.get('hls-timeout-retry-1.mp4');
+    assert(
+      !!timeoutDone && stallAttempts === 2 && abortedCount === 1
+        && savedTimeout && savedTimeout.byteLength === timeoutSeg.byteLength,
+      'stalled CDN segment aborts via AbortController at segmentTimeoutMs and succeeds on retry',
+      { timeoutDone, stallAttempts, abortedCount, err: swMessages.find((m) => m.type === 'HLS_FAILED') },
+    );
+  } finally {
+    sandbox.fetch = savedFetch12;
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

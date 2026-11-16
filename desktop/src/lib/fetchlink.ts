@@ -11,10 +11,10 @@ export async function fetchLink(it: { url: string; title: string; audioOnly: boo
   const body = fetchLinkBody(it.url, serverQuality(it));
   try {
     let token = await getAccessToken();
-    let r = await apiFetch('/api/v1/fetch-link', { method: 'POST', body, token, headers: { 'X-VG-Source': 'desktop' } });
+    let r = await apiFetch('/api/v1/fetch-link', { method: 'POST', body, token, headers: { 'X-VG-Source': 'desktop' }, timeoutMs: 45_000 });
     if (r.status === 401 && token) { // expired access token: refresh once
       token = await getAccessToken(true);
-      r = await apiFetch('/api/v1/fetch-link', { method: 'POST', body, token, headers: { 'X-VG-Source': 'desktop' } });
+      r = await apiFetch('/api/v1/fetch-link', { method: 'POST', body, token, headers: { 'X-VG-Source': 'desktop' }, timeoutMs: 45_000 });
     }
     return parseFetchLink(r.status, r.data, { apiBase: API_BASE, audioOnly: it.audioOnly, fallbackTitle: it.title });
   } catch {

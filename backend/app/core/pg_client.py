@@ -32,6 +32,7 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -103,8 +104,8 @@ class _Pool:
             with self._lock:
                 if self._pool is None or self._pid != os.getpid():
                     self._pool = pgpool.ThreadedConnectionPool(
-                        1, self.maxconn, self.dsn, connect_timeout=10,
-                        options="-c timezone=UTC -c statement_timeout=30000")
+                        1, self.maxconn, self.dsn, connect_timeout=5,
+                        options="-c timezone=UTC -c statement_timeout=15000")
                     self._pid = os.getpid()
                     self.columns.clear()
                     self.pkeys.clear()
@@ -115,8 +116,17 @@ class _Pool:
     def run(self, sql: str, params: Sequence[Any] = (), fetch: bool = True):
         import psycopg2  # noqa: PLC0415
         import psycopg2.extras  # noqa: PLC0415
+        from psycopg2.pool import PoolError  # noqa: PLC0415
         pool = self._get()
-        conn = pool.getconn()
+        conn = None
+        for attempt in range(25):
+            try:
+                conn = pool.getconn()
+                break
+            except PoolError as exc:
+                if attempt == 24:
+                    raise _api_error(exc) from exc
+                time.sleep(0.04)
         broken = False
         try:
             conn.autocommit = True
@@ -127,7 +137,8 @@ class _Pool:
             broken = conn.closed != 0 or isinstance(exc, (psycopg2.OperationalError, psycopg2.InterfaceError))
             raise _api_error(exc) from exc
         finally:
-            pool.putconn(conn, close=broken)
+            if conn is not None:
+                pool.putconn(conn, close=broken)
 
     # catalog
     def table_columns(self, table: str) -> Dict[str, str]:

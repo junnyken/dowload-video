@@ -26,11 +26,14 @@ if _SENTRY_DSN:
     )
     print(f"[Sentry] Initialized (DSN configured)")
 
+import asyncio
+import datetime
 import re
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -56,6 +59,11 @@ limiter = Limiter(
     key_func=rate_limit_key,
     default_limits=["60/minute"],
     storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+    storage_options={
+        "socket_connect_timeout": 1,
+        "socket_timeout": 1,
+        "retry_on_timeout": False,
+    },
     # Survive a Redis outage instead of taking the whole API down with it.
     #
     # Previously neither option was set, so a redis.ConnectionError propagated
@@ -79,42 +87,60 @@ limiter = Limiter(
 _DAILY_QUOTA = int(os.getenv("DAILY_QUOTA_PER_IP", "0"))
 _QUOTA_ENDPOINTS = {"/api/v1/fetch-link", "/api/v1/bulk-download"}
 
-class DailyIPQuotaMiddleware(BaseHTTPMiddleware):
+
+def _incr_ip_quota(redis_key: str) -> int:
+    from app.core.redis_client import get_redis
+
+    rc = get_redis()
+    count = rc.incr(redis_key)
+    if count == 1:
+        rc.expire(redis_key, 86400)  # expire at end of UTC day
+    return int(count)
+
+
+class DailyIPQuotaMiddleware:
     """Block IPs that exceed DAILY_QUOTA_PER_IP requests/day (Redis counter)."""
 
-    async def dispatch(self, request: Request, call_next):
-        if _DAILY_QUOTA <= 0 or request.method != "POST":
-            return await call_next(request)
-        if request.url.path not in _QUOTA_ENDPOINTS:
-            return await call_next(request)
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] != "http"
+            or _DAILY_QUOTA <= 0
+            or scope.get("method") != "POST"
+            or scope.get("path") not in _QUOTA_ENDPOINTS
+        ):
+            await self.app(scope, receive, send)
+            return
         # API-key calls are metered per account (monthly API quota + the
         # account's daily downloads); an invalid key is refused with 401.
         # A verified key or signed-in account is metered per key / per
         # account (quotas.py); the per-IP day quota is for guests only —
         # otherwise a company's staff behind one office IP share it.
+        request = Request(scope)
         if has_verified_identity(request):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         ip = get_client_ip(request)
-        today = __import__("datetime").date.today().isoformat()
+        today = datetime.date.today().isoformat()
         redis_key = f"quota:{ip}:{today}"
 
         try:
-            import redis as _redis_lib
-            _r = _redis_lib.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
-            count = _r.incr(redis_key)
-            if count == 1:
-                _r.expire(redis_key, 86400)   # expire at end of UTC day
+            count = await asyncio.wait_for(asyncio.to_thread(_incr_ip_quota, redis_key), timeout=1.5)
             if count > _DAILY_QUOTA:
                 from fastapi.responses import JSONResponse
-                return JSONResponse(
+                resp = JSONResponse(
                     status_code=429,
                     content={"detail": f"Daily limit of {_DAILY_QUOTA} requests reached. Try again tomorrow."},
                 )
+                await resp(scope, receive, send)
+                return
         except Exception:
-            pass   # Redis unavailable → allow request (fail open)
+            pass  # Redis unavailable -> allow request (fail open)
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 from app.core.database import init_db
 from app.core.structured_log import configure_logging, StructuredLoggingMiddleware
@@ -136,36 +162,59 @@ from app.api import webhook as webhook_api
 
 
 # ── Correlation ID Middleware ────────────────────────────────────────
-class CorrelationIDMiddleware(BaseHTTPMiddleware):
+class CorrelationIDMiddleware:
     """
     Attach a unique X-Request-ID to every request/response pair.
     Clients may supply their own; if absent, one is generated.
     The ID is echoed back in the response header for easy log correlation.
     """
-    async def dispatch(self, request: Request, call_next):
-        req_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
-        request.state.request_id = req_id
-        response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = req_id
-        return response
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        req_id = Headers(scope=scope).get("X-Request-ID") or uuid.uuid4().hex[:12]
+        scope.setdefault("state", {})["request_id"] = req_id
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["X-Request-ID"] = req_id
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 # ── Security Headers Middleware ──────────────────────────────────────
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+class SecurityHeadersMiddleware:
     """Add security-related headers to every response."""
-    async def dispatch(self, request: Request, call_next):
-        response: Response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # Hide server technology
-        if "server" in response.headers:
-            del response.headers["server"]
-        if "x-powered-by" in response.headers:
-            del response.headers["x-powered-by"]
-        return response
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-Frame-Options"] = "DENY"
+                headers["X-XSS-Protection"] = "1; mode=block"
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+                headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+                # Hide server technology
+                if "server" in headers:
+                    del headers["server"]
+                if "x-powered-by" in headers:
+                    del headers["x-powered-by"]
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 WATCHDOG_BEAT_KEY = "vidgrab:watchdog_last_run_at"
@@ -374,11 +423,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if is_dev else None,
 )
 
-# Register Security Headers
-app.add_middleware(CorrelationIDMiddleware)
+# Register Security Headers & Structured Logging inside Correlation ID
+# (last added wraps outermost, so CorrelationID runs first and sets state.request_id)
 app.add_middleware(SecurityHeadersMiddleware)
 # Phase 17: structured JSON logging per request (correlation ID → JSON log)
 app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(CorrelationIDMiddleware)
 
 # Register Per-IP daily quota (no-op when DAILY_QUOTA_PER_IP=0)
 app.add_middleware(DailyIPQuotaMiddleware)
@@ -870,17 +920,29 @@ async def _detailed_health():
     pending_tasks_set = -1
     last_cleanup_at   = None
     try:
-        import redis as _r
-        rc = _r.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-        rc.ping()
-        redis_ok      = True
-        queue_depth   = rc.llen("celery")
-        downloads_queue = rc.llen("downloads")
-        partner_queue = rc.llen("partner")
-        pending_tasks_set = rc.scard("vidgrab:pending_tasks")
-        last_cleanup_raw = rc.get("vidgrab:last_cleanup_at")
-        if last_cleanup_raw:
-            last_cleanup_at = last_cleanup_raw if isinstance(last_cleanup_raw, str) else last_cleanup_raw.decode()
+        def _read_redis_health():
+            from app.core.redis_client import get_redis as _gr_health
+
+            rc = _gr_health()
+            rc.ping()
+            qd = rc.llen("celery")
+            dq = rc.llen("downloads")
+            pq = rc.llen("partner")
+            pts = rc.scard("vidgrab:pending_tasks")
+            lcr = rc.get("vidgrab:last_cleanup_at")
+            lca = (lcr if isinstance(lcr, str) else lcr.decode()) if lcr else None
+            return qd, dq, pq, pts, lca
+
+        import asyncio as _aio_health
+
+        (
+            queue_depth,
+            downloads_queue,
+            partner_queue,
+            pending_tasks_set,
+            last_cleanup_at,
+        ) = await _aio_health.wait_for(_aio_health.to_thread(_read_redis_health), timeout=2.5)
+        redis_ok = True
     except Exception:
         pass
 
