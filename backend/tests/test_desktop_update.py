@@ -12,7 +12,7 @@ import pytest
 
 from app.core import desktop_release as dr
 
-REPO = "junnyken/dowload-video"
+REPO = "junnyken/vidgrab-releases"
 SIG = base64.b64encode(
     b"untrusted comment: signature from tauri secret key\n"
     b"RURjNAIiy1FN+Kc0000000000000000000000000000000000000000000000000000000000000000000000000000000000\n"
@@ -145,11 +145,11 @@ def test_draft_prerelease_and_offhost_assets_are_refused(gh):
 
 
 def test_repo_override(gh, monkeypatch):
-    monkeypatch.setenv("DESKTOP_RELEASE_REPO", "junnyken/vidgrab-releases")
-    f = Fake(release(repo="junnyken/vidgrab-releases"))
+    monkeypatch.setenv("DESKTOP_RELEASE_REPO", "junnyken/dowload-video")
+    f = Fake(release(repo="junnyken/dowload-video"))
     out = offer(f)
-    assert f.repos == ["junnyken/vidgrab-releases"]
-    assert out["url"].startswith("https://github.com/junnyken/vidgrab-releases/releases/download/v0.11.1/")
+    assert f.repos == ["junnyken/dowload-video"]
+    assert out["url"].startswith("https://github.com/junnyken/dowload-video/releases/download/v0.11.1/")
     # an asset of the OLD repo is not accepted once the repo is switched
     dr._mem.update(at=0.0, ttl=0, val=None)
     dr._last_good_mem.clear()   # no earlier good release either (it would be answered instead, rightly)

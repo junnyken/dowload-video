@@ -348,7 +348,7 @@ export default function ApiKeysPage() {
               <p className="text-[11px] text-fg-muted mt-0.5">{lang === 'en' ? 'Web UI only' : 'Chỉ tải trên Web'}</p>
             </div>
             <div className="p-3 rounded-xl bg-accent-soft border border-accent">
-              <p className="text-[11px] font-bold text-accent-text">Pro ($6.99/mo)</p>
+              <p className="text-[11px] font-bold text-accent-text">Pro ($3.99/mo)</p>
               <p className="text-sm font-extrabold text-fg mt-0.5">3,000 calls/mo</p>
               <p className="text-[11px] text-fg-2 mt-0.5">{lang === 'en' ? 'Up to 3 API Keys' : 'Tối đa 3 API Key'}</p>
             </div>
@@ -363,7 +363,7 @@ export default function ApiKeysPage() {
               href={lp('/checkout')}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-xs font-bold hover:opacity-90 transition shadow-sm"
             >
-              {lang === 'en' ? 'Upgrade to Pro ($6.99/mo) →' : 'Nâng cấp Pro ($6.99/tháng) →'}
+              {lang === 'en' ? 'Upgrade to Pro ($3.99/mo) →' : 'Nâng cấp Pro ($3.99/tháng) →'}
             </a>
             <a
               href={lp('/pricing')}

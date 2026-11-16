@@ -1068,7 +1068,7 @@ async def package_zip(
     Supported template tokens: {title}, {platform}_{title}, {index:02d}_{title}, {date}_{title}
     """
     _enforce_paid_processing_tier(
-        request, user, ("pro", "team", "enterprise", "api"), "Đóng gói tải trọn bộ Album/Batch .ZIP"
+        request, user, ("starter", "pro", "team", "enterprise", "api", "admin"), "Đóng gói tải trọn bộ Album/Batch .ZIP"
     )
     paths_list = list(payload.paths or [])
     image_urls_list = list(payload.image_urls or [])

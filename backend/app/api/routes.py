@@ -1755,9 +1755,9 @@ async def bulk_zip(
                 "error":         ERR_BULK_ZIP,
                 "feature":       "bulk_zip",
                 "current_tier":  _zip_perm["tier"] if _zip_perm else "free",
-                "required_tier": "pro",
-                "upgrade_url":   "/upgrade",
-                "message":       "Tải ZIP yêu cầu gói Pro. Nâng cấp để tải toàn bộ batch về 1 file ZIP.",
+                "required_tier": "starter",
+                "upgrade_url":   "/pricing",
+                "message":       "Tải ZIP yêu cầu gói trả phí (Starter / Pro / Team). Nâng cấp để tải toàn bộ batch về 1 file ZIP.",
             },
         )
     
@@ -1839,9 +1839,9 @@ async def zip_stream(
                 "error":         ERR_BULK_ZIP,
                 "feature":       "bulk_zip",
                 "current_tier":  _zip_perm["tier"] if _zip_perm else "free",
-                "required_tier": "pro",
-                "upgrade_url":   "/upgrade",
-                "message":       "Tải ZIP yêu cầu gói Pro. Nâng cấp để tải toàn bộ batch về 1 file ZIP.",
+                "required_tier": "starter",
+                "upgrade_url":   "/pricing",
+                "message":       "Tải ZIP yêu cầu gói trả phí (Starter / Pro / Team). Nâng cấp để tải toàn bộ batch về 1 file ZIP.",
             },
         )
 

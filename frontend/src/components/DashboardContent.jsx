@@ -135,7 +135,7 @@ export default function DashboardContent() {
    * profiles through the service role) and caches for 5 minutes.
    */
   const { tier: userTier } = useEntitlement();
-  const isProUser = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const isProUser = ['pro', 'team', 'enterprise', 'api', 'admin'].includes(userTier);
   const isEnUi = getLang() === 'en';
 
   const _historyAuthHeaders = session?.access_token
@@ -1277,15 +1277,8 @@ export default function DashboardContent() {
   };
 
   // ── Upgrade #4: TikTok / Douyin Photo Carousel Download ─────
-  const isPaidUser = ['starter', 'pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const isPaidUser = ['starter', 'pro', 'team', 'enterprise', 'api', 'admin'].includes(userTier);
   const handleSingleSlideDownload = (imgUrl, index) => {
-    if (!isPaidUser) {
-      setUpgradeErrorCode('tier_required_feature');
-      setShowUpgradeModal(true);
-      trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_locked' });
-      setPaywallTrigger('tier_required_feature');
-      return;
-    }
     const baseTitle = (videoInfo?.title || 'slide').slice(0, 60);
     const downloadUrl = `${API_BASE}/api/v1/download-thumbnail?url=${encodeURIComponent(imgUrl)}&filename=${encodeURIComponent(`${baseTitle}-${index + 1}`)}`;
     const a = document.createElement('a');
@@ -1297,7 +1290,7 @@ export default function DashboardContent() {
   const handleCarouselZipDownload = async () => {
     const imgs = videoInfo?.images || [];
     if (!imgs.length) return;
-    if (!isProUser) {
+    if (!isPaidUser) {
       setUpgradeErrorCode('bulk_zip_pro');
       setShowUpgradeModal(true);
       trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_zip' });
@@ -1479,7 +1472,7 @@ export default function DashboardContent() {
 
     setDownloadingChapter(chapter.title);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/trim`, {
+      const res = await fetch(`${API_BASE}/api/v1/trim`, withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1489,7 +1482,7 @@ export default function DashboardContent() {
           filename: chapter.title,
           is_audio: videoInfo?.is_audio_only || false,
         }),
-      });
+      }));
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Chapter download failed');
       if (data.success && (data.trimmed_file_id || data.trimmed_file_path)) {
@@ -2800,41 +2793,26 @@ export default function DashboardContent() {
                       {isEnUi
                         ? `Photo Slideshow (${videoInfo.images.length} HD Photos)`
                         : `Album ảnh trượt TikTok / Douyin (${videoInfo.images.length} ảnh gốc HD)`}
-                      {!isPaidUser && (
-                        <span className="bg-accent text-accent-fg text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {isEnUi ? '🔒 Starter / Pro' : '🔒 Gói trả phí'}
-                        </span>
-                      )}
                     </h5>
                     <p className="text-xs text-fg-muted mt-0.5">
                       {!isPaidUser
                         ? (isEnUi
-                          ? 'Photo Slideshow download is locked for Guest & Free accounts. Upgrade to Starter or Pro to download HD photos & .ZIP.'
-                          : 'Tính năng tải Album ảnh trượt TikTok/Douyin đã khóa với Khách & tài khoản Free. Nâng cấp lên Starter hoặc Pro để mở khóa.')
+                          ? 'Free: download single HD photos & MP3 · Starter / Pro / Team: download full album .ZIP.'
+                          : 'Miễn phí: tải lẻ từng ảnh HD & MP3 · Starter / Pro / Team: tải trọn bộ Album .ZIP.')
                         : (isEnUi
-                          ? 'Download individual photos (Starter) or grab the full album as a single .ZIP file (Pro).'
-                          : 'Tải lẻ từng ảnh gốc (Starter) hoặc tải trọn bộ Album nén .ZIP chỉ với 1 chạm (Pro).')}
+                          ? 'Download individual photos or grab the full album as a single .ZIP archive.'
+                          : 'Tải lẻ từng ảnh gốc hoặc tải trọn bộ Album nén .ZIP chỉ với 1 chạm.')}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {videoInfo.audio_url && (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!isPaidUser) {
-                            setUpgradeErrorCode('tier_required_feature');
-                            setShowUpgradeModal(true);
-                            trackEvent(EVENT.PAYWALL_SEEN, { trigger: 'photo_carousel_audio_locked' });
-                            setPaywallTrigger('tier_required_feature');
-                            return;
-                          }
-                          handleFormatDownload({ url: videoInfo.audio_url, ext: 'mp3', label: 'Music MP3' });
-                        }}
+                        onClick={() => handleFormatDownload({ url: videoInfo.audio_url, ext: 'mp3', label: 'Music MP3' })}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-2 text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
                       >
                         <Music className="w-3.5 h-3.5 text-accent-text" />
                         {isEnUi ? 'Download Audio MP3' : 'Tải nhạc nền MP3'}
-                        {!isPaidUser && <Lock className="w-3 h-3 text-fg-muted" />}
                       </button>
                     )}
                     <button
@@ -2847,14 +2825,16 @@ export default function DashboardContent() {
                       {isEnUi
                         ? `Download All ${videoInfo.images.length} Photos (.ZIP)`
                         : `Tải tất cả ${videoInfo.images.length} ảnh (.ZIP)`}
-                      <span className="bg-black/25 text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+                      {!isPaidUser && (
+                        <span className="bg-black/25 text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">ZIP</span>
+                      )}
                     </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[420px] overflow-y-auto pr-1">
                   {videoInfo.images.map((imgUrl, idx) => (
                     <div key={idx} className="group relative rounded-xl overflow-hidden border border-line bg-surface-2 aspect-[3/4]">
-                      <img src={imgUrl} alt={`Slide ${idx + 1}`} className={`w-full h-full object-cover ${!isPaidUser ? 'blur-[1.5px] opacity-80' : ''}`} loading="lazy" />
+                      <img src={imgUrl} alt={`Slide ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
                       <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-white">
                         #{idx + 1}
                       </span>
@@ -2863,10 +2843,8 @@ export default function DashboardContent() {
                         onClick={() => handleSingleSlideDownload(imgUrl, idx)}
                         className="absolute inset-x-2 bottom-2 py-1.5 rounded-lg bg-black/75 hover:bg-accent text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
-                        {!isPaidUser ? <Lock className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-                        {!isPaidUser
-                          ? (isEnUi ? 'Unlock Photo' : 'Mở khóa tải ảnh')
-                          : (isEnUi ? 'Save Photo' : 'Tải ảnh')}
+                        <Download className="w-3.5 h-3.5" />
+                        {isEnUi ? 'Save Photo' : 'Tải ảnh'}
                       </button>
                     </div>
                   ))}
@@ -3840,6 +3818,16 @@ export default function DashboardContent() {
                   videoInfo={videoInfo}
                   mediaUrl={videoInfo?.direct_mp4_url || videoInfo?.original_url}
                   userTier={userTier}
+                  onApplyTrim={({ start, end }) => {
+                    if (start != null) setTrimStart(start);
+                    if (end != null) setTrimEnd(end);
+                    setProcessingHubTab('trim');
+                    setShowProcessingHub(true);
+                  }}
+                  onApplyGif={() => {
+                    setProcessingHubTab('gif');
+                    setShowProcessingHub(true);
+                  }}
                   onRequireUpgrade={() => {
                     setUpgradeErrorCode('tier_required_feature');
                     setShowUpgradeModal(true);

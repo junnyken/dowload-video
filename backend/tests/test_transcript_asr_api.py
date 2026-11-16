@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app as fastapi_app
@@ -13,8 +14,24 @@ client = TestClient(fastapi_app, raise_server_exceptions=False)
 
 def _with_identity(user_id):
     from app.api.transcript_translate import resolve_identity as _real_resolve
+    from app.core.auth_middleware import get_optional_user as _real_auth
     fastapi_app.dependency_overrides[_real_resolve] = lambda: user_id
+    fastapi_app.dependency_overrides[_real_auth] = lambda: ({"id": user_id} if user_id else None)
     return _real_resolve
+
+
+def _clear_identity():
+    from app.api.transcript_translate import resolve_identity as _real_resolve
+    from app.core.auth_middleware import get_optional_user as _real_auth
+    fastapi_app.dependency_overrides.pop(_real_resolve, None)
+    fastapi_app.dependency_overrides.pop(_real_auth, None)
+
+
+@pytest.fixture(autouse=True)
+def _mock_paid_tier(monkeypatch):
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda _uid: "pro")
+    yield
+    _clear_identity()
 
 
 def _mock_ffprobe(duration_sec: float):

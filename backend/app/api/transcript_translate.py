@@ -65,6 +65,18 @@ _TARGET_LANGS = {
 # of room, not "1000 vs 4000" which silently blocked the advertised max.
 _DAILY_CUE_LIMIT = int(os.environ.get("TRANSCRIPT_TRANSLATE_DAILY_CUE_LIMIT", "6000"))
 
+
+def daily_cue_limit_for_tier(tier: str | None) -> int:
+    """Return daily translated-cue quota matching advertised Starter/Pro/Team caps."""
+    t = (tier or "free").lower()
+    if t in ("team", "enterprise", "api", "admin"):
+        return max(15000, _DAILY_CUE_LIMIT)
+    if t == "pro":
+        return _DAILY_CUE_LIMIT
+    if t == "starter":
+        return 2000
+    return 0
+
 # Storage layout: {_DOWNLOAD_DIR}/transcript_jobs/{job_id}/input{ext} and
 # .../translated{ext}. Reuses the same _DOWNLOAD_DIR base pattern as
 # app.api.flow_cleanup (three levels up from this file -> backend/downloads).
@@ -233,7 +245,7 @@ async def upload_transcripts(
 
     from app.core.quotas import get_user_tier  # noqa: PLC0415
     user_tier = get_user_tier(str(auth_uid)) or "free"
-    if user_tier not in ("starter", "pro", "team", "enterprise", "api"):
+    if user_tier not in ("starter", "pro", "team", "enterprise", "api", "admin"):
         raise HTTPException(
             status_code=402,
             detail="Tính năng Dịch file Phụ đề hàng loạt bằng AI (.SRT/.VTT) chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
@@ -241,6 +253,7 @@ async def upload_transcripts(
 
     user_id = str(auth_uid)
     quota_key = str(auth_uid)
+    cue_daily_limit = daily_cue_limit_for_tier(user_tier)
 
     from app.services.subtitle_format import parse_srt_with_skip_count, parse_vtt_with_skip_count
 
@@ -345,7 +358,7 @@ async def upload_transcripts(
         try:
             reserve_resp = db.rpc(
                 "reserve_transcript_translation_usage",
-                {"p_user_id": quota_key, "p_cues": cue_count, "p_limit": _DAILY_CUE_LIMIT},
+                {"p_user_id": quota_key, "p_cues": cue_count, "p_limit": cue_daily_limit},
             ).execute()
             reserved = bool(reserve_resp.data)
         except Exception as exc:
@@ -359,7 +372,7 @@ async def upload_transcripts(
             rejected.append({
                 "filename": fname,
                 "reason": (
-                    f"Vượt quá hạn mức dịch trong ngày ({_DAILY_CUE_LIMIT} dòng/ngày). "
+                    f"Vượt quá hạn mức dịch trong ngày ({cue_daily_limit} dòng/ngày). "
                     "Thử lại vào ngày mai."
                 ),
             })

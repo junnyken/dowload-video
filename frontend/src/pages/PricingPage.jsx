@@ -230,7 +230,7 @@ function PaymentSection({ pay, pro, period, autoCheckout }) {
     );
   }
 
-  const isPro = me?.tier === 'pro';
+  const isPro = ['starter', 'pro', 'team', 'enterprise', 'admin'].includes(me?.tier);
   const checkoutHref = `${lang === 'en' ? '/en' : ''}/checkout`;
   return (
     <section className={box} aria-labelledby="pay-h">

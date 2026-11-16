@@ -9,7 +9,7 @@ import pytest
 
 from app.core import desktop_release as dr
 
-REPO = "junnyken/dowload-video"
+REPO = "junnyken/vidgrab-releases"
 URL_10 = f"https://github.com/{REPO}/releases/download/v0.10.0/VidGrab_0.10.0_x64-setup.exe"
 
 

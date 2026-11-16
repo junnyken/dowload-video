@@ -98,6 +98,7 @@ export function PlatformsPage() {
 
       <PlatformDetailDrawer
         detail={detailLoading ? null : (detail ?? null)}
+        summaryRow={selected}
         onClose={() => setSelected(null)}
         onAction={handleAction}
       />

@@ -13,25 +13,25 @@
     "title": "Choose a Pro plan (USD)",
     "month": {
       "name": "Pro Monthly",
-      "price": "$6.99",
-      "period": "/month",
-      "desc": "Full Pro Studio + 3,000 API calls/month for 30 days"
+      "price": "$3.99",
+      "period": "/1st month ($5.99 renewal)",
+      "desc": "Full Pro Studio + 3,000 API calls/month (+500 first-purchase bonus)"
     },
     "year": {
       "name": "Pro Yearly",
-      "price": "$49",
+      "price": "$39",
       "period": "/year",
-      "desc": "Save 42% ($4.08/mo) — best value for creators & developers",
-      "badge": "Save 42%"
+      "desc": "Save 45% ($3.25/mo) — best value for creators & developers",
+      "badge": "Save 45%"
     },
     "features": {
       "title": "All Pro features unlocked",
       "items": [
-        "200 downloads/day · 4K/8K Ultra HD",
+        "300 downloads/day · 4K Ultra HD",
         "Developer REST API (3,000 calls/mo)",
         "Anti-Detect Reup Cleaner (MD5 + Flip)",
         "Burn-in Subtitles (Hardsub MP4)",
-        "1-Click Photo Carousel & Playlist .ZIP",
+        "Floating <video> Hover Pill + HLS 1080p",
         "Clip Video up to 10 mins (Full HD/4K)"
       ]
     },

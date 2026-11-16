@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '../../utils/cn'
 import { NO_TRAFFIC_HINT, safeRate } from '../../utils/rate'
-import type { PlatformDetail, RecentJob, ErrorBreakdownItem, PhaseStatItem } from './platform.types'
+import type { PlatformDetail, PlatformHealthRow, RecentJob, ErrorBreakdownItem, PhaseStatItem } from './platform.types'
 import { PlatformStatusBadge, CircuitStatePill } from './PlatformStatusBadge'
 
 // ─── Tab definitions ───────────────────────────────────────────────────────────
@@ -232,12 +232,14 @@ function ConfigTab({ config }: { config: PlatformDetail['config'] }) {
 
 interface PlatformDetailDrawerProps {
   detail: PlatformDetail | null
+  summaryRow?: PlatformHealthRow | null
   onClose: () => void
   onAction?: (platform: string, action: string) => void
 }
 
 export function PlatformDetailDrawer({
   detail,
+  summaryRow,
   onClose,
   onAction,
 }: PlatformDetailDrawerProps) {
@@ -353,15 +355,15 @@ export function PlatformDetailDrawer({
                     items={[
                       {
                         label: 'Fail Rate (1h)',
-                        value: `${MOCK_FAIL_RATE(detail.platform)}%`,
+                        value: summaryRow?.failRate1h != null ? `${summaryRow.failRate1h}%` : '—',
                       },
                       {
                         label: 'Jobs (1h)',
-                        value: MOCK_TOTAL_JOBS(detail.platform).toString(),
+                        value: String(summaryRow?.totalJobs1h ?? detail.recentJobs.length),
                       },
                       {
                         label: 'Last Success',
-                        value: MOCK_LAST_SUCCESS(detail.platform),
+                        value: summaryRow?.lastSuccessAt || '—',
                       },
                       {
                         label: 'Error Types',
@@ -378,18 +380,12 @@ export function PlatformDetailDrawer({
                     <div className="flex flex-wrap gap-2">
                       {(detail.circuitState === 'open' || detail.circuitState === 'half') && (
                         <button
-                          onClick={() => onAction?.(detail.platform, 'reset_circuit')}
+                          onClick={() => onAction?.(detail.platform, 'reset')}
                           className="rounded-control border border-success/30 bg-success-soft px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
                         >
                           Reset Circuit
                         </button>
                       )}
-                      <button
-                        onClick={() => onAction?.(detail.platform, 'test_connection')}
-                        className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
-                      >
-                        Test Connection
-                      </button>
                       <Link
                         to={`/vid-admin/jobs?platform=${detail.platform}`}
                         className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-fg-2 transition-colors hover:bg-surface"
@@ -411,18 +407,4 @@ export function PlatformDetailDrawer({
       </aside>
     </>
   )
-}
-
-// Helpers to derive stats from mock data without a full lookup
-function MOCK_FAIL_RATE(platform: string) {
-  const map: Record<string, number> = { youtube: 100, instagram: 34, twitter: 23, threads: 18, tiktok: 2, soundcloud: 3, reddit: 1 }
-  return map[platform] ?? 0
-}
-function MOCK_TOTAL_JOBS(platform: string) {
-  const map: Record<string, number> = { youtube: 42, instagram: 29, twitter: 17, tiktok: 84, facebook: 31 }
-  return map[platform] ?? 10
-}
-function MOCK_LAST_SUCCESS(platform: string) {
-  const map: Record<string, string> = { youtube: '3h ago', instagram: '8m ago', twitter: '22m ago' }
-  return map[platform] ?? '< 10m ago'
 }

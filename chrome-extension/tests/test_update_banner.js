@@ -33,6 +33,7 @@ function make({ store = {}, fetchImpl, version = '5.6.0' } = {}) {
       } },
     },
     fetch: async (...a) => { calls.fetch++; return fetchImpl(...a); },
+    vgPopupFetch: async (...a) => { calls.fetch++; return fetchImpl(...a); },
     vgApiBase: async () => 'https://api.example',
     vgAuthHeaders: async () => ({}),
     console,

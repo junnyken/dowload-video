@@ -7,11 +7,21 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocalePath } from "../i18n";
 import { API_BASE as API_ROOT } from "../lib/apiBase";
+import { supabase } from "../lib/supabaseClient";
 
 // Was the literal "/api/v1" — relative, so 502 on the split-domain deploy.
 const API_BASE = `${API_ROOT}/api/v1`;
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 30; // ~60s timeout
+
+async function authHeaders(extra = {}) {
+  const headers = { ...extra };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  } catch { /* guest fallback */ }
+  return headers;
+}
 
 // ---------------------------------------------------------------------------
 // Utility helpers
@@ -126,7 +136,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
             </div>
           )}
           <button
-            onClick={() => onApplyTrim({ start: s.suggested_start, end: s.suggested_end })}
+            onClick={() => onApplyTrim({ start: s.suggested_start, end: s.suggested_end, index: i })}
             className="w-full text-xs font-medium bg-accent hover:bg-accent-hover text-accent-fg py-1.5 rounded transition-colors"
           >
             {t("smart.applyThis")}
@@ -141,7 +151,7 @@ function TrimTab({ suggestions, onApplyTrim }) {
 // Tab: Highlights (Clips)
 // ---------------------------------------------------------------------------
 
-function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
+function HighlightsTab({ suggestions, onQueueClips, tierFiltered, sourceUrl }) {
   const { t } = useTranslation("results");
   if (tierFiltered && (!suggestions || suggestions.length === 0)) {
     return <ProGate feature="highlights" />;
@@ -182,7 +192,9 @@ function HighlightsTab({ suggestions, onQueueClips, tierFiltered }) {
             <button
               onClick={() => {
                 const ts = Math.floor(s.start || 0);
-                window.open(`${window.location.origin}?t=${ts}`, "_blank");
+                const base = sourceUrl || window.location.href;
+                const sep = base.includes("?") ? "&" : "?";
+                window.open(`${base}${ts > 0 ? `${sep}t=${ts}` : ""}`, "_blank", "noopener,noreferrer");
               }}
               className="flex-1 text-xs border border-line text-fg-muted hover:bg-surface-2 py-1.5 rounded transition-colors"
             >
@@ -358,12 +370,13 @@ export default function SmartActionsPanel({
   onRequireUpgrade = null,
 }) {
   const { t } = useTranslation("results");
-  const isPaidTier = ["starter", "pro", "team", "enterprise", "api"].includes(userTier);
+  const isPaidTier = ["starter", "pro", "team", "enterprise", "api", "admin"].includes(userTier);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [activeTab, setActiveTab] = useState("trim");
+  const [actionStatus, setActionStatus] = useState(null);
 
   const pollRef = useRef(null);
   const pollCountRef = useRef(0);
@@ -389,7 +402,7 @@ export default function SmartActionsPanel({
     try {
       const res = await fetch(`${API_BASE}/analyze-media`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           url,
@@ -400,10 +413,11 @@ export default function SmartActionsPanel({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        const detailMsg = typeof err.detail === "string" ? err.detail : err.detail?.message;
         if (res.status === 429 || res.status === 402) {
-          throw new Error(err.detail || t("smart.quotaReached"));
+          throw new Error(detailMsg || t("smart.quotaReached"));
         }
-        throw new Error(err.detail || t("smart.errorStatus", { status: res.status }));
+        throw new Error(detailMsg || t("smart.errorStatus", { status: res.status }));
       }
 
       const { job_id, status } = await res.json();
@@ -435,6 +449,7 @@ export default function SmartActionsPanel({
   async function fetchResult(jobId) {
     try {
       const res = await fetch(`${API_BASE}/analyze/${jobId}`, {
+        headers: await authHeaders(),
         credentials: "include",
       });
       if (!res.ok) return false;
@@ -485,32 +500,37 @@ export default function SmartActionsPanel({
     : [];
 
   // Handler adapters that call parent callbacks and also hit the apply APIs
-  async function handleApplyTrim({ start, end }) {
-    if (onApplyTrim) onApplyTrim({ start, end });
+  async function handleApplyTrim({ start, end, index = 0 }) {
+    if (onApplyTrim) onApplyTrim({ start, end, index });
     if (!result?.job_id) return;
+    setActionStatus({ tone: "info", text: "⏳ Đang gửi tác vụ cắt đoạn..." });
     try {
-      await fetch(`${API_BASE}/smart-trim/apply`, {
+      const res = await fetch(`${API_BASE}/smart-trim/apply`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           job_id: result.job_id,
-          suggestion_index: 0,
+          suggestion_index: index,
           media_url: mediaUrl || videoInfo?.webpage_url || "",
         }),
       });
-    } catch {
-      // Non-blocking
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setActionStatus({ tone: "ok", text: `✅ Đã xếp hàng cắt đoạn (${fmtRange(start, end)})` });
+    } catch (err) {
+      setActionStatus({ tone: "err", text: `⚠️ ${err.message || "Không thể áp dụng cắt đoạn"}` });
     }
   }
 
   async function handleApplyGif({ index, quality }) {
     if (onApplyGif) onApplyGif({ index, quality });
     if (!result?.job_id) return;
+    setActionStatus({ tone: "info", text: `⏳ Đang tạo GIF ${quality}...` });
     try {
-      await fetch(`${API_BASE}/smart-gif/apply`, {
+      const res = await fetch(`${API_BASE}/smart-gif/apply`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           job_id: result.job_id,
@@ -519,18 +539,22 @@ export default function SmartActionsPanel({
           quality,
         }),
       });
-    } catch {
-      // Non-blocking
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setActionStatus({ tone: "ok", text: `✅ Đã gửi yêu cầu tạo GIF ${quality}` });
+    } catch (err) {
+      setActionStatus({ tone: "err", text: `⚠️ ${err.message || "Không thể tạo GIF"}` });
     }
   }
 
   async function handleQueueClips(indices) {
     if (onQueueClips) onQueueClips(indices);
     if (!result?.job_id) return;
+    setActionStatus({ tone: "info", text: "⏳ Đang xếp hàng cắt Highlight..." });
     try {
-      await fetch(`${API_BASE}/smart-clips/apply`, {
+      const res = await fetch(`${API_BASE}/smart-clips/apply`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           job_id: result.job_id,
@@ -538,8 +562,11 @@ export default function SmartActionsPanel({
           media_url: mediaUrl || videoInfo?.webpage_url || "",
         }),
       });
-    } catch {
-      // Non-blocking
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setActionStatus({ tone: "ok", text: `✅ Đã đưa ${data.queued_jobs?.length || indices.length} clip vào hàng đợi` });
+    } catch (err) {
+      setActionStatus({ tone: "err", text: `⚠️ ${err.message || "Không thể xếp hàng clip"}` });
     }
   }
 
@@ -643,6 +670,7 @@ export default function SmartActionsPanel({
                         suggestions={result.clip_suggestions}
                         onQueueClips={handleQueueClips}
                         tierFiltered={result.tier_filtered}
+                        sourceUrl={mediaUrl || videoInfo?.webpage_url}
                       />
                     )}
                     {activeTab === "gif" && (
@@ -655,6 +683,14 @@ export default function SmartActionsPanel({
                       <MetadataTab suggestions={result.metadata_suggestions} />
                     )}
                   </div>
+
+                  {actionStatus && (
+                    <div className="px-3 pb-2">
+                      <p className={`text-xs ${actionStatus.tone === "err" ? "text-danger" : actionStatus.tone === "ok" ? "text-success" : "text-fg-muted"}`}>
+                        {actionStatus.text}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Warnings */}
                   {result.warnings && result.warnings.length > 0 && (

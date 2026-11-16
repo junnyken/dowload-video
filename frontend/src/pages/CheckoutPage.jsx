@@ -1,5 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Crown, ArrowLeft, Check, Copy, Loader2, QrCode, CreditCard,
@@ -223,12 +222,21 @@ function PlanCard({ id, name, price, period, desc, badge, selected, onClick }) {
 
 // ── Main Checkout Page ───────────────────────────────────────────────────────
 
-export default function CheckoutPage() {
+export default function CheckoutPage({ onNavigate }) {
   const { t } = useTranslation('checkout');
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const lang = useLang();
   const pollRef = useRef(null);
+
+  const goPath = useCallback((targetPath) => {
+    if (onNavigate) {
+      const normalized = targetPath.replace(/^\/en(?=\/|$)/, '') || '/';
+      const targetView = normalized === '/billing' ? 'billing' : 'landing';
+      onNavigate(targetView, targetPath);
+      return;
+    }
+    window.location.href = targetPath;
+  }, [onNavigate]);
 
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -620,8 +628,8 @@ export default function CheckoutPage() {
                         ? `🎁 1st Month $1.99 (renews at ${st.regUsd || '$2.99'} / ${st.regVnd || '69.000₫'}) · 100 downloads/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + ASR 30m`
                         : `🎁 Tháng đầu $1.99 / 49k (gia hạn ${st.regUsd || '$2.99'} / ${st.regVnd || '69.000₫'}) · 100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + ASR 30p`)
                       : (lang === 'en'
-                        ? '100 downloads/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR 30m/day (No AI Logo Removal / Reup / API)'
-                        : '100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + Phụ đề ASR 30p/ngày (Không gồm Xóa Logo AI / Reup / API)'),
+                        ? '100 downloads/day · Unlock 4K + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR 30m/day (Excludes Floating Stream / Reup / API)'
+                        : '100 lượt/ngày · Mở khóa 4K + Batch 20 link (.ZIP) + Album ảnh .ZIP + Phụ đề ASR 30p/ngày (Không gồm Bắt luồng trình duyệt / Reup / API)'),
                     badge: isFirstTime && billingCycle === 'month'
                       ? (lang === 'en' ? '1st Month -33% ($1.99)' : 'Tháng đầu -33% (49k)')
                       : null,
@@ -635,11 +643,11 @@ export default function CheckoutPage() {
                     period: `${perText} (${pr.vnd})`,
                     desc: isFirstTime
                       ? (lang === 'en'
-                        ? `🎁 1st Purchase Deal (-33% off ${pr.regUsd || '$5.99'}) · 300 downloads/day · Full 4K/8K + AI Logo Removal + Reup + Hardsub + 3,500 API calls · Renews at ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`
-                        : `🎁 Ưu đãi mua lần đầu (-33% từ ${pr.regUsd || '$5.99'}) · 300 lượt/ngày · Full 4K/8K + Xóa Logo AI + Làm sạch Reup + Hardsub + 3.500 API · Gia hạn lần sau ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`)
+                        ? `🎁 1st Purchase Deal (-33% off ${pr.regUsd || '$5.99'}) · 300 downloads/day · Full 4K + Floating Video Button + Reup + Hardsub + 3,500 API calls · Renews at ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`
+                        : `🎁 Ưu đãi mua lần đầu (-33% từ ${pr.regUsd || '$5.99'}) · 300 lượt/ngày · Full 4K + Nút tải nổi <video> + Làm sạch Reup + Hardsub + 3.500 API · Gia hạn lần sau ${pr.regUsd || '$5.99'} (${pr.regVnd || '139.000₫'})`)
                       : (lang === 'en'
-                        ? '🔄 Standard Renewal Rate · 300 downloads/day · Full 4K/8K + AI Logo Removal + Reup MD5 + Hardsub MP4 + 3,000 API calls/month'
-                        : '🔄 Giá gốc Gia hạn · 300 lượt/ngày · Full 4K/8K + Xóa Logo AI + Làm sạch Reup MD5 + Hardsub MP4 + 3.000 API/tháng'),
+                        ? '🔄 Standard Renewal Rate · 300 downloads/day · Full 4K + Floating Video Button + Reup MD5 + Hardsub MP4 + 3,000 API calls/month'
+                        : '🔄 Giá gốc Gia hạn · 300 lượt/ngày · Full 4K + Nút tải nổi <video> + Làm sạch Reup MD5 + Hardsub MP4 + 3.000 API/tháng'),
                     badge: isFirstTime
                       ? (lang === 'en' ? '⭐ 1st Time: -33% + 500 API Bonus' : '⭐ Mua lần đầu: -33% + Tặng 500 API')
                       : (lang === 'en' ? '🔄 Regular Renewal Price' : '🔄 Giá gốc Gia hạn'),
@@ -833,7 +841,7 @@ export default function CheckoutPage() {
             )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
               <button
-                onClick={() => navigate(lang === 'en' ? '/en/billing' : '/billing')}
+                onClick={() => goPath(lang === 'en' ? '/en/billing' : '/billing')}
                 className="px-5 py-2.5 rounded-xl bg-accent text-accent-fg text-sm font-semibold hover:opacity-90 transition-colors"
               >
                 {t('success.goToBilling')}
@@ -1001,7 +1009,7 @@ export default function CheckoutPage() {
             </div>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
-                onClick={() => navigate(lang === 'en' ? '/en/billing' : '/billing')}
+                onClick={() => goPath(lang === 'en' ? '/en/billing' : '/billing')}
                 className="px-6 py-3 rounded-xl bg-accent text-accent-fg text-sm font-semibold
                            hover:opacity-90 transition-colors inline-flex items-center justify-center gap-2"
               >
@@ -1009,7 +1017,7 @@ export default function CheckoutPage() {
                 {t('success.goToBilling')}
               </button>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => goPath(lang === 'en' ? '/en' : '/')}
                 className="px-6 py-3 rounded-xl border border-line bg-surface-2 text-fg text-sm font-medium
                            hover:bg-surface transition-colors"
               >

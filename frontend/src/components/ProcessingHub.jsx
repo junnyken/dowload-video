@@ -96,7 +96,13 @@ function ErrorRow({ error }) {
 
 // ── Tab: Trim ──────────────────────────────────────────────────────────────
 function TrimTab({ localPath, sourceUrl, title, duration, processing, userTier, onOpenUpgrade }) {
-  const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
+  const maxTrimSec = ['team', 'enterprise', 'api', 'admin'].includes(userTier)
+    ? 1800
+    : userTier === 'pro'
+      ? 600
+      : userTier === 'starter'
+        ? 120
+        : 10;
   const [preset, setPreset]     = useState(10);
   const [isCustom, setIsCustom] = useState(false);
   const [start, setStart]       = useState(0);
@@ -114,7 +120,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing, userTier, 
   };
 
   const handleSubmit = async () => {
-    if ((end - start) > 10 && !isPro) {
+    if ((end - start) > maxTrimSec) {
       onOpenUpgrade?.('tier_required_feature');
       return;
     }
@@ -165,7 +171,7 @@ function TrimTab({ localPath, sourceUrl, title, duration, processing, userTier, 
           <div className="flex-1">
             <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">{t('hub.toSec')}</label>
             <input
-              type="number" min={start + 1} max={Math.min((duration || 600), start + 600)} value={end}
+              type="number" min={start + 1} max={Math.min((duration || maxTrimSec), start + maxTrimSec)} value={end}
               onChange={e => setEnd(parseFloat(e.target.value) || start + 1)}
               className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-sm text-fg outline-none focus:border-success/60"
             />

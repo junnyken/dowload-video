@@ -1151,15 +1151,22 @@ def check_feature_permission(user_id: str, feature: str) -> Dict[str, Any]:
         "spotify_artist_full": ERR_SPOTIFY_FULL,
     }
     error_code = error_map.get(feature, ERR_FEATURE)
+    required_tier_map = {
+        "bulk_zip":         "starter",
+        "cloud_save":       "starter",
+        "chapters":         "starter",
+        "universal_stream": "team",
+    }
+    required_tier = required_tier_map.get(feature, "pro")
 
     return {
         "allowed":    False,
         "error_code": error_code,
         "feature":    feature,
         "tier":       tier,
-        "message":    f"Tính năng '{label}' chỉ dành cho Pro. Nâng cấp để sử dụng.",
-        "required_tier": "pro",
-        "upgrade_url":   "/upgrade",
+        "message":    f"Tính năng '{label}' yêu cầu gói {required_tier.title()} trở lên. Nâng cấp để sử dụng.",
+        "required_tier": required_tier,
+        "upgrade_url":   "/pricing",
     }
 
 

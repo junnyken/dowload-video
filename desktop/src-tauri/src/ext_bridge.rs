@@ -428,7 +428,7 @@ mod tests {
             })
         );
 
-        let rich = r#"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true,"audioLang":"vi-VN","cookieJar":"# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz","subtitles":[{"url":"https://cdn.x/subs/vi.vtt","lang":"vi","format":"vtt"},{"url":"javascript:x","lang":"en","format":"vtt"}]}"#;
+        let rich = r##"{"url":"https://cdn.x/hls/master.m3u8","title":"Tap 01","referer":"https://embed.x/e/1","userAgent":"Mozilla/5.0 Chrome/135","height":1080,"stream":true,"audioLang":"vi-VN","cookieJar":"# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t0\tsid\txyz","subtitles":[{"url":"https://cdn.x/subs/vi.vtt","lang":"vi","format":"vtt"},{"url":"javascript:x","lang":"en","format":"vtt"}]}"##;
         let (s, _, _, job) = handle(&req("POST", "/vidgrab/download", EXT, rich), 17325, "x");
         assert_eq!(s, 200);
         let j = job.expect("rich job");

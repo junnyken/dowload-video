@@ -21,13 +21,14 @@ from app.core.quotas import get_user_tier
 
 router = APIRouter()
 
-# Pin limits per tier (Free is locked = 0; paid tiers unlock cloud pinning)
+# Pin limits per tier (Free is locked = 0; paid tiers unlock cloud pinning; -1 = unlimited)
 _PIN_LIMITS: Dict[str, int] = {
     "free": 0,
     "starter": 10,
     "pro": 50,
-    "team": 500,
-    "enterprise": 500,
+    "team": -1,
+    "enterprise": -1,
+    "admin": -1,
 }
 # Pin retention window in days per tier
 _PIN_DAYS: Dict[str, int] = {
@@ -36,6 +37,7 @@ _PIN_DAYS: Dict[str, int] = {
     "pro": 30,
     "team": 90,
     "enterprise": 90,
+    "admin": 365,
 }
 
 
@@ -125,7 +127,7 @@ async def pin_file(job_id: str, user=Depends(get_required_user)):
     pin_limit = _PIN_LIMITS.get(tier, 0)
     pin_days  = _PIN_DAYS.get(tier, 0)
 
-    if pin_limit <= 0:
+    if pin_limit == 0:
         raise HTTPException(402, detail={
             "code": "tier_required_feature",
             "message": "Tính năng Ghim tệp giữ trên Cloud đã bị khóa với gói Miễn phí. Vui lòng nâng cấp lên Starter hoặc Pro để sử dụng.",
@@ -167,7 +169,7 @@ async def pin_file(job_id: str, user=Depends(get_required_user)):
         .eq("file_retention_status", "pinned")
         .execute()
     )
-    if (pinned_res.count or 0) >= pin_limit:
+    if pin_limit > 0 and (pinned_res.count or 0) >= pin_limit:
         raise HTTPException(403, detail={
             "code": "pin_limit_reached",
             "message": f"Bạn đã ghim {pinned_res.count}/{pin_limit} file. Bỏ ghim một file trước.",

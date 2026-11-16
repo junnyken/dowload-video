@@ -40,7 +40,7 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_REPO = "junnyken/dowload-video"
+DEFAULT_REPO = "junnyken/vidgrab-releases"
 CACHE_KEY = "vidgrab:desktop_release:github"
 LAST_GOOD_KEY = "vidgrab:desktop_release:last_good:{repo}"
 LAST_GOOD_TTL_S = 90 * 86400

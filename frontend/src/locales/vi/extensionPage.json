@@ -15,8 +15,10 @@
     }
   },
   "heroTitle": "Cài <accent>VidGrab</accent> Extension",
-  "heroSub": "Tải video 1 click ngay trên trang TikTok, YouTube, Facebook và nhiều nền tảng khác — cài chính thức từ Chrome Web Store, tự động cập nhật.",
+  "heroSub": "Tải video 1 click ngay trên TikTok, Douyin, Facebook, Instagram, X & các trang phát HLS — cài từ Chrome Web Store hoặc bản .ZIP v5.29.2 mới nhất.",
   "download": "Thêm vào Chrome — Chrome Web Store",
+  "downloadZip": "Tải bản .ZIP mới nhất (v5.29.2)",
+  "downloadZipHint": "Bản .ZIP v5.29.2 chứa đầy đủ tính năng mới nhất (Nút tải nổi, Đa âm thanh, OPFS HLS). Bật Chế độ nhà phát triển trong chrome://extensions rồi kéo thả tệp ZIP.",
   "platformsAria": "Nền tảng hỗ trợ",
   "supportedFrom": "Hỗ trợ tải từ",
   "platformListAria": "Danh sách nền tảng",

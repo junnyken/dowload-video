@@ -77,12 +77,13 @@ export default function UsageContent() {
   const dayLimit  = pq ? pq.limit : usage.limits.daily;
   const dailyPct  = dayLimit > 0 ? Math.min(100, (dayUsed / dayLimit) * 100) : 0;
   const usedPlatforms = pq ? pq.platforms.filter(p => p.used > 0) : [];
-  const monthPct  = usage.limits.monthly > 0 ? Math.min(100, (usage.downloads_this_month / usage.limits.monthly) * 100) : 0;
-  const isPro     = ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(usage.plan);
+  const monthPct     = usage.limits.monthly > 0 ? Math.min(100, (usage.downloads_this_month / usage.limits.monthly) * 100) : 0;
+  const isPro        = ['starter', 'pro', 'vip', 'team', 'enterprise', 'admin'].includes(usage.plan);
+  const hasApiAccess = ['pro', 'vip', 'team', 'enterprise', 'admin'].includes(usage.plan);
 
-  // Fetch API key status when pro tier is confirmed
+  // Fetch API key status when API-eligible tier (Pro+) is confirmed
   useEffect(() => {
-    if (!isPro || !session) return;
+    if (!hasApiAccess || !session) return;
     const apiBase = API_BASE;
     fetch(`${apiBase}/api/v1/user/api-key/status`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -90,7 +91,7 @@ export default function UsageContent() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setApiKeyStatus(d); })
       .catch(() => {});
-  }, [isPro, session]);
+  }, [hasApiAccess, session]);
 
   const handleGenerateApiKey = async () => {
     setApiKeyLoading(true);
@@ -139,7 +140,7 @@ export default function UsageContent() {
 
   // ── Webhook: fetch logs on mount to detect registration ───────────
   useEffect(() => {
-    if (!isPro || !session) return;
+    if (!hasApiAccess || !session) return;
     const apiBase = API_BASE;
     fetch(`${apiBase}/api/v1/user/webhook/logs`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -151,7 +152,7 @@ export default function UsageContent() {
       })
       .then(d => { if (d) setWebhookLogs(Array.isArray(d) ? d : (d.logs || [])); })
       .catch(() => {});
-  }, [isPro, session]);
+  }, [hasApiAccess, session]);
 
   const handleRegisterWebhook = async (e) => {
     e.preventDefault();
@@ -369,9 +370,9 @@ export default function UsageContent() {
       <div className="rounded-xl border border-line overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
-          <Key className={`w-4 h-4 ${isPro ? 'text-fg-2' : 'text-fg-muted'}`} />
+          <Key className={`w-4 h-4 ${hasApiAccess ? 'text-fg-2' : 'text-fg-muted'}`} />
           <span className="text-fg font-bold text-sm">API Key</span>
-          {isPro && (
+          {hasApiAccess && (
             <span className="ml-auto text-[10px] font-bold text-fg-2 bg-surface-2 border border-line px-2 py-0.5 rounded-full">
               Pro
             </span>
@@ -379,8 +380,8 @@ export default function UsageContent() {
         </div>
 
         <div className="p-4 bg-surface-2">
-          {/* Free tier: locked */}
-          {!isPro && (
+          {/* Free / Starter tier: locked */}
+          {!hasApiAccess && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <Lock className="w-8 h-8 text-fg-muted" />
               <div>
@@ -393,8 +394,8 @@ export default function UsageContent() {
             </div>
           )}
 
-          {/* Pro tier */}
-          {isPro && (
+          {/* Pro+ tier */}
+          {hasApiAccess && (
             <>
               {/* Error */}
               {apiKeyError && (
@@ -501,9 +502,9 @@ export default function UsageContent() {
       <div className="rounded-xl border border-line overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
-          <Webhook className={`w-4 h-4 ${isPro ? 'text-fg-2' : 'text-fg-muted'}`} />
+          <Webhook className={`w-4 h-4 ${hasApiAccess ? 'text-fg-2' : 'text-fg-muted'}`} />
           <span className="text-fg font-bold text-sm">Webhook</span>
-          {isPro && (
+          {hasApiAccess && (
             <span className="ml-auto text-[10px] font-bold text-fg-2 bg-surface-2 border border-line px-2 py-0.5 rounded-full">
               Pro
             </span>
@@ -511,8 +512,8 @@ export default function UsageContent() {
         </div>
 
         <div className="p-4 bg-surface-2">
-          {/* Free tier: locked */}
-          {!isPro && (
+          {/* Free / Starter tier: locked */}
+          {!hasApiAccess && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <Lock className="w-8 h-8 text-fg-muted" />
               <div>
@@ -525,8 +526,8 @@ export default function UsageContent() {
             </div>
           )}
 
-          {/* Pro tier */}
-          {isPro && (
+          {/* Pro+ tier */}
+          {hasApiAccess && (
             <div className="space-y-4">
               {/* Error */}
               {webhookError && (
@@ -681,21 +682,25 @@ function StorageSection({ info, isPro }) {
   const { t } = useTranslation('usage');
   const { free: freePlan, pro: proPlan } = usePlans();
   const tierPlan = isPro ? proPlan : freePlan;
-  const pinnedLimit = tierPlan ? tierPlan.pins : 0;
-  const pinnedCount = info.pinned_count ?? 0;
-  const pinnedBytes = info.pinned_bytes ?? 0;
-  const tempCount   = info.temp_count ?? 0;
-  const tempBytes   = info.temp_bytes ?? 0;
-  const archiveTotal = info.archive_total ?? 0;
-  const pinnedPct   = pinnedLimit > 0 ? Math.min(100, (pinnedCount / pinnedLimit) * 100) : 0;
-  const pinBarColor = pinnedPct >= 90 ? 'bg-danger' : pinnedPct >= 70 ? 'bg-accent' : 'bg-success';
+  const rawLimit = info.pinned?.limit ?? info.policy?.pin_limit ?? (tierPlan ? tierPlan.pins : 0);
+  const pinnedLimitDisplay = rawLimit < 0 ? '∞' : rawLimit;
+  const pinnedCount  = info.pinned?.count ?? info.pinned_count ?? 0;
+  const pinnedBytes  = info.pinned?.bytes ?? info.pinned_bytes ?? 0;
+  const pinDays      = info.pinned?.retention_days ?? info.policy?.pin_retention_days ?? tierPlan?.pin_days ?? 0;
+  const tempCount    = info.active_temporary?.count ?? info.temp_count ?? 0;
+  const tempBytes    = info.active_temporary?.bytes ?? info.temp_bytes ?? 0;
+  const archiveTotal = info.archive_items_total ?? info.archive_total ?? 0;
+  const pinnedPct    = rawLimit > 0 ? Math.min(100, (pinnedCount / rawLimit) * 100) : 0;
+  const pinBarColor  = pinnedPct >= 90 ? 'bg-danger' : pinnedPct >= 70 ? 'bg-accent' : 'bg-success';
 
   return (
     <div className="rounded-xl border border-line overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 bg-surface border-b border-line">
         <HardDrive className="w-4 h-4 text-fg-2" />
         <span className="text-fg font-bold text-sm">Storage</span>
-        <span className="ml-auto text-[10px] text-fg-muted">Oracle Cloud 10 GB</span>
+        <span className="ml-auto text-[10px] text-fg-muted">
+          {pinDays > 0 ? `Cloud (${pinDays}d Pin · 24h Temp)` : '24h Temp Cache'}
+        </span>
       </div>
 
       <div className="p-4 bg-surface-2 space-y-4">
@@ -707,8 +712,8 @@ function StorageSection({ info, isPro }) {
               {t('storage.pinned')}
             </div>
             <span className="text-fg-muted">
-              {tierPlan
-                ? t('storage.pinnedCountLimit', { count: pinnedCount, limit: pinnedLimit, size: fmtBytes(pinnedBytes) })
+              {tierPlan || rawLimit !== undefined
+                ? t('storage.pinnedCountLimit', { count: pinnedCount, limit: pinnedLimitDisplay, size: fmtBytes(pinnedBytes) })
                 : t('storage.pinnedCount', { count: pinnedCount, size: fmtBytes(pinnedBytes) })}
             </span>
           </div>

@@ -1258,11 +1258,15 @@ document.getElementById('retry-btn')?.addEventListener('click', () => {
 // ── Preview Card ───────────────────────────────────────────────────
 function detectPlatform(url) {
   if (!url) return '';
-  if (url.includes('tiktok.com')) return 'TikTok';
-  if (url.includes('facebook.com')) return 'Facebook';
-  if (url.includes('instagram.com')) return 'Instagram';
-  if (url.includes('douyin.com')) return 'Douyin';
-  if (url.includes('spotify.com')) return 'Spotify';
+  const u = String(url).toLowerCase();
+  if (u.includes('tiktok.com')) return 'TikTok';
+  if (u.includes('douyin.com') || u.includes('iesdouyin.com')) return 'Douyin';
+  if (u.includes('facebook.com') || u.includes('fb.watch')) return 'Facebook';
+  if (u.includes('instagram.com')) return 'Instagram';
+  if (u.includes('spotify.com')) return 'Spotify';
+  if (u.includes('bilibili.com') || u.includes('b23.tv')) return 'Bilibili';
+  if (u.includes('twitter.com') || u.includes('x.com')) return 'X / Twitter';
+  if (u.includes('reddit.com')) return 'Reddit';
   return '';
 }
 
@@ -1581,17 +1585,21 @@ async function saveToArchive(item) {
   const r = await fetch(`${API_BASE}/api/v1/archive`, {
     method: 'POST',
     headers: await vgAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ ...item, platform: detectPlatform(item.original_url || '') }),
+    body: JSON.stringify({ ...item, platform: detectPlatformSlug(item.original_url || '') }),
   });
   return r.ok;
 }
 
-function detectPlatform(url) {
-  if (/tiktok\.com/.test(url)) return 'tiktok';
-  if (/facebook\.com|fb\.watch/.test(url)) return 'facebook';
-  if (/instagram\.com/.test(url)) return 'instagram';
-  if (/twitter\.com|x\.com/.test(url)) return 'twitter';
-  if (/reddit\.com/.test(url)) return 'reddit';
+function detectPlatformSlug(url) {
+  const u = String(url || '').toLowerCase();
+  if (/tiktok\.com/.test(u)) return 'tiktok';
+  if (/douyin\.com|iesdouyin\.com/.test(u)) return 'douyin';
+  if (/facebook\.com|fb\.watch/.test(u)) return 'facebook';
+  if (/instagram\.com/.test(u)) return 'instagram';
+  if (/spotify\.com/.test(u)) return 'spotify';
+  if (/bilibili\.com|b23\.tv/.test(u)) return 'bilibili';
+  if (/twitter\.com|x\.com/.test(u)) return 'twitter';
+  if (/reddit\.com/.test(u)) return 'reddit';
   return 'other';
 }
 
@@ -2068,11 +2076,11 @@ document.getElementById('ch-send-btn').addEventListener('click', async () => {
         sendText.textContent = t('ch_btn_scanning');
         startChannelDiscovery();
         startJobPolling(data.batch_id, _chMaxVideos);
-        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: chUrl }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab?.url || '' }).catch(() => {});
       } else {
         status.textContent = tn('ch_queued_n', urls.length); status.style.color = '#4ade80';
         sendText.textContent = t('ch_sent');
-        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: chUrl }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'VG_TRACK_BATCH', batchId: data.batch_id, sourceUrl: tab?.url || '' }).catch(() => {});
         chrome.tabs.create({ url: `${WEB_BASE}/?batch=${encodeURIComponent(data.batch_id)}` });
       }
     } else throw new Error(data.detail || t('err_unknown'));
@@ -2176,7 +2184,7 @@ function showQualityNote(note) {
 
 async function openSitePage(kind) {
   if (kind === 'signin') chrome.tabs.create({ url: `${WEB_BASE}/?connect_extension=1` });
-  else chrome.tabs.create({ url: `${await getApiBaseLocal()}/upgrade` });
+  else chrome.tabs.create({ url: `${WEB_BASE}/pricing` });
 }
 
 function showMultiFormat(data) {
@@ -3047,7 +3055,21 @@ vgRecRender();
   let v;
   try { v = (await chrome.storage.sync.get('vg_floating_pill')).vg_floating_pill; } catch { /* default */ }
   box.checked = typeof v === 'boolean' ? v : true;
-  box.addEventListener('change', () => chrome.storage.sync.set({ vg_floating_pill: box.checked }));
+  box.addEventListener('change', async () => {
+    chrome.storage.sync.set({ vg_floating_pill: box.checked });
+    if (!box.checked && chrome.scripting && typeof chrome.scripting.executeScript === 'function') {
+      const tab = await getActiveTab().catch(() => null);
+      if (tab && tab.id && /^https?:\/\//i.test(tab.url || '')) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          func: () => {
+            if (window.__vgHoverPill) window.__vgHoverPill = null;
+            document.getElementById('vg-floating-pill-host')?.remove();
+          },
+        }).catch(() => {});
+      }
+    }
+  });
 })();
 
 // 5.21.0: the account signed this device out (Free 2 / Pro 5 devices).

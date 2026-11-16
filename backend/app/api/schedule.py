@@ -25,8 +25,9 @@ _SCHEDULE_LIMITS: Dict[str, int] = {
     "free": 0,
     "starter": 5,
     "pro": 20,
-    "team": 100,
-    "enterprise": 500,
+    "team": -1,
+    "enterprise": -1,
+    "admin": -1,
 }
 
 
@@ -84,12 +85,14 @@ def _validate_frequency(schedule_type: str, min_interval_hours: int):
 
 def _check_limit(supabase, user_id: str, tier: str):
     limit = _SCHEDULE_LIMITS.get(tier, 0)
-    if limit <= 0:
+    if limit == 0:
         raise HTTPException(402, detail={
             "code": "tier_required_feature",
             "message": "Tính năng Hẹn giờ tải tự động chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp để sử dụng.",
             "limit": 0,
         })
+    if limit < 0:
+        return
     count_res = (
         supabase.table("scheduled_jobs")
         .select("id", count="exact")

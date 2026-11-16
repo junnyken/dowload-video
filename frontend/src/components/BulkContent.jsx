@@ -1716,7 +1716,13 @@ export default function BulkContent() {
               {batchId && totalData.total === totalData.success && (
                 <div className="ml-2">
                   <button
-                    onClick={() => setShowRename(p => !p)}
+                    onClick={() => {
+                      if (quotaInfo && !quotaInfo.permissions?.can_zip) {
+                        setShowUpgradeModal(true);
+                        return;
+                      }
+                      setShowRename(p => !p);
+                    }}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
                       showRename
                         ? 'bg-surface-2 text-fg-2 border-line'

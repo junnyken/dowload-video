@@ -8,10 +8,12 @@ import {
   Cpu,
   MonitorDown,
   ShieldCheck,
+  Download,
 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 import { CHROME_STORE_URL } from '../lib/chromeExtension';
+import { API_BASE } from '../lib/apiBase';
 
 // ── Platform SVG Icons (inline — no extra deps) ──────────────
 const TikTokIcon = () => (
@@ -19,9 +21,9 @@ const TikTokIcon = () => (
     <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 0010.86 4.46V13.2a8.16 8.16 0 005.58 2.2v-3.45a4.85 4.85 0 01-3.77-1.49V6.69h3.77z" />
   </svg>
 );
-const YouTubeIcon = () => (
+const XIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-    <path d="M23.5 6.19a3.02 3.02 0 00-2.12-2.14C19.54 3.5 12 3.5 12 3.5s-7.54 0-9.38.55A3.02 3.02 0 00.5 6.19 31.6 31.6 0 000 12a31.6 31.6 0 00.5 5.81 3.02 3.02 0 002.12 2.14c1.84.55 9.38.55 9.38.55s7.54 0 9.38-.55a3.02 3.02 0 002.12-2.14A31.6 31.6 0 0024 12a31.6 31.6 0 00-.5-5.81zM9.55 15.57V8.43L15.82 12l-6.27 3.57z" />
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 );
 const FacebookIcon = () => (
@@ -46,12 +48,12 @@ const SpotifyIcon = () => (
 );
 
 const platforms = [
-  { icon: TikTokIcon, label: 'TikTok',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#69C9D0]' },
-  { icon: YouTubeIcon, label: 'YouTube',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#FF0000]' },
-  { icon: FacebookIcon, label: 'Facebook', color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1877F2]' },
-  { icon: InstagramIcon, label: 'Instagram', color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#E1306C]' },
-  { icon: DouyinIcon, label: 'Douyin',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#ff0050]' },
-  { icon: SpotifyIcon, label: 'Spotify',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
+  { icon: TikTokIcon, label: 'TikTok',      color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#69C9D0]' },
+  { icon: DouyinIcon, label: 'Douyin',      color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#ff0050]' },
+  { icon: FacebookIcon, label: 'Facebook',  color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1877F2]' },
+  { icon: InstagramIcon, label: 'Instagram',color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#E1306C]' },
+  { icon: XIcon, label: 'X / Twitter',      color: 'text-fg-2 border-line bg-surface-2', ic: 'text-fg' },
+  { icon: SpotifyIcon, label: 'Spotify',    color: 'text-fg-2 border-line bg-surface-2', ic: 'text-[#1DB954]' },
 ];
 
 const FEATURES = [
@@ -130,18 +132,30 @@ export default function ExtensionPage() {
             </p>
           </div>
 
-          <div className="flex justify-center w-full max-w-sm">
+          <div className="flex flex-col sm:flex-row justify-center gap-3 w-full max-w-lg">
             <a
               href={CHROME_STORE_URL}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page' })}
-              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-accent text-accent-fg font-extrabold text-sm shadow-lg hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
               <ExternalLink className="w-4 h-4 flex-shrink-0" />
               {t('download')}
             </a>
+            <a
+              href={`${API_BASE}/api/v1/extension/download`}
+              download="VidGrab-extension.zip"
+              onClick={() => trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'extension_page_zip' })}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl border border-line-strong bg-surface-2 text-fg font-bold text-sm hover:border-accent hover:text-accent-text transition-all duration-200 cursor-pointer"
+            >
+              <Download className="w-4 h-4 flex-shrink-0 text-accent-text" />
+              {t('downloadZip')}
+            </a>
           </div>
+          <p className="text-xs text-fg-muted max-w-md -mt-2">
+            {t('downloadZipHint')}
+          </p>
         </section>
 
         {/* ── Platform chips ────────────────────────────────── */}

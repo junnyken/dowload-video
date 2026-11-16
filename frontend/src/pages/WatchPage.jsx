@@ -104,7 +104,7 @@ export default function WatchPage() {
   useTranslation('watch'); // re-render on language change (T reads i18n at render)
   const lp = useLocalePath();
   const { isAuthenticated, session, withAuth } = useAuth();
-  const { canUseFeature } = useEntitlement();
+  const { allowed } = useEntitlement();
   const [status, setStatus] = useState(null);       // null = loading, false = unavailable
   const [subs, setSubs] = useState([]);
   const [inbox, setInbox] = useState({ items: [], unread: 0, ready: true });
@@ -267,7 +267,7 @@ export default function WatchPage() {
     setMsg(T.push[res] || T.push.failed);
   }
 
-  const bulkZipAllowed = canShowWatchBulkZip(status, canUseFeature('bulk_zip'));
+  const bulkZipAllowed = canShowWatchBulkZip(status, allowed('bulk_zip'));
 
   async function downloadChannelZip(group) {
     if (!bulkZipAllowed || zipState[group.key]) return;

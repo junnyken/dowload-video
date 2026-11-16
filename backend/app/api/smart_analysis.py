@@ -21,7 +21,7 @@ from pydantic import BaseModel, field_validator
 
 from app.core.auth_middleware import get_optional_user as _auth_optional_user
 
-_PAID_TIERS = ("starter", "pro", "team", "enterprise", "api")
+_PAID_TIERS = ("starter", "pro", "team", "enterprise", "api", "admin")
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ FREE_ANALYSES_PER_DAY = int(os.getenv("AI_FREE_ANALYSES_PER_DAY", "0"))
 STARTER_ANALYSES_PER_DAY = int(os.getenv("AI_STARTER_ANALYSES_PER_DAY", "10"))
 FREE_CLIP_SUGGESTIONS_MAX = 1   # free gets 1 highlight only
 PRO_ANALYSES_PER_DAY = int(os.getenv("AI_PRO_ANALYSES_PER_DAY", "50"))
+TEAM_ANALYSES_PER_DAY = int(os.getenv("AI_TEAM_ANALYSES_PER_DAY", "200"))
 
 
 def anon_limit() -> int:
@@ -55,9 +56,16 @@ def starter_limit() -> int:
 
 def pro_limit() -> int:
     return max(PRO_ANALYSES_PER_DAY, starter_limit())
+
+
+def team_limit() -> int:
+    return max(TEAM_ANALYSES_PER_DAY, pro_limit())
+
+
 MAX_DURATION_FREE_S = 600.0     # 10 min max for free
 MAX_DURATION_STARTER_S = 1800.0 # 30 min max for Starter
 MAX_DURATION_PRO_S = 3600.0     # 60 min max for Pro
+MAX_DURATION_TEAM_S = 10800.0   # 180 min max for Team / Enterprise
 
 VALID_ANALYSES = {"trim", "gif", "metadata", "clips", "summary"}
 
@@ -306,10 +314,14 @@ def _check_analysis_quota(
     tier = user.get("tier", "free")
     user_id = user.get("id")
 
-    if tier == "starter":
-        daily_limit = starter_limit()
-    elif tier in _PAID_TIERS:
+    if tier in ("enterprise", "admin"):
+        return True, ""
+    if tier in ("team", "api"):
+        daily_limit = team_limit()
+    elif tier == "pro":
         daily_limit = pro_limit()
+    elif tier == "starter":
+        daily_limit = starter_limit()
     else:
         daily_limit = free_limit()
         if daily_limit <= 0:
@@ -443,11 +455,14 @@ async def submit_analyze_media(
     tier = (user or {}).get("tier", "anonymous" if user is None else "free")
     from app.core.quotas import is_admin_request
     _is_admin = is_admin_request(request)
-    if not _is_admin and tier not in _PAID_TIERS:
-        allowed_q, reason_q = _check_analysis_quota(user, request)
-        if not allowed_q:
-            raise HTTPException(status_code=402, detail=reason_q)
-    max_duration = MAX_DURATION_STARTER_S if tier == "starter" else (MAX_DURATION_PRO_S if (tier in _PAID_TIERS or _is_admin) else MAX_DURATION_FREE_S)
+    if _is_admin or tier in ("team", "enterprise", "admin", "api"):
+        max_duration = MAX_DURATION_TEAM_S
+    elif tier == "pro":
+        max_duration = MAX_DURATION_PRO_S
+    elif tier == "starter":
+        max_duration = MAX_DURATION_STARTER_S
+    else:
+        max_duration = MAX_DURATION_FREE_S
 
     if body.duration_hint_s is not None and body.duration_hint_s > max_duration:
         raise HTTPException(
@@ -467,10 +482,12 @@ async def submit_analyze_media(
             raise HTTPException(status_code=400, detail="Invalid media_path.")
         body.media_path = _real_media
 
-    # Quota check
-    allowed, reason = _check_analysis_quota(user, request)
-    if not allowed:
-        raise HTTPException(status_code=429, detail=reason)
+    # Single authoritative quota & tier check (skip for authenticated admin requests)
+    if not _is_admin:
+        allowed, reason = _check_analysis_quota(user, request)
+        if not allowed:
+            status_code = 402 if tier not in _PAID_TIERS else 429
+            raise HTTPException(status_code=status_code, detail=reason)
 
     # Check DB cache by media_path (reuse a still-fresh completed analysis of the same file)
     if body.media_path:

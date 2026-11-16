@@ -13,25 +13,25 @@
     "title": "Chọn gói Pro (Ưu tiên Quốc tế USD / VietQR)",
     "month": {
       "name": "Pro Tháng",
-      "price": "$6.99",
-      "period": "/tháng",
-      "desc": "Full tính năng Pro Studio + 3.000 lượt gọi API/tháng (30 ngày)"
+      "price": "$3.99",
+      "period": "/tháng đầu ($5.99 gia hạn)",
+      "desc": "Full tính năng Pro Studio + 3.000 lượt gọi API/tháng (+500 bonus lần đầu)"
     },
     "year": {
       "name": "Pro Năm",
-      "price": "$49",
+      "price": "$39",
       "period": "/năm",
-      "desc": "Tiết kiệm 42% ($4.08/tháng) — tối ưu nhất cho Creator & Developer",
-      "badge": "Tiết kiệm 42%"
+      "desc": "Tiết kiệm 45% ($3.25/tháng) — tối ưu nhất cho Creator & Developer",
+      "badge": "Tiết kiệm 45%"
     },
     "features": {
       "title": "Tất cả tính năng Pro mở khóa",
       "items": [
-        "200 lượt tải/ngày · Chất lượng 4K/8K",
+        "300 lượt tải/ngày · Chất lượng 4K",
         "Developer REST API (3.000 lượt/tháng)",
         "Làm sạch Video Reup (Xoá MD5 + Lật gương)",
         "Ghép cứng phụ đề vào MP4 (Hardsub)",
-        "Tải trọn bộ Ảnh/Slide & Playlist (.ZIP)",
+        "Nút tải nổi trên khung video + HLS 1080p",
         "Cắt đoạn Video dài tới 10 phút (4K)"
       ]
     },

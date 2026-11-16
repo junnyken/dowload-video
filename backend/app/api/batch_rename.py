@@ -93,6 +93,21 @@ async def bulk_zip_rename(
     """
     if not user or not user.get("id"):
         raise HTTPException(401, detail="Vui lòng đăng nhập để tạo ZIP đổi tên.")
+    from app.core.quotas import check_feature_permission, is_admin_request  # noqa: PLC0415
+    if not is_admin_request(request):
+        perm = check_feature_permission(str(user["id"]), "bulk_zip")
+        if not perm.get("allowed"):
+            raise HTTPException(
+                402,
+                detail={
+                    "error": perm.get("error_code") or "bulk_zip_pro",
+                    "feature": "bulk_zip",
+                    "current_tier": perm.get("tier") or "free",
+                    "required_tier": perm.get("required_tier") or "starter",
+                    "upgrade_url": "/pricing",
+                    "message": perm.get("message") or "Tính năng Đổi tên hàng loạt & nén .ZIP chỉ dành cho gói trả phí (Starter / Pro / Team).",
+                },
+            )
     pattern = payload.pattern.strip()
     if not pattern:
         raise HTTPException(400, detail="Pattern không được để trống.")

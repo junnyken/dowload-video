@@ -39,8 +39,9 @@ _PLAYLIST_LIMITS: Dict[str, int] = {
     "free": 0,
     "starter": 5,
     "pro": 20,
-    "team": 100,
-    "enterprise": 500,
+    "team": -1,
+    "enterprise": -1,
+    "admin": -1,
 }
 
 
@@ -99,29 +100,30 @@ async def save_playlist(
     # Determine tier + limit
     tier = get_user_tier(user_id)
     limit = _PLAYLIST_LIMITS.get(tier, _PLAYLIST_LIMITS["free"])
-    if limit <= 0:
+    if limit == 0:
         raise HTTPException(
             status_code=402,
             detail="Tính năng Lưu Playlist theo dõi chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
         )
 
     # Count existing playlists
-    try:
-        count_res = (
-            supabase.table("saved_playlists")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        current_count = count_res.count or 0
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check playlist count: {e}")
+    if limit > 0:
+        try:
+            count_res = (
+                supabase.table("saved_playlists")
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            current_count = count_res.count or 0
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to check playlist count: {e}")
 
-    if current_count >= limit:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Bạn đã đạt giới hạn {limit} danh sách phát cho gói {tier.title()}.",
-        )
+        if current_count >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Bạn đã đạt giới hạn {limit} danh sách phát cho gói {tier.title()}.",
+            )
 
     # Detect platform
     platform = _detect_platform(body.url)

@@ -22,6 +22,7 @@ const PLAN_FEATURES = {
   pro:        new Set(['basic_platforms', ...PRO_FEATURES]),
   team:       new Set(['basic_platforms', ...PRO_FEATURES, ...TEAM_EXTRA]),
   enterprise: new Set(['basic_platforms', ...PRO_FEATURES, ...TEAM_EXTRA, ...ENTERPRISE_EXTRA]),
+  admin:      new Set(['basic_platforms', ...PRO_FEATURES, ...TEAM_EXTRA, ...ENTERPRISE_EXTRA]),
 };
 
 function readCache() {
@@ -110,7 +111,7 @@ export function useEntitlement() {
     fetchStatus(true);
   }, [fetchStatus]);
 
-  const isProEquivalent = ['pro', 'team', 'enterprise'].includes(tier);
+  const isProEquivalent = ['pro', 'team', 'enterprise', 'admin'].includes(tier);
 
   const allowed = useCallback(
     (feature) => {
@@ -120,5 +121,5 @@ export function useEntitlement() {
     [tier],
   );
 
-  return { tier, billingStatus, isProEquivalent, allowed, loading, refresh };
+  return { tier, billingStatus, isProEquivalent, allowed, canUseFeature: allowed, loading, refresh };
 }

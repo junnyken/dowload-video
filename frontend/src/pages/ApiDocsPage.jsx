@@ -205,7 +205,7 @@ export default function ApiDocsPage() {
             t={t}
             i18nKey="auth.note"
             components={{
-              a: <a href="#/api-keys" className="text-accent-text underline" />,
+              a: <a href="/api-keys" className="text-accent-text underline" />,
               b: <strong />,
               code: <code className="bg-surface-2 px-1 rounded" />,
             }}

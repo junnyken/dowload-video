@@ -16,7 +16,7 @@
     },
     {
       "tag": "Pillar 02",
-      "title": "Browser Extension v5.28",
+      "title": "Browser Extension v5.29",
       "desc": "Detects active streams in real time, renders a floating download pill on web players, remuxes HLS AES-128/SAMPLE-AES directly to OPFS disk with zero RAM bloat, and resumes interrupted movies."
     },
     {

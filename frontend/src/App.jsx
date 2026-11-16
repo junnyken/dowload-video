@@ -58,7 +58,6 @@ import MobileTabBar from './components/MobileTabBar';
 import ActiveJobsMobile from './components/ActiveJobsMobile';
 import MobileShareIntake from './components/MobileShareIntake';
 import MobileQuickTools from './components/MobileQuickTools';
-import { CHROME_STORE_URL } from './lib/chromeExtension';
 import { trackEvent, EVENT } from './utils/trackEvent';
 
 // ── Path → view mapping ──────────────────────────────────────────────
@@ -311,9 +310,8 @@ function AppInner() {
       title: t('navExtensionTitle'),
       active: view === 'extension',
       onClick: () => {
-        setMenuOpen(false);
         trackEvent(EVENT.EXTENSION_INSTALL_CLICK, { from: 'navbar' });
-        window.open(CHROME_STORE_URL, '_blank', 'noopener,noreferrer');
+        goTo('extension', '/extension');
       },
     },
     { key: 'subtitle-hub', label: t('navSubtitles'), title: t('navSubtitlesTitle'), icon: Languages, active: ['subtitle-hub', 'transcript-asr', 'transcript-translate'].includes(view), onClick: () => goTo('subtitle-hub', '/phu-de') },
@@ -637,7 +635,7 @@ function AppInner() {
         )}
         {view === 'features' && <FeaturesPage onNavigate={navigateTo} />}
         {view === 'pricing' && <PricingPage />}
-        {view === 'checkout' && <CheckoutPage />}
+        {view === 'checkout' && <CheckoutPage onNavigate={navigateTo} />}
         {view === 'billing' && (
           <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
             <BillingPage onNavigate={navigateTo} />

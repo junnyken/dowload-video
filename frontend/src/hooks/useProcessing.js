@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import i18n from '../i18n';
-
-const API = import.meta.env.VITE_API_URL || '';
+import { supabase } from '../lib/supabaseClient';
+import { API_BASE } from '../lib/apiBase';
 
 // Server error codes -> text in locales/*/common.json (processing.errors.<code>).
 const FRIENDLY_CODES = ['no_subtitles', 'file_expired', 'invalid_path'];
@@ -11,13 +11,23 @@ function friendlyMsg(err) {
   const failed = i18n.t('processing.failed', { ns: 'common' });
   if (!err) return failed;
   if (typeof err === 'string') return friendly(err) || err;
-  return friendly(err.error) || err.message || err.detail || failed;
+  if (err.detail && typeof err.detail === 'object') {
+    return friendly(err.detail.error || err.detail.error_code) || err.detail.message || err.detail.user_message || failed;
+  }
+  return friendly(err.error || err.error_code) || err.message || err.user_message || (typeof err.detail === 'string' ? err.detail : '') || failed;
 }
 
 async function callAPI(path, body) {
-  const res = await fetch(`${API}/api/v1/${path}`, {
+  let token = null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    token = session?.access_token || null;
+  } catch { /* guest */ }
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/api/v1/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));

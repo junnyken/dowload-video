@@ -34,12 +34,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
+from app.core.auth_middleware import get_optional_user as _auth_get_optional_user
 from app.services.asr import budget as asr_budget
 from app.services.asr import config as asr_config
 from app.services.asr.jobs import NON_TERMINAL, fail_job, parse_error, refund_quota
 from app.services.asr.types import ERROR_MESSAGES_VI, AsrError
 
 from app.api.transcript_translate import (  # same identity model, reused not duplicated
+    daily_cue_limit_for_tier,
     resolve_identity,
     resolve_quota_subject,
 )
@@ -176,13 +178,13 @@ async def _create_asr_job(payload: CreateAsrJobRequest, identity, quota_subject)
 
     from app.core.quotas import get_user_tier  # noqa: PLC0415
     user_tier = get_user_tier(str(user_id)) or "free"
-    if user_tier not in ("starter", "pro", "team", "enterprise", "api"):
+    if user_tier not in ("starter", "pro", "team", "enterprise", "api", "admin"):
         raise HTTPException(
             status_code=402,
             detail="Tính năng Phiên âm AI (ASR - Chuyển giọng nói thành Phụ đề) chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
         )
 
-    tier_asr_limit = 30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api") else _DAILY_MINUTES_LIMIT)
+    tier_asr_limit = 30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api", "admin") else _DAILY_MINUTES_LIMIT)
 
     # ASR minutes are billed per minute, so the daily cap cannot hang off a
     # client-supplied X-Session-ID — see resolve_quota_subject.
@@ -346,11 +348,11 @@ async def get_asr_quota(
     quota_key = quota_subject or identity
     from app.core.quotas import get_user_tier  # noqa: PLC0415
     user_tier = get_user_tier(str(identity)) if identity else "guest"
-    is_paid_asr = user_tier in ("starter", "pro", "team", "enterprise", "api")
+    is_paid_asr = user_tier in ("starter", "pro", "team", "enterprise", "api", "admin")
     if not is_paid_asr:
         enabled = False
         reason = "tier_locked"
-    effective_limit = 0 if not is_paid_asr else (30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api") else _DAILY_MINUTES_LIMIT))
+    effective_limit = 0 if not is_paid_asr else (30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api", "admin") else _DAILY_MINUTES_LIMIT))
     if quota_key and is_paid_asr:
         try:
             resp = (
@@ -469,6 +471,7 @@ class ChainTranslateRequest(BaseModel):
 async def translate_asr_result(
     job_id: str,
     payload: ChainTranslateRequest,
+    user: dict | None = Depends(_auth_get_optional_user),
     identity: str | None = Depends(resolve_identity),
 ):
     """
@@ -482,13 +485,29 @@ async def translate_asr_result(
     import uuid
 
     from app.api.transcript_translate import (
-        _DAILY_CUE_LIMIT,
         _MAX_CUE_TEXT_LENGTH,
         _MAX_CUES_PER_JOB,
         _TARGET_LANGS,
         _TRANSCRIPT_JOBS_DIR,
     )
     from app.services.subtitle_format import parse_srt_with_skip_count
+
+    auth_uid = (user or {}).get("id")
+    if not auth_uid:
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Dịch phụ đề từ ASR bằng AI đã bị khóa với Khách chưa đăng nhập. Vui lòng đăng nhập và nâng cấp gói trả phí để sử dụng.",
+        )
+
+    from app.core.quotas import get_user_tier  # noqa: PLC0415
+    user_tier = get_user_tier(str(auth_uid)) or "free"
+    if user_tier not in ("starter", "pro", "team", "enterprise", "api", "admin"):
+        raise HTTPException(
+            status_code=402,
+            detail="Tính năng Dịch phụ đề từ ASR bằng AI chỉ dành cho gói trả phí (Starter / Pro / Team). Vui lòng nâng cấp gói để sử dụng.",
+        )
+    cue_daily_limit = daily_cue_limit_for_tier(user_tier)
+    quota_key = str(auth_uid)
 
     if payload.target_lang not in _TARGET_LANGS:
         raise HTTPException(
@@ -497,7 +516,7 @@ async def translate_asr_result(
         )
 
     db = _get_db()
-    asr_row = _load_owned_job(db, job_id, identity, require_done=True)
+    asr_row = _load_owned_job(db, job_id, identity or str(auth_uid), require_done=True)
     result_path = asr_row.get("result_path")
     if not result_path or not os.path.isfile(result_path):
         raise HTTPException(status_code=404, detail="File phụ đề chưa hoàn tất, chưa thể dịch.")
@@ -518,14 +537,14 @@ async def translate_asr_result(
     try:
         reserve_resp = db.rpc(
             "reserve_transcript_translation_usage",
-            {"p_user_id": identity, "p_cues": cue_count, "p_limit": _DAILY_CUE_LIMIT},
+            {"p_user_id": quota_key, "p_cues": cue_count, "p_limit": cue_daily_limit},
         ).execute()
         reserved = bool(reserve_resp.data)
     except Exception as exc:
         logger.error("Failed to reserve translation quota for ASR-chained job %s: %s", job_id, exc)
         raise HTTPException(status_code=503, detail="Không thể kiểm tra hạn mức, vui lòng thử lại sau.") from exc
     if not reserved:
-        raise HTTPException(status_code=422, detail=f"Vượt quá hạn mức dịch trong ngày ({_DAILY_CUE_LIMIT} dòng/ngày).")
+        raise HTTPException(status_code=422, detail=f"Vượt quá hạn mức dịch trong ngày ({cue_daily_limit} dòng/ngày).")
 
     translate_job_id = str(uuid.uuid4())
     work_dir = os.path.join(_TRANSCRIPT_JOBS_DIR, translate_job_id)
