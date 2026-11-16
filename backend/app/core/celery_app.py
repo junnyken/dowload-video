@@ -319,13 +319,8 @@ celery_app.conf.update(
             'task': 'run_health_checks_task',
             'schedule': 300.0,
         },
-        # Active platform probes every 30 minutes. P0.1 of the Q4 plan: without
-        # this, a platform nobody happens to be using looks healthy because it
-        # is silent, which is how it also looks the moment it breaks.
-        'probe-platforms-30m': {
-            'task': 'probe_all_platforms',
-            'schedule': 1800.0,
-        },
+        # Active platform probes every 30 minutes disabled per owner request
+        # to eliminate background Douyin/Instagram/proxy/bandwidth consumption.
         # Phase 14 — Aggregate analytics_events daily at 23:30 UTC
         'flush-analytics-daily-2330': {
             'task': 'flush_analytics_daily',

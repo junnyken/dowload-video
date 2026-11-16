@@ -50,12 +50,12 @@ class TestEveryPlatformIsCoveredOrExplained:
         assert st["reason"] == "paid_probe_admin_opt_in"
         assert st["paid"] is True and st["min_interval_s"] == pp.PAID_MIN_INTERVAL_SEC
 
-    def test_douyin_is_probed_every_sweep_on_the_free_route(self, rc):
-        """19/10: Douyin (most traffic) got a default target; its first route
-        is the free self-signed API, paid routes stay closed to probes."""
-        assert "douyin" in pp._DEFAULT_TARGETS
-        assert "douyin" not in pp.PAID_PROBE_PLATFORMS
-        assert pp.get_min_interval("douyin") == 0
+    def test_douyin_is_not_probed_by_default(self, rc):
+        """Douyin removed from automatic defaults per owner request; admin opt-in only."""
+        assert "douyin" not in pp._DEFAULT_TARGETS
+        assert "douyin" in pp.PAID_PROBE_PLATFORMS
+        assert "douyin" in pp.NOT_CONFIGURED_REASON
+        assert pp.get_min_interval("douyin") == pp.PAID_MIN_INTERVAL_SEC
 
     def test_defaults_are_https_urls(self):
         for p, url in pp._DEFAULT_TARGETS.items():

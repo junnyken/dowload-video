@@ -185,10 +185,7 @@ class TestTargets:
             # 2026-10-13 (#6332): verified locally through each platform's app
             # path — see the comments on _DEFAULT_TARGETS.
             "rumble", "snapchat", "lemon8", "podcast", "spotify", "pinterest",
-            # 2026-10-19: Douyin, through the live /fetch-link (free
-            # self-signed route); paid routes stay closed to probes.
-            "douyin",
-            # 2026-10-19: owner-provided, paid-gated (24 h).
+            # 2026-10-19: owner-provided, paid-gated (24 h). Douyin removed from defaults per owner request.
             "xiaohongshu",
         }
 
