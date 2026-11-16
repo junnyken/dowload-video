@@ -349,7 +349,7 @@ async def get_asr_quota(
     from app.core.quotas import get_user_tier  # noqa: PLC0415
     user_tier = get_user_tier(str(identity)) if identity else "guest"
     is_paid_asr = user_tier in ("starter", "pro", "team", "enterprise", "api", "admin")
-    if not is_paid_asr:
+    if enabled and not is_paid_asr:
         enabled = False
         reason = "tier_locked"
     effective_limit = 0 if not is_paid_asr else (30 if user_tier == "starter" else (300 if user_tier in ("team", "enterprise", "api", "admin") else _DAILY_MINUTES_LIMIT))

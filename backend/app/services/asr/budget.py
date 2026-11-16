@@ -206,6 +206,18 @@ def alert_ceiling_once(day: str, *, spend: float, minutes: float) -> None:
 
 # ── per-job metadata ────────────────────────────────────────────────────
 
+def _as_hash(raw) -> dict:
+    """Normalize redis-py/fakeredis HGETALL responses (dict or flat key/val list)."""
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, (list, tuple)):
+        it = iter(raw)
+        return dict(zip(it, it))
+    return dict(raw)
+
+
 def meta_set(job_id: str, **fields) -> None:
     try:
         r = _r()
@@ -217,7 +229,7 @@ def meta_set(job_id: str, **fields) -> None:
 
 def meta_get(job_id: str) -> dict:
     try:
-        return _r().hgetall(f"asr:job:{job_id}") or {}
+        return _as_hash(_r().hgetall(f"asr:job:{job_id}"))
     except Exception:  # noqa: BLE001
         return {}
 
@@ -229,7 +241,7 @@ def meta_get_many(job_ids: list[str]) -> dict[str, dict]:
         pipe = _r().pipeline()
         for jid in job_ids:
             pipe.hgetall(f"asr:job:{jid}")
-        return {jid: (m or {}) for jid, m in zip(job_ids, pipe.execute())}
+        return {jid: _as_hash(m) for jid, m in zip(job_ids, pipe.execute())}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -245,7 +257,7 @@ def settle(job_id: str, actual_cost_usd: float, *, paid_started: bool,
         if not r.hsetnx(f"asr:job:{job_id}", "settled", "1"):
             return
         r.expire(f"asr:job:{job_id}", _META_TTL)
-        meta = r.hgetall(f"asr:job:{job_id}") or {}
+        meta = _as_hash(r.hgetall(f"asr:job:{job_id}"))
     except Exception as exc:  # noqa: BLE001
         logger.warning("asr settle failed for %s: %s", job_id, exc)
         return

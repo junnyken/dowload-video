@@ -19,10 +19,11 @@ client = TestClient(fastapi_app, raise_server_exceptions=False)
 
 
 @pytest.fixture
-def identity():
+def identity(monkeypatch):
     from app.api.transcript_translate import resolve_identity, resolve_quota_subject
     fastapi_app.dependency_overrides[resolve_identity] = lambda: "user-1"
     fastapi_app.dependency_overrides[resolve_quota_subject] = lambda: "user-1"
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: "pro")
     yield "user-1"
     fastapi_app.dependency_overrides.pop(resolve_identity, None)
     fastapi_app.dependency_overrides.pop(resolve_quota_subject, None)
@@ -209,7 +210,7 @@ SRT = "1\n00:00:01,000 --> 00:00:02,500\nXin chào\n\n2\n00:00:03,000 --> 00:00:
 @pytest.fixture
 def done_job(asr_env, tmp_path):
     p = tmp_path / "asr_result_x.srt"
-    p.write_text(SRT, encoding="utf-8")
+    p.write_text(SRT, encoding="utf-8", newline="\n")
     asr_env.db.tables["transcript_asr_jobs"] = [{
         "id": "j1", "user_id": "user-1", "status": "done", "result_path": str(p),
         "video_title": "Video", "detected_language": "vi", "duration_sec": 5,
@@ -414,7 +415,7 @@ def test_quota_reads_usage_and_reset(asr_env, identity, monkeypatch):
         r = client.get("/api/v1/transcript-asr/quota")
     assert r.status_code == 200
     assert r.json() == {
-        "enabled": True, "unavailable_reason": None, "minutes_used": 37.5,
+        "enabled": True, "unavailable_reason": None, "tier_locked": False, "minutes_used": 37.5,
         "minutes_limit": 120, "per_job_max_minutes": 45,
         "reset_at_utc": "2030-01-16T00:00:00+00:00",
     }
@@ -461,3 +462,15 @@ def test_selftest_preview_is_cut_like_a_user_job(asr_env, admin):
     assert body["ok"] is True
     assert body["provider_segment_count"] == 3 and body["segment_count"] > 3
     assert all(s["end"] - s["start"] <= 7.0 * 1.3 and len(s["text"]) <= 84 for s in body["segments"])
+
+
+def test_free_tier_gets_tier_locked_only_when_enabled(asr_env, identity, video, monkeypatch):
+    _enable(monkeypatch)
+    monkeypatch.setattr("app.core.quotas.get_user_tier", lambda uid: "free")
+    with patch("app.api.transcript_asr._get_db", return_value=asr_env.db):
+        quota_body = client.get("/api/v1/transcript-asr/quota").json()
+    assert quota_body["enabled"] is False
+    assert quota_body["unavailable_reason"] == "tier_locked"
+    assert quota_body["tier_locked"] is True
+    post_resp = _post(asr_env, video)
+    assert post_resp.status_code == 402

@@ -171,12 +171,14 @@ async def _maybe_ai_refine_title(raw_title: str, deterministic: str, platform: s
             f"Platform: {platform or 'web'}\n"
             f"Raw title: {raw_title[:320]}"
         )
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        from app.services.llm_client import _GEMINI_MODEL  # noqa: PLC0415
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={api_key}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 48},
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 256},
         }
-        async with httpx.AsyncClient(timeout=0.65) as client:
+        async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.post(url, json=payload)
         if resp.status_code != 200:
             return None
