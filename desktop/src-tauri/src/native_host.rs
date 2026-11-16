@@ -169,7 +169,7 @@ pub fn serve(
                     // port closed, or a frame we refuse: the host ends (and
                     // the app loop below stops waiting on the socket)
                     if let Some(s) = app_w.lock().unwrap().take() {
-                        let _ = s.shutdown(std::net::Shutdown::Both);
+                        let _ = s.shutdown(std::net::Shutdown::Write);
                     }
                     return;
                 }
@@ -215,21 +215,31 @@ pub fn serve(
             let _ = stream.shutdown(std::net::Shutdown::Both);
             return 0;
         }
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
         let mut lines = BufReader::new(stream);
         let mut buf = Vec::new();
         loop {
-            buf.clear();
+            if reader_done() {
+                break;
+            }
             match read_line_capped(&mut lines, &mut buf, MAX_OUT) {
-                Ok(0) | Err(_) => break,
+                Ok(0) => break,
+                Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => continue,
+                Err(_) => break,
                 Ok(_) => {}
             }
-            let Some((line, _)) = to_line(&buf) else { continue };
+            let parsed = to_line(&buf);
+            buf.clear();
+            let Some((line, _)) = parsed else { continue };
             if write_frame(&mut *out.lock().unwrap(), line.trim_end().as_bytes()).is_err() {
                 return 0; // browser gone
             }
         }
         if let Some(s) = app.lock().unwrap().take() {
             let _ = s.shutdown(std::net::Shutdown::Both);
+        }
+        if reader_done() {
+            return 0;
         }
         told_down = write_frame(&mut *out.lock().unwrap(), &status(false, None)).is_ok();
         sleep_unless(&reader, RETRY);
@@ -247,10 +257,11 @@ fn sleep_unless(reader: &std::thread::JoinHandle<()>, d: Duration) {
 
 /// One line without the newline, refusing (Err) a line longer than `max`.
 pub fn read_line_capped(r: &mut impl BufRead, buf: &mut Vec<u8>, max: usize) -> io::Result<usize> {
-    let n = r.by_ref().take(max as u64 + 1).read_until(b'\n', buf)?;
+    let limit = (max + 1).saturating_sub(buf.len());
+    let n = r.by_ref().take(limit as u64).read_until(b'\n', buf)?;
     if buf.ends_with(b"\n") {
         buf.pop();
-    } else if n > max {
+    } else if buf.len() > max {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "line too long"));
     }
     Ok(n)
