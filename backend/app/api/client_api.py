@@ -312,7 +312,7 @@ def _features() -> Dict[str, Any]:
 # Server-side platform slugs (app.core.platform_key) the app may fall back for.
 SERVER_FALLBACK_SLUGS = ("youtube", "tiktok", "instagram", "facebook", "twitter", "threads", "reddit",
                          "pinterest", "vimeo", "bilibili", "soundcloud", "youku", "mgtv", "iqiyi",
-                         "kuaishou", "xiaohongshu")
+                         "kuaishou", "xiaohongshu", "pikpak")
 
 
 def server_fallback_platforms() -> List[str]:

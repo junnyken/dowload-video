@@ -34,6 +34,7 @@ PLATFORM_LABELS = {
     "iqiyi":     "iQIYI",
     "youku":     "Youku",
     "mgtv":      "Mango TV",
+    "pikpak":    "PikPak",
     "other":     "các trang khác",
 }
 
@@ -49,6 +50,7 @@ _HOST_PLATFORMS = (
     ("iqiyi", ("iq.com", "iqiyi.com")),
     ("youku", ("youku.com",)),
     ("mgtv", ("mgtv.com",)),
+    ("pikpak", ("mypikpak.com", "mypikpak.net")),
 )
 
 

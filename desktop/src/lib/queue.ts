@@ -15,7 +15,7 @@ import { gatePaused, tokenStale } from './quota-core';
 import { cookieState, refreshCookieStatus, routesFor } from './cookies';
 import { cookieErrorCode, cookiePlatformOf, pickNext, settleThenFallback, type Plan, type Route } from './cookies-core';
 import {
-  claimRoute, currentStep, isLocalStep, legacyRoute, nextRoute, triedBefore, type FetchLinkOutcome, type RouteId,
+  claimRoute, currentStep, isLocalStep, legacyRoute, nextRoute, platformOf, triedBefore, type FetchLinkOutcome, type RouteId,
 } from './routes-core';
 import { fetchLink } from './fetchlink';
 import { applyCodecPref, capForGuest } from './quality';
@@ -469,7 +469,12 @@ export async function initQueue() {
           break;
         }
         if (e.cookiesUsed) void refreshCookieStatus(); // Rust may have flagged the blob
-        finishFailed(e.jobId, cookieErrorCode(code, {
+        // When the platform is unrecognised ('other') and yt-dlp failed without
+        // a specific needle match, tell the user the platform is unsupported
+        // instead of the vague "unknown error" (PikPak, etc. before they were
+        // added, or any genuinely unknown site).
+        const finalCode = (code === 'unknown' && platformOf(it.url) === 'other') ? 'unsupported' : code;
+        finishFailed(e.jobId, cookieErrorCode(finalCode, {
           cookiesUsed: !!e.cookiesUsed, platform: cookiePlatformOf(it.url), enabled: cookieState.get().enabled ?? [],
         }));
         break;

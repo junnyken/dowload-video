@@ -979,15 +979,21 @@ async def fetch_link(
 
     _outcome_counted = False
     try:
-        info = await extract_video_info(
-            payload.url,
-            _quality,
-            payload.remove_watermark,
-            download_subs=_resolve_download_subs(payload.subtitle_mode, payload.download_subs),
-            progress_token=payload.progress_token or "",
-            subtitle_language=payload.subtitle_language or "auto",
-            user_cookies_file=user_cookie_file,
-        )
+        # PikPak share links: resolve via PikPak REST API (yt-dlp has no
+        # PikPak extractor).  Videos in public shares are guest-accessible.
+        if _get_platform_key(payload.url) == "pikpak":
+            from app.services.pikpak_extractor import resolve_pikpak_share
+            info = await resolve_pikpak_share(payload.url, _quality)
+        else:
+            info = await extract_video_info(
+                payload.url,
+                _quality,
+                payload.remove_watermark,
+                download_subs=_resolve_download_subs(payload.subtitle_mode, payload.download_subs),
+                progress_token=payload.progress_token or "",
+                subtitle_language=payload.subtitle_language or "auto",
+                user_cookies_file=user_cookie_file,
+            )
 
         # Honest failure: an audio request that produced no downloadable
         # artifact is NOT a success — without this the UI shows "Xong" but

@@ -221,6 +221,8 @@ def _load_extractors():
         "app.services.podcast_extractor",
         # Registers itself ONLY when KUAISHOU_ENABLED is on (default off).
         "app.services.kuaishou_extractor",
+        # PikPak share link resolver (REST API, no yt-dlp).
+        "app.services.pikpak_extractor",
     ]
     for mod in modules:
         try:

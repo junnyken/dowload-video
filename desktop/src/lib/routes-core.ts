@@ -53,6 +53,7 @@ const HOSTS: readonly (readonly [string, readonly string[]])[] = [
   ['odysee', ['odysee.com']],
   ['lemon8', ['lemon8-app.com', 'lemon8.app']],
   ['snapchat', ['snapchat.com']],
+  ['pikpak', ['mypikpak.com', 'mypikpak.net']],
 ];
 
 export const PLATFORM_SLUGS: readonly string[] = [...HOSTS.map(([s]) => s), 'other'];
@@ -102,6 +103,7 @@ const ORDER: Record<string, readonly RouteId[]> = {
   odysee: ['L0', 'S0'],
   lemon8: ['L0', 'L1', 'S0'],
   snapchat: ['L0', 'S0'],
+  pikpak: ['S0'],
 };
 const DEFAULT_ORDER: readonly RouteId[] = ['L0', 'L1', 'S0'];
 
