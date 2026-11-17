@@ -1181,7 +1181,7 @@ async function vgSyncFloatingPill(tabId) {
         renderCfg();
 
         const positionPill = (v) => {
-          if (!v || state.dismissed || v.mediaKeys) {
+          if (!v || state.dismissed || v.mediaKeys || document.fullscreenElement) {
             pill.classList.remove('visible');
             return;
           }
@@ -1197,14 +1197,14 @@ async function vgSyncFloatingPill(tabId) {
         };
 
         const showForVideo = (v) => {
-          if (state.dismissed || !v || v.mediaKeys) return;
+          if (state.dismissed || !v || v.mediaKeys || document.fullscreenElement) return;
           state.activeVideo = v;
           positionPill(v);
           pill.classList.add('visible');
           clearTimeout(state.hideTimer);
           state.hideTimer = setTimeout(() => {
             if (!state.overPill) pill.classList.remove('visible');
-          }, 2600);
+          }, 4500);
         };
 
         pill.addEventListener('mouseenter', () => {
@@ -1252,6 +1252,10 @@ async function vgSyncFloatingPill(tabId) {
         window.addEventListener('scroll', () => {
           if (state.activeVideo && pill.classList.contains('visible')) positionPill(state.activeVideo);
         }, { passive: true });
+        document.addEventListener('fullscreenchange', () => {
+          if (document.fullscreenElement) pill.classList.remove('visible');
+          else if (state.activeVideo && !state.dismissed) positionPill(state.activeVideo);
+        });
 
         const initialVid = findEligibleVideo();
         if (initialVid) showForVideo(initialVid);
@@ -1984,6 +1988,58 @@ async function vgSetLocalRelay(token, entry) {
   try { await chrome.storage.session.set({ [VG_LOCAL_RELAYS_KEY]: all }); } catch { /* none */ }
 }
 
+async function vgRefreshStream(m) {
+  const rawUrl = String((m && m.url) || '').trim();
+  if (!/^https?:\/\//i.test(rawUrl)) return { found: false };
+  const rawRef = String((m && m.referer) || '').trim();
+  const rawTitle = String((m && m.title) || '').trim();
+  const cleanTargetTitle = rawTitle ? vgCleanStreamTitle({ title: rawTitle, pageUrl: rawRef }) : '';
+  const wantCanon = vgCanonicalManifestIdentity(rawUrl);
+
+  let refOrigin = '';
+  try { if (rawRef) refOrigin = new URL(rawRef).origin.toLowerCase(); } catch { /* ignore */ }
+
+  const queried = await chrome.tabs.query({}).catch(() => []);
+  const tabs = Array.isArray(queried) ? queried : [];
+  const sortedTabs = [...tabs].sort((a, b) => {
+    const aMatch = (rawRef && a.url && vgSamePage(a.url, rawRef)) ? 2 : (refOrigin && a.url && a.url.toLowerCase().startsWith(refOrigin) ? 1 : 0);
+    const bMatch = (rawRef && b.url && vgSamePage(b.url, rawRef)) ? 2 : (refOrigin && b.url && b.url.toLowerCase().startsWith(refOrigin) ? 1 : 0);
+    return bMatch - aMatch;
+  });
+
+  for (const tab of sortedTabs) {
+    if (!tab || typeof tab.id !== 'number' || tab.id < 0) continue;
+    let tabOrigin = '';
+    try { if (tab.url) tabOrigin = new URL(tab.url).origin.toLowerCase(); } catch { /* ignore */ }
+    const sameRefTab = Boolean(rawRef && tab.url && (vgSamePage(tab.url, rawRef) || (refOrigin && tabOrigin === refOrigin)));
+    if (sameRefTab && typeof self.vgSniffProbe === 'function') {
+      await self.vgSniffProbe(tab.id).catch(() => null);
+    }
+    const list = typeof self.vgSniffList === 'function' ? await self.vgSniffList(tab.id).catch(() => []) : [];
+    const candidates = (Array.isArray(list) ? list : [])
+      .filter((x) => x && !x.hidden && !x.error && x.encryption !== 'drm' && !x.live && /^https?:\/\//i.test(x.url || ''))
+      .sort((a, b) => (b.at || 0) - (a.at || 0));
+    const byCanon = candidates.filter((x) => vgCanonicalManifestIdentity(x.url) === wantCanon);
+    const freshCanon = byCanon.find((x) => x.url !== rawUrl) || byCanon[0];
+    const byRef = rawRef
+      ? candidates.filter((x) => (x.refererUrl === rawRef || x.pageUrl === rawRef)
+        && (!cleanTargetTitle || vgCleanStreamTitle(x) === cleanTargetTitle))
+      : [];
+    const fresh = freshCanon || byRef.find((x) => x.url !== rawUrl) || byRef[0];
+    if (fresh && fresh.url) {
+      const nextRef = fresh.refererUrl || fresh.pageUrl || rawRef || '';
+      const cookieJar = await vgGetStreamCookieJar(fresh.url, nextRef).catch(() => undefined);
+      return {
+        found: true,
+        url: fresh.url,
+        ...(nextRef ? { referer: nextRef } : {}),
+        ...(cookieJar ? { cookieJar } : {}),
+      };
+    }
+  }
+  return { found: false };
+}
+
 async function vgNativeRequest(m) {
   if (m.op === 'open_relay') {
     const ch = vgRelayChannelUrl(m.url);
@@ -1994,6 +2050,9 @@ async function vgNativeRequest(m) {
     const tab = await chrome.tabs.create({ url: `${ch.url}#vg-relay=${token}`, active: true });
     if (tab && tab.windowId != null) chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
     return { signedIn };
+  }
+  if (m.op === 'refresh_stream') {
+    return vgRefreshStream(m);
   }
   throw new Error('unknown_op');
 }

@@ -158,6 +158,28 @@ pub fn named_template(n: &OutName<'_>) -> Option<String> {
     Some(format!("{cut} [{}].%(ext)s", n.id))
 }
 
+/// Direct single-file HTTP URLs (`.mp4`, `.mkv`, etc., not HLS/DASH manifests)
+/// benefit from `--http-chunk-size 10M` in yt-dlp to bypass per-connection CDN
+/// throttling and make dropped transfers cleanly resumable on `.part` files.
+pub fn is_direct_media_file_url(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    if lower.contains(".m3u8")
+        || lower.contains(".mpd")
+        || lower.contains("playlist")
+        || lower.contains("manifest")
+        || lower.contains("chunklist")
+        || lower.contains("master")
+    {
+        return false;
+    }
+    let path = lower.split(['?', '#']).next().unwrap_or("");
+    const EXTS: &[&str] = &[
+        ".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".flv", ".mp3", ".m4a", ".aac", ".opus", ".ogg", ".wav",
+        ".flac",
+    ];
+    EXTS.iter().any(|ext| path.ends_with(ext))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn download_args(
     tools: &Tools<'_>,
@@ -237,6 +259,12 @@ pub fn download_args(
         // cookie-authenticated runs (which pace requests sequentially via SLEEP).
         a.push("--concurrent-fragments".into());
         a.push("8".into());
+        if is_direct_media_file_url(url) {
+            // Split large single-file downloads into 10 MiB HTTP Range chunks so
+            // cloud CDNs cannot cap/drop a single long-running HTTP socket.
+            a.push("--http-chunk-size".into());
+            a.push("10M".into());
+        }
     }
     // Each header is its own argv item (`Name:Value`); validate::download_header
     // already limited names to Referer / Origin / User-Agent and refused control chars.
@@ -619,5 +647,26 @@ mod tests {
         assert!(s.windows(2).any(|w| w[0] == "--fragment-retries" && w[1] == "10"));
         assert!(!s.iter().any(|x| x == "--sleep-interval" || x == "--max-sleep-interval"));
         assert_eq!(after_dashdash(&s), vec!["--", "https://cdn.example/hls/master.m3u8"]);
+    }
+
+    #[test]
+    fn direct_media_file_url_enables_http_chunk_size_without_affecting_manifests() {
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let direct = strs(&download_args(
+            &t,
+            "https://cdn.example/video.mp4?token=1",
+            Path::new("/out"),
+            None,
+            false,
+            &[],
+            None,
+            None,
+        ));
+        assert!(direct.windows(2).any(|w| w[0] == "--http-chunk-size" && w[1] == "10M"));
+
+        for non_direct in ["https://cdn.example/hls/master.m3u8", "https://www.youtube.com/watch?v=abc"] {
+            let s = strs(&download_args(&t, non_direct, Path::new("/out"), None, false, &[], None, None));
+            assert!(!s.iter().any(|x| x == "--http-chunk-size"), "{non_direct}: {s:?}");
+        }
     }
 }

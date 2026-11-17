@@ -54,7 +54,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -87,8 +87,20 @@ const STOP_PAUSE: u8 = 1;
 const STOP_CANCEL: u8 = 2;
 
 struct Running {
-    tree: proc::ProcessTree,
+    tree: Mutex<proc::ProcessTree>,
     stop: AtomicU8,
+}
+
+impl Running {
+    fn new(tree: proc::ProcessTree) -> Arc<Self> {
+        Arc::new(Self { tree: Mutex::new(tree), stop: AtomicU8::new(STOP_NONE) })
+    }
+    fn kill(&self) -> std::io::Result<()> {
+        lock(&self.tree).kill()
+    }
+    fn swap_tree(&self, tree: proc::ProcessTree) {
+        *lock(&self.tree) = tree;
+    }
 }
 
 /// Short-lived yt-dlp runs keyed by URL (several may share one URL).
@@ -107,12 +119,12 @@ impl Jobs {
     fn kill_all(&self) {
         for r in lock(&self.downloads).values() {
             r.stop.store(STOP_PAUSE, Ordering::SeqCst);
-            let _ = r.tree.kill();
+            let _ = r.kill();
         }
         for reg in [&self.probes, &self.channel_fetches] {
             for r in lock(reg).values().flatten() {
                 r.stop.store(STOP_CANCEL, Ordering::SeqCst);
-                let _ = r.tree.kill();
+                let _ = r.kill();
             }
         }
     }
@@ -399,7 +411,7 @@ async fn run_collect(
     secret: Option<String>,
 ) -> CmdResult<Collected> {
     let (mut child, tree) = spawn_ytdlp(ytdlp, args)?;
-    let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
+    let running = Running::new(tree);
     lock(registry).entry(key.to_string()).or_default().push(running.clone());
 
     let stdout = child.stdout.take().expect("piped");
@@ -434,14 +446,14 @@ async fn run_collect(
                 Ok(Some(s)) => break Some(s),
                 Ok(None) if Instant::now() >= deadline => {
                     timed_out = true;
-                    let _ = r.tree.kill();
+                    let _ = r.kill();
                     break child.wait().ok();
                 }
                 Ok(None) => std::thread::sleep(Duration::from_millis(100)),
                 Err(_) => break None,
             }
         };
-        let _ = r.tree.kill(); // stragglers
+        let _ = r.kill(); // stragglers
         (status, timed_out, out_t.join().unwrap_or_default(), err_t.join().unwrap_or_default())
     })
     .await
@@ -464,7 +476,7 @@ fn cancel_in(registry: &Registry, key: &str) {
     let list = lock(registry).get(key).cloned().unwrap_or_default();
     for r in list {
         r.stop.store(STOP_CANCEL, Ordering::SeqCst);
-        let _ = r.tree.kill();
+        let _ = r.kill();
     }
 }
 
@@ -821,6 +833,8 @@ struct JobIo {
     tracked: Mutex<HashSet<PathBuf>>,
     final_path: Mutex<Option<String>>,
     stderr_tail: Mutex<VecDeque<String>>,
+    /// Peak bytes reported by yt-dlp during this job, used to verify progress before auto-resume.
+    max_bytes: AtomicU64,
     /// Lines containing this (the temp cookie file name) are dropped.
     secret: Option<String>,
 }
@@ -841,6 +855,9 @@ fn handle_line(app: &AppHandle, io: &JobIo, line: &str, is_stderr: bool) {
                         }
                     }
                 }
+            }
+            if let Some(b) = update.downloaded_bytes {
+                io.max_bytes.fetch_max(b, Ordering::Relaxed);
             }
             let Some(stage) = update.stage else { return };
             if !lock(&io.throttle).allow(Instant::now(), &update) {
@@ -1180,8 +1197,8 @@ async fn start_download(
         if map.contains_key(&job_id) {
             return Err(CommandError::unknown("this job is already running"));
         }
-        let (child, tree) = spawn_ytdlp(&ytdlp, args)?;
-        let running = Arc::new(Running { tree, stop: AtomicU8::new(STOP_NONE) });
+        let (child, tree) = spawn_ytdlp(&ytdlp, args.clone())?;
+        let running = Running::new(tree);
         map.insert(job_id.clone(), running.clone());
         (child, running)
     };
@@ -1193,24 +1210,87 @@ async fn start_download(
         tracked: Mutex::new(HashSet::new()),
         final_path: Mutex::new(None),
         stderr_tail: Mutex::new(VecDeque::new()),
+        max_bytes: AtomicU64::new(0),
         secret: ck
             .as_ref()
             .map(RunCookies::needle)
             .or_else(|| ext_ck.as_ref().map(|f| f.needle().to_string())),
     });
-    let out = pump(app.clone(), io.clone(), child.stdout.take().expect("piped"), false);
-    let err = pump(app.clone(), io.clone(), child.stderr.take().expect("piped"), true);
+    let mut out = pump(app.clone(), io.clone(), child.stdout.take().expect("piped"), false);
+    let mut err = pump(app.clone(), io.clone(), child.stderr.take().expect("piped"), true);
 
     std::thread::spawn(move || {
-        let status = child.wait();
-        let _ = out.join();
-        let _ = err.join();
-        let _ = running.tree.kill(); // stragglers (no-op if the tree is gone)
+        let mut attempt: u8 = 0;
+        let mut prev_bytes: u64 = 0;
+        let (status, stop) = loop {
+            let status = child.wait();
+            let _ = out.join();
+            let _ = err.join();
+            let _ = running.kill(); // stragglers (no-op if the tree is gone)
+
+            let success = status.as_ref().is_ok_and(|s| s.success());
+            let stop = running.stop.load(Ordering::SeqCst);
+            if success || stop != STOP_NONE {
+                break (status, stop);
+            }
+
+            let tail: Vec<String> = lock(&io.stderr_tail).iter().cloned().collect();
+            let code = error::classify(&tail);
+            let cur_bytes = io.max_bytes.load(Ordering::Relaxed);
+            let progressed = cur_bytes > prev_bytes;
+            let has_partials = !lock(&io.tracked).is_empty();
+            let retryable = attempt < 2
+                && (matches!(code, Code::Network | Code::Timeout)
+                    || (progressed && has_partials && code == Code::Unknown));
+            if !retryable {
+                break (status, stop);
+            }
+
+            let _ = app.emit(
+                EVENT_LOG,
+                LogEvent {
+                    job_id: &job_id,
+                    line: "Kết nối bị ngắt giữa chừng — đang tự động nối lại tệp tải dở...",
+                },
+            );
+            for _ in 0..15 {
+                if running.stop.load(Ordering::SeqCst) != STOP_NONE {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            let stop_after_wait = running.stop.load(Ordering::SeqCst);
+            if stop_after_wait != STOP_NONE {
+                break (status, stop_after_wait);
+            }
+
+            lock(&io.stderr_tail).clear();
+            *lock(&io.final_path) = None;
+            prev_bytes = cur_bytes;
+            match spawn_ytdlp(&ytdlp, args.clone()) {
+                Ok((next_child, next_tree)) => {
+                    running.swap_tree(next_tree);
+                    child = next_child;
+                    if running.stop.load(Ordering::SeqCst) != STOP_NONE {
+                        let _ = running.kill();
+                        let s = child.wait();
+                        break (s, running.stop.load(Ordering::SeqCst));
+                    }
+                    out = pump(app.clone(), io.clone(), child.stdout.take().expect("piped"), false);
+                    err = pump(app.clone(), io.clone(), child.stderr.take().expect("piped"), true);
+                    attempt += 1;
+                }
+                Err(spawn_err) => {
+                    lock(&io.stderr_tail).push_back(format!("ERROR: {}", spawn_err.message));
+                    break (status, running.stop.load(Ordering::SeqCst));
+                }
+            }
+        };
+
         lock(&app.state::<Jobs>().downloads).remove(&job_id);
 
         let success = status.as_ref().is_ok_and(|s| s.success());
         let final_path = lock(&io.final_path).clone();
-        let stop = running.stop.load(Ordering::SeqCst);
         let mut ev = DoneEvent {
             job_id: job_id.clone(),
             cookies_used: ck.as_ref().map(|_| true).or_else(|| ext_ck.as_ref().map(|_| true)),
@@ -1281,7 +1361,7 @@ fn pause_download(jobs: State<'_, Jobs>, job_id: String) -> CmdResult<()> {
     let running = lock(&jobs.downloads).get(&job_id).cloned();
     if let Some(r) = running {
         r.stop.store(STOP_PAUSE, Ordering::SeqCst);
-        r.tree.kill().map_err(|e| CommandError::unknown(format!("pause failed: {e}")))?;
+        r.kill().map_err(|e| CommandError::unknown(format!("pause failed: {e}")))?;
     }
     Ok(())
 }
@@ -1296,7 +1376,7 @@ async fn cancel_download(app: AppHandle, jobs: State<'_, Jobs>, job_id: String) 
         Some(r) => {
             // The waiter thread deletes the partial files and emits "cancelled".
             r.stop.store(STOP_CANCEL, Ordering::SeqCst);
-            r.tree.kill().map_err(|e| CommandError::unknown(format!("cancel failed: {e}")))?;
+            r.kill().map_err(|e| CommandError::unknown(format!("cancel failed: {e}")))?;
         }
         None => {
             // Paused, failed, or from an earlier app session.
@@ -1516,6 +1596,20 @@ async fn ext_relay_start(url: String) -> CmdResult<Option<ext_link::RelayStarted
 #[tauri::command]
 fn ext_relay_poll(id: u64) -> Option<ext_link::RelayDoc> {
     ext_link::relay_poll(id)
+}
+
+#[tauri::command]
+async fn ext_refresh_stream(
+    url: String,
+    referer: Option<String>,
+    title: Option<String>,
+) -> CmdResult<Option<ext_link::RefreshedStream>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        ext_link::refresh_stream(&url, referer.as_deref(), title.as_deref())
+    })
+    .await
+    .map_err(|e| CommandError::unknown(e.to_string()))?
+    .map_err(CommandError::unknown)
 }
 
 // ---------------------------------------------------------------- history
@@ -2096,6 +2190,7 @@ pub fn run() {
             ext_link_status,
             ext_relay_start,
             ext_relay_poll,
+            ext_refresh_stream,
             history_list,
             history_add,
             history_delete,

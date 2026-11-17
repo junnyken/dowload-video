@@ -1,3 +1,9 @@
+## 0.22.9
+- Tải file đơn trực tiếp (`.mp4`, `.mkv` từ PikPak / Cloud) theo khối `--http-chunk-size 10M` chuẩn IDM, chống bóp băng thông kết nối đơn và chống ngắt socket cuối file.
+- Tự động nối lại ngầm (Auto-Resume `.part` tối đa 3 lần) ngay trong tiến trình tải khi gặp lỗi mạng tạm thời hoặc đứt kết nối SSL/EOF ở 90–99%.
+- Tự động làm mới địa chỉ luồng phát đã hết hạn (`refresh_stream` qua cầu nối Native với Tiện ích Chrome `v5.29.3`) khi gặp lỗi `403 Forbidden` và tiếp tục tải nối vào tệp `.part` đang dở.
+- Giữ nguyên thanh tiến độ `%` và dung lượng đã lưu trên thẻ Hàng đợi khi Tạm dừng, Chờ tải tiếp hoặc Lỗi.
+
 ## 0.22.8
 - Khắc phục lỗi biên dịch Rust unit test (`ext_bridge.rs`) giúp CI phát hành bản cài đặt Windows ký số tự động (`vidgrab-releases`).
 - Đồng bộ phiên bản với Web Studio & Tiện ích `v5.29.2`, nâng độ ổn định kết nối và hoàn tất luồng dịch phụ đề AI + nhúng mềm MP4.

@@ -364,6 +364,42 @@ function refusedByQuota(id: string, errorText?: string) {
   pump();
 }
 
+async function tryExtRefreshAndRetry(it: QueueItem, jobId: string, code: string, cookiesUsed: boolean) {
+  try {
+    const referer = it.extHeaders?.find((h) => /^referer$/i.test(h.name))?.value ?? null;
+    const res = await api.extRefreshStream({ url: it.url, referer, title: it.fileTitle || it.title });
+    const cur = queue.get().find((i) => i.id === jobId);
+    if (!cur || cur.state !== 'running') return;
+    if (res && res.url) {
+      if (res.cookieJar) {
+        extEphemeral.set(jobId, { ...extEphemeral.get(jobId), cookieJar: res.cookieJar });
+      }
+      let extHeaders = cur.extHeaders;
+      if (res.referer) {
+        const rest = (extHeaders ?? []).filter((h) => !/^referer$/i.test(h.name));
+        extHeaders = [...rest, { name: 'Referer', value: res.referer }];
+      }
+      patch(jobId, {
+        url: res.url,
+        ...(extHeaders ? { extHeaders } : {}),
+        state: 'queued',
+        stage: null,
+        speedBps: null,
+        etaSec: null,
+        pausing: false,
+        errorCode: null,
+      });
+      toast('info', `Đang làm mới liên kết tải từ trình duyệt: ${cur.title}`);
+      pump();
+      return;
+    }
+  } catch { /* fall back to normal failure */ }
+  if (cookiesUsed) void refreshCookieStatus();
+  finishFailed(jobId, cookieErrorCode(code, {
+    cookiesUsed, platform: cookiePlatformOf(it.url), enabled: cookieState.get().enabled ?? [],
+  }));
+}
+
 function finishFailed(id: string, code: string) {
   const it = queue.get().find((i) => i.id === id);
   if (!it) return;
@@ -426,6 +462,12 @@ export async function initQueue() {
           pump();
           break;
         }
+        if (it.localOnly && (code === 'forbidden' || code === 'network') && !refreshed.has(e.jobId)) {
+          // Browser-sniffed stream link expired (403) or dropped: ask Chrome Extension for a fresh URL/cookie jar once.
+          refreshed.add(e.jobId);
+          void tryExtRefreshAndRetry(it, e.jobId, code, Boolean(e.cookiesUsed));
+          break;
+        }
         if (e.cookiesUsed) void refreshCookieStatus(); // Rust may have flagged the blob
         finishFailed(e.jobId, cookieErrorCode(code, {
           cookiesUsed: !!e.cookiesUsed, platform: cookiePlatformOf(it.url), enabled: cookieState.get().enabled ?? [],
@@ -468,7 +510,7 @@ export function resume(id: string) {
 export function retry(id: string) {
   forget(id);
   clearGate();
-  patch(id, { state: 'queued', claimId: null, claimToken: null, route: undefined, step: undefined, tried: [], cookieFallback: false, errorCode: null, errorText: null, percent: null, downloadedBytes: null, speedBps: null, etaSec: null });
+  patch(id, { state: 'queued', claimId: null, claimToken: null, route: undefined, step: undefined, tried: [], cookieFallback: false, errorCode: null, errorText: null, speedBps: null, etaSec: null });
   pump();
 }
 

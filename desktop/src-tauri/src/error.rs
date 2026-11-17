@@ -217,8 +217,18 @@ const RULES: &[(Code, &[&str])] = &[
             "ssl:",
             "certificate verify failed",
             "http error 5",
+            "http error 408",
+            "http error 429",
             "remote end closed connection",
             "incompleteread",
+            "eof occurred in violation of protocol",
+            "winerror 10053]",
+            "premature end of",
+            "contenttooshort",
+            "chunkedencodingerror",
+            "connection broken",
+            "stream ended unexpectedly",
+            "read timed out",
             "giving up after",
         ],
     ),
@@ -290,6 +300,8 @@ mod tests {
         assert_eq!(c("ERROR: [tiktok:user] cz3z: Unable to extract secondary user ID. If you are able to get the channel_id from a video posted by this user, try using \"tiktokuser:channel_id\" as the input URL"), Code::TemporarilyBlocked);
         assert_eq!(c("ERROR: [instagram:user] nasa: Unable to extract data; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues"), Code::CookieRequired);
         assert_eq!(c("ERROR: Unsupported URL: https://x.com/i/jf/onboarding/web?redirect_after_login=%2FNASA%2Fmedia&mode=login"), Code::CookieRequired);
+        assert_eq!(c("ERROR: unable to download video data: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"), Code::Network);
+        assert_eq!(c("ERROR: unable to download video data: ContentTooShortError"), Code::Network);
         assert_eq!(Code::TemporarilyBlocked.as_str(), "temporarily_blocked");
     }
 

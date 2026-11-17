@@ -54,6 +54,7 @@ function makeChrome() {
   let usagePayload = { tier: 'free', universal_stream: false };
   const downloads = [];
   let cookieJarEntries = [];
+  let queryTabs = [];
   const chrome = new Proxy({
     downloads: new Proxy({
       download: (opts, cb) => {
@@ -107,6 +108,7 @@ function makeChrome() {
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     tabs: new Proxy({
       create: async (o) => { tabs.push(o); return { id: tabs.length, windowId: 7 }; },
+      query: async () => queryTabs,
     }, { get: (t, k) => (k in t ? t[k] : anything()) }),
     cookies: new Proxy({
       get: async (q) => (cookie && cookie.name === q.name && q.url.includes(cookie.host) ? { name: q.name, value: 'secret' } : null),
@@ -117,6 +119,7 @@ function makeChrome() {
     chrome, posted, ports, tabs, fetches, listeners, session, local, sync, downloads,
     setCookie: (c) => { cookie = c; },
     setCookieJar: (arr) => { cookieJarEntries = arr; },
+    setQueryTabs: (arr) => { queryTabs = arr; },
     setNativeError: (e) => { nativeError = e; },
     getUsagePayload: () => usagePayload,
     setUsagePayload: (u) => { usagePayload = u; },
@@ -550,6 +553,59 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     aiSchemaSeen && typeof aiSchemaSeen.title === 'string' && refined10f === 'Solo Leveling - S02E14',
     '[10f] vgRefineStreamTitleAi sends { title }, parses { filename_cleaned, episode_tag }, and preserves episode label',
     { aiSchemaSeen, refined10f },
+  );
+
+  // [11] refresh_stream op over native messaging returns fresh URL + cookies from open matching tab
+  env.setQueryTabs([{ id: 3, url: 'https://cinema.example/watch/ep-01' }]);
+  env.setCookieJar([
+    { matchHost: 'cdn.x', domain: '.cdn.x', path: '/', secure: true, expirationDate: 1900000000, name: 'cf_clearance', value: 'fresh_cf' },
+  ]);
+  env.sync.vg_send_cookies = true;
+  sandbox.vgSniffList = async (tid) => tid === 3 ? [
+    {
+      id: 'ep-hls-1-fresh',
+      kind: 'hls',
+      encryption: 'none',
+      live: false,
+      at: Date.now(),
+      url: 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_99',
+      title: 'Hành Trình Biển Đông - Tập 01',
+      pageUrl: 'https://cinema.example/watch/ep-01',
+      refererUrl: 'https://player.embed.x/e/1?token=fresh_99',
+    },
+  ] : [];
+  env.posted.length = 0;
+  p3.deliver({
+    t: 'req',
+    id: 1101,
+    op: 'refresh_stream',
+    url: 'https://cdn.x/anime/ep01/master.m3u8?token=expired_00',
+    referer: 'https://player.embed.x/e/1?token=expired_00',
+    title: 'Hành Trình Biển Đông - Tập 01',
+  });
+  await tick(); await tick();
+  const refreshOk = env.posted.find((x) => x.t === 'res' && x.id === 1101);
+  assert(
+    refreshOk && refreshOk.ok === true && refreshOk.data && refreshOk.data.found === true
+      && refreshOk.data.url === 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_99'
+      && refreshOk.data.referer === 'https://player.embed.x/e/1?token=fresh_99'
+      && typeof refreshOk.data.cookieJar === 'string' && refreshOk.data.cookieJar.includes('fresh_cf'),
+    '[11] refresh_stream answers with fresh signed URL, referer, and cookieJar from live tab',
+  );
+
+  p3.deliver({
+    t: 'req',
+    id: 1102,
+    op: 'refresh_stream',
+    url: 'https://other-cdn.example/missing/video.mp4',
+    referer: 'https://other.example/watch/99',
+    title: 'Missing Video',
+  });
+  await tick(); await tick();
+  const refreshMiss = env.posted.find((x) => x.t === 'res' && x.id === 1102);
+  assert(
+    refreshMiss && refreshMiss.ok === true && refreshMiss.data && refreshMiss.data.found === false,
+    '[11b] refresh_stream answers { found: false } when no open tab matches',
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

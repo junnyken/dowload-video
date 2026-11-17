@@ -25,6 +25,7 @@ const COMMANDS: &[&str] = &[
     "ext_link_status",
     "ext_relay_start",
     "ext_relay_poll",
+    "ext_refresh_stream",
     "history_list",
     "history_add",
     "history_delete",

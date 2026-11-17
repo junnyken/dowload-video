@@ -238,6 +238,14 @@ pub struct RelayStarted {
     pub browser: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshedStream {
+    pub url: String,
+    pub referer: Option<String>,
+    pub cookie_jar: Option<String>,
+}
+
 /// Asks the extension to open and scroll the channel. Ok(None): no browser is
 /// linked, or this link is not one the local relay takes — use the server's.
 pub fn relay_start(url: &str) -> Result<Option<RelayStarted>, String> {
@@ -282,6 +290,45 @@ pub fn relay_start(url: &str) -> Result<Option<RelayStarted>, String> {
 pub fn relay_poll(id: u64) -> Option<RelayDoc> {
     let relays = state().relays.lock().unwrap();
     relays.get(&id).filter(|r| r.started.elapsed() < RELAY_TTL).map(|r| r.doc.clone())
+}
+
+/// Asks the connected browser extension for a refreshed signed URL (+ cookies)
+/// from an open tab when a browser-sniffed download expires or returns 403.
+pub fn refresh_stream(url: &str, referer: Option<&str>, title: Option<&str>) -> Result<Option<RefreshedStream>, String> {
+    if !crate::ext_bridge::valid_http_url(url) {
+        return Ok(None);
+    }
+    let Some(link) = preferred() else { return Ok(None) };
+    let st = state();
+    let id = st.next.fetch_add(1, Ordering::Relaxed) + 1;
+    let data = match request(
+        &link,
+        id,
+        "refresh_stream",
+        json!({ "url": url, "referer": referer, "title": title }),
+        Duration::from_secs(5),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("refresh_stream not completed: {e}");
+            return Ok(None);
+        }
+    };
+    if data.get("found").and_then(Value::as_bool) != Some(true) {
+        return Ok(None);
+    }
+    let Some(new_url) = clean_text(data.get("url"), crate::ext_bridge::MAX_URL)
+        .filter(|u| crate::ext_bridge::valid_http_url(u))
+    else {
+        return Ok(None);
+    };
+    let clean_ref = clean_text(data.get("referer"), crate::ext_bridge::MAX_URL)
+        .filter(|r| crate::ext_bridge::valid_http_url(r));
+    let cookie_jar = data
+        .get("cookieJar")
+        .and_then(Value::as_str)
+        .and_then(crate::cookies::sanitize_netscape);
+    Ok(Some(RefreshedStream { url: new_url, referer: clean_ref, cookie_jar }))
 }
 
 // ---------------------------------------------------------------- relay rules
@@ -524,6 +571,36 @@ mod tests {
         let got = jobs_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(got.url, "https://cdn.x/a.mpd");
         assert_eq!((got.referer.as_deref(), got.user_agent.as_deref(), got.height, got.stream), (Some("https://embed.x/p"), Some("Mozilla/5.0"), Some(720), Some(true)));
+
+        // refresh_stream round-trip over the native link
+        let refresher = std::thread::spawn(|| {
+            refresh_stream("https://cdn.x/ep01/master.m3u8?token=old", Some("https://embed.x/e/1"), Some("Ep 01"))
+        });
+        let r_req = next(&mut ext_in);
+        assert_eq!(r_req["op"], "refresh_stream");
+        assert_eq!(r_req["url"], "https://cdn.x/ep01/master.m3u8?token=old");
+        let r_id = r_req["id"].as_u64().unwrap();
+        write_frame(
+            &mut ext_out,
+            json!({
+                "t": "res",
+                "id": r_id,
+                "ok": true,
+                "data": {
+                    "found": true,
+                    "url": "https://cdn.x/ep01/master.m3u8?token=fresh",
+                    "referer": "https://embed.x/e/1",
+                    "cookieJar": "# Netscape HTTP Cookie File\n.cdn.x\tTRUE\t/\tTRUE\t1900000000\tsid\tabc"
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap();
+        let refreshed = refresher.join().unwrap().unwrap().expect("refreshed stream");
+        assert_eq!(refreshed.url, "https://cdn.x/ep01/master.m3u8?token=fresh");
+        assert_eq!(refreshed.referer.as_deref(), Some("https://embed.x/e/1"));
+        assert!(refreshed.cookie_jar.as_deref().unwrap().contains("sid\tabc"));
 
         // the browser closes the port: the host ends, the link goes away
         drop(ext_out);

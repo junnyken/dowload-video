@@ -63,10 +63,26 @@ function Row({
 
         {(it.state === 'running' || it.state === 'paused' || it.state === 'queued') && (
           <>
-            <ProgressBar percent={it.percent} tone={it.state === 'paused' ? 'warning' : 'accent'} indeterminate={indeterminate || (it.state === 'queued')} />
+            <ProgressBar
+              percent={it.percent}
+              tone={it.state === 'paused' ? 'warning' : 'accent'}
+              indeterminate={indeterminate || (it.state === 'queued' && (it.percent == null || it.percent <= 0))}
+            />
             <p className="flex flex-wrap gap-x-3 text-xs text-fg-muted">
-              {it.state === 'queued' && <span>Đang chờ đến lượt…</span>}
-              {it.state === 'paused' && <><span className="font-medium text-warning">Đã tạm dừng</span>{it.percent != null && <span>{Math.round(it.percent)}%</span>}</>}
+              {it.state === 'queued' && (
+                <>
+                  <span>{(it.percent != null && it.percent > 0) || (it.downloadedBytes != null && it.downloadedBytes > 0) ? 'Đang chờ tải tiếp…' : 'Đang chờ đến lượt…'}</span>
+                  {it.percent != null && it.percent > 0 && <span>{Math.round(it.percent)}%</span>}
+                  {it.downloadedBytes != null && it.downloadedBytes > 0 && <span>{formatBytes(it.downloadedBytes)} / {formatBytes(it.totalBytes ?? it.estSize)}</span>}
+                </>
+              )}
+              {it.state === 'paused' && (
+                <>
+                  <span className="font-medium text-warning">Đã tạm dừng</span>
+                  {it.percent != null && <span>{Math.round(it.percent)}%</span>}
+                  {it.downloadedBytes != null && <span>{formatBytes(it.downloadedBytes)} / {formatBytes(it.totalBytes ?? it.estSize)}</span>}
+                </>
+              )}
               {running && (
                 <>
                   <span className="font-medium text-accent-text">{it.pausing ? 'Đang tạm dừng…' : stage}</span>
@@ -81,6 +97,18 @@ function Row({
         )}
         {it.state === 'completed' && (
           <p className="flex items-center gap-1.5 text-xs text-success"><CheckCircle2 size={14} aria-hidden />Hoàn tất · {formatBytes(it.fileSize)}</p>
+        )}
+        {it.state === 'failed' && ((it.percent != null && it.percent > 0) || (it.downloadedBytes != null && it.downloadedBytes > 0)) && (
+          <>
+            <ProgressBar percent={it.percent} tone="warning" indeterminate={false} />
+            <p className="text-xs text-fg-muted">
+              Đã lưu {it.percent != null && it.percent > 0 ? `${Math.round(it.percent)}%` : formatBytes(it.downloadedBytes)}
+              {it.downloadedBytes != null && it.downloadedBytes > 0 && (it.totalBytes ?? it.estSize) != null
+                ? ` (${formatBytes(it.downloadedBytes)} / ${formatBytes(it.totalBytes ?? it.estSize)})`
+                : ''}
+              {' — bấm Thử lại để tải tiếp từ chỗ dở'}
+            </p>
+          </>
         )}
         {it.state === 'failed' && (
           <p className="flex items-start gap-1.5 text-xs text-danger"><AlertCircle size={14} className="mt-px shrink-0" aria-hidden />{it.errorText || errorMessage(it.errorCode)}</p>

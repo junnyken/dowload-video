@@ -87,6 +87,8 @@ export const api = {
   extRelayStart: (url: string) => call<{ id: number; browser: string } | null>('ext_relay_start', { url }),
   // null = expired (like the server's 404)
   extRelayPoll: (id: number) => call<RelayDoc | null>('ext_relay_poll', { id }),
+  extRefreshStream: (a: { url: string; referer?: string | null; title?: string | null }) =>
+    call<{ url: string; referer?: string | null; cookieJar?: string | null } | null>('ext_refresh_stream', a),
   historyList: (a: { limit?: number; offset?: number; query?: string } = {}) => call<HistoryItem[]>('history_list', a),
   historyAdd: (item: HistoryItem) => call<null>('history_add', { item }),
   historyDelete: (id: string) => call<null>('history_delete', { id }),

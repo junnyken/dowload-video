@@ -21,6 +21,7 @@
     "allow-ext-link-status",
     "allow-ext-relay-start",
     "allow-ext-relay-poll",
+    "allow-ext-refresh-stream",
     "allow-history-list",
     "allow-history-add",
     "allow-history-delete",
