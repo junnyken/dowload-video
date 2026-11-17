@@ -30,9 +30,9 @@ PLAN_DEFS: Dict[str, Dict[str, Any]] = {
     "free": {
         "name": "Free",
         "limits": {
-            "downloads_per_day":     int(os.getenv("FREE_DAILY_LIMIT", "20")),
+            "downloads_per_day":     int(os.getenv("FREE_DAILY_LIMIT", "10")),
             "batch_size_max":        int(os.getenv("FREE_BATCH_LIMIT", "5")),
-            "max_height":            1080,
+            "max_height":            int(os.getenv("FREE_MAX_HEIGHT", "720")),
             "history_days":          7,
             "history_limit":         20,
             "ai_analyses_per_day":   0,

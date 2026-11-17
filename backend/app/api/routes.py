@@ -257,7 +257,7 @@ def youtube_height_cap(user_id) -> int:
     YT_MAX_HEIGHT_ANON (720). Decided by plan NAME, not perms["max_height"]:
     production raised FREE_MAX_HEIGHT to 4320 for the other platforms."""
     if not user_id:
-        return int(os.getenv("YT_MAX_HEIGHT_ANON", "1080"))
+        return int(os.getenv("YT_MAX_HEIGHT_ANON", "720"))
     from app.core.quotas import get_user_tier
     paid = (get_user_tier(user_id) or "free") != "free"
     return youtube_height_for(paid)
@@ -267,7 +267,7 @@ def youtube_height_for(paid: bool) -> int:
     """Free: YT_MAX_HEIGHT_USER. Paid: YT_MAX_HEIGHT_PRO, never below Free —
     28/10/2026 production had YT_MAX_HEIGHT_USER=0 (no cap) and no
     YT_MAX_HEIGHT_PRO, so Pro stopped at 2160 while Free had no limit."""
-    free = int(os.getenv("YT_MAX_HEIGHT_USER", "1080"))
+    free = int(os.getenv("YT_MAX_HEIGHT_USER", "720"))
     if not paid:
         return free
     pro = int(os.getenv("YT_MAX_HEIGHT_PRO", "2160"))
@@ -931,19 +931,32 @@ async def fetch_link(
             if _req_h > _cap:
                 _quality = f"video_{_cap}"
 
-    # Guests stop at GUEST_MAX_HEIGHT (1080) on EVERY platform; 2K/4K needs an
-    # account — free or paid (owner 08/10, task #6134: "để khách phải đăng ký").
-    # The rows above stay visible, locked "signin", and the note says why.
+    # Guests and Free accounts stop at their height cap (default 720p) on
+    # EVERY platform; higher resolutions need a paid plan (or sign-in + upgrade).
+    # The rows above stay visible, locked "signin"/"plan", and the note says why.
     if not user_id:
-        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "1080") or 0)
+        _guest_cap = int(os.getenv("GUEST_MAX_HEIGHT", "720") or 0)
         if _guest_cap > 0:
             if not _height_cap["height"] or _guest_cap < _height_cap["height"]:
                 _height_cap = {"height": _guest_cap, "reason": "signin"}
             _q = str(_quality or "")
             _asks_more = _q in ("video_4k", "4k", "mp4_4k") or (
+                _q in ("", "video") and _guest_cap < 1080) or (
                 _q.startswith("video_") and _q[6:].isdigit() and int(_q[6:]) > _guest_cap)
             if _asks_more:
                 _quality = f"video_{_guest_cap}"
+    elif _quota_req.kind == REQ_USER and _quota_req.tier == "free":
+        from app.core.quotas import get_tier_permissions as _gtp
+        _free_cap = int(_gtp("free").get("max_height") or 0)
+        if 0 < _free_cap < 2160:
+            if not _height_cap["height"] or _free_cap < _height_cap["height"]:
+                _height_cap = {"height": _free_cap, "reason": "plan"}
+            _q = str(_quality or "")
+            _asks_more = _q in ("video_4k", "4k", "mp4_4k") or (
+                _q in ("", "video") and _free_cap < 1080) or (
+                _q.startswith("video_") and _q[6:].isdigit() and int(_q[6:]) > _free_cap)
+            if _asks_more:
+                _quality = f"video_{_free_cap}"
 
     # Global concurrency guard — graceful wait-queue absorbs burst traffic
     _is_paid_slot = bool(user_id and (user or {}).get("tier", "free") not in ("free", "guest", ""))

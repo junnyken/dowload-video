@@ -1109,7 +1109,7 @@ async def tenant_branding(request: Request):
         "favicon_url": None,
         "primary_color": "#6366f1",
         "accent_color": "#8b5cf6",
-        "support_email": "support@vidgrab.dev",
+        "support_email": "tranthevanle@gmail.com",
         "hide_powered_by": False,
         "is_white_label": False,
     }
@@ -1139,7 +1139,7 @@ async def tenant_branding(request: Request):
             "favicon_url": branding.get("favicon_url"),
             "primary_color": branding.get("primary_color") or "#6366f1",
             "accent_color": branding.get("accent_color") or "#8b5cf6",
-            "support_email": branding.get("support_email") or "support@vidgrab.dev",
+            "support_email": branding.get("support_email") or "tranthevanle@gmail.com",
             "hide_powered_by": branding.get("hide_powered_by", False),
             "is_white_label": True,
         }

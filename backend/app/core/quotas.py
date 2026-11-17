@@ -30,7 +30,7 @@ from typing import Dict, Any, Optional
 from app.core.database import get_supabase_client
 
 # ── Tier limits (env-tunable) ─────────────────────────────────────────
-FREE_DAILY_LIMIT  = int(os.getenv("FREE_DAILY_LIMIT",   "20"))
+FREE_DAILY_LIMIT  = int(os.getenv("FREE_DAILY_LIMIT",   "10"))
 STARTER_DAILY_LIMIT = int(os.getenv("STARTER_DAILY_LIMIT", "100"))
 PRO_DAILY_LIMIT   = int(os.getenv("PRO_DAILY_LIMIT",   "300"))
 TEAM_DAILY_LIMIT  = int(os.getenv("TEAM_DAILY_LIMIT",  "1000"))
@@ -48,8 +48,8 @@ TIER_PERMISSIONS: Dict[str, Dict[str, Any]] = {
         # FREE_MAX_HEIGHT (task #6134): owner 08/10 — every account may take
         # 2K/4K when the video has it; set 4320 on the deployment. Default
         # keeps the old 1080p cap.
-        "max_height":           int(os.getenv("FREE_MAX_HEIGHT", "1080")),
-        "youtube_download":     "video",   # video allowed, capped 1080p + 5/day
+        "max_height":           int(os.getenv("FREE_MAX_HEIGHT", "720")),
+        "youtube_download":     "video",   # video allowed, capped 720p + 10/day
         "bulk_zip":             False,
         "spotify_artist_full":  False,     # only top_tracks
         "cloud_save":           False,
@@ -325,7 +325,7 @@ def platform_limit_anon() -> int:
 
 
 def platform_limit_user() -> int:
-    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 20)
+    return _env_limit("PLATFORM_DAILY_LIMIT_USER", 10)
 
 
 def platform_limit_for_tier(tier: str) -> int:
@@ -1173,21 +1173,21 @@ def check_feature_permission(user_id: str, feature: str) -> Dict[str, Any]:
 def check_quality_permission(user_id: str, quality_str: str, height: int = 0) -> Dict[str, Any]:
     """
     Return whether the requested quality is allowed for this user's tier.
-    Free users are capped at 1080p.
+    Free users are capped at max_height (720p by default).
     """
     tier  = _get_tier(user_id)
     perms = get_tier_permissions(tier)
     max_h = perms["max_height"]
 
     is_4k_str = quality_str.lower() in PRO_ONLY_QUALITY_STRINGS
-    is_4k_h   = height > 1080
+    is_above_cap = bool(height and height > max_h)
 
-    if (is_4k_str or is_4k_h) and max_h < 2160:
+    if (is_4k_str or is_above_cap) and max_h < 2160:
         return {
             "allowed":    False,
             "error_code": ERR_QUALITY,
             "tier":       tier,
-            "message":    "Chất lượng 4K chỉ dành cho Pro. Nâng cấp hoặc chọn ≤ 1080p.",
+            "message":    f"Chất lượng 4K chỉ dành cho Pro. Nâng cấp hoặc chọn ≤ {max_h}p.",
         }
 
     return {"allowed": True, "tier": tier}

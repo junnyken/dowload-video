@@ -21,9 +21,9 @@ export function buildPlanRows(tiers) {
     },
     {
       // App Windows 0.22.9: --http-chunk-size 10M + auto-resume .part (3 lần) + làm mới link 403.
-      // Hiện mọi gói đều dùng được (chưa gate) — đổi ở đây khi bật giới hạn theo gói.
+      // Mở cho tài khoản đăng ký trở lên (Free / Starter / Pro / Team); Khách chưa đăng nhập bị khóa.
       key: 'turbo', label: tp('rows.turbo'),
-      get: () => tp('turboAll'),
+      get: (t) => (t.id === 'guest' ? false : tp('turboAll')),
     },
     {
       // PikPak share link (video) qua máy chủ VidGrab — tính vào lượt tải mỗi ngày.

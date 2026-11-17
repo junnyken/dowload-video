@@ -39,13 +39,13 @@ def test_guest_gets_five_in_total_across_platforms():
 
 def test_user_gets_twenty_in_total():
     rq = QuotaRequester(REQ_USER, "u-1")
-    _use(rq, "tiktok", 10)
-    _use(rq, "douyin", 9)
+    _use(rq, "tiktok", 5)
+    _use(rq, "douyin", 4)
     assert quotas.check_platform_quota(rq, "youtube", "https://youtube.example/x")["allowed"] is True
     _use(rq, "youtube", 1)
     out = quotas.check_platform_quota(rq, "kuaishou", "https://kuaishou.example/y")
-    assert out["allowed"] is False and out["daily_limit"] == 20
-    assert out["message"].startswith("Bạn đã dùng hết 20 lượt hôm nay.")
+    assert out["allowed"] is False and out["daily_limit"] == 10
+    assert out["message"].startswith("Bạn đã dùng hết 10 lượt hôm nay.")
 
 
 def test_admin_unlimited():
@@ -76,11 +76,11 @@ def test_snapshot_reports_total_and_per_platform_display():
     _use(rq, "tiktok", 2)
     _use(rq, "youtube", 1)
     snap = quotas.platform_usage_snapshot(rq)
-    assert snap["scope"] == "total" and snap["used_total"] == 3 and snap["remaining_total"] == 17
+    assert snap["scope"] == "total" and snap["used_total"] == 3 and snap["remaining_total"] == 7
     rows = {r["platform"]: r["used"] for r in snap["platforms"]}
     assert rows["tiktok"] == 2 and rows["youtube"] == 1
     legacy = quotas.legacy_usage_fields(snap)
-    assert legacy["used"] == 3 and legacy["limit"] == 20 and legacy["used_platform"] is None
+    assert legacy["used"] == 3 and legacy["limit"] == 10 and legacy["used_platform"] is None
 
 
 def test_per_platform_mode_still_available(monkeypatch):

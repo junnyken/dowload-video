@@ -325,5 +325,5 @@ async function download(url, quality = "video") {
 
 ## 9. Liên hệ
 
-Cấp key, đổi key, tăng hạn mức, giới hạn IP, hoặc báo lỗi: email support@vidgrab.dev hoặc
+Cấp key, đổi key, tăng hạn mức, giới hạn IP, hoặc báo lỗi: email tranthevanle@gmail.com hoặc
 Telegram @vidgrab_support. Gửi kèm `id` của job và thời điểm gọi để tra cứu nhanh.

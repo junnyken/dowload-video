@@ -83,13 +83,13 @@ def test_cobalt_high_res_needs_vp9(q, want):
 
 @pytest.mark.parametrize("uid,tier,env,want", [
     (None, None, {}, 720),
-    ("u", "free", {}, 1080),
-    ("u", "free", {"FREE_MAX_HEIGHT": "4320"}, 1080),   # production's Free cap for other platforms does not open YouTube 4K
+    ("u", "free", {}, 720),
+    ("u", "free", {"FREE_MAX_HEIGHT": "4320"}, 720),   # production's Free cap for other platforms does not open YouTube 4K
     ("u", "pro", {}, 2160),
     ("u", "team", {}, 2160),
     ("u", "enterprise", {}, 2160),
     ("u", "pro", {"YT_MAX_HEIGHT_PRO": "1440"}, 1440),
-    ("u", "free", {"YT_MAX_HEIGHT_USER": "720"}, 720),
+    ("u", "free", {"YT_MAX_HEIGHT_USER": "1080"}, 1080),
     # production 28/10: Free set to 0 (no cap), Pro unset → Pro must not stop at 2160
     ("u", "free", {"YT_MAX_HEIGHT_USER": "0"}, 0),
     ("u", "pro", {"YT_MAX_HEIGHT_USER": "0"}, 0),
@@ -108,9 +108,9 @@ def test_youtube_cap_is_by_plan(monkeypatch, uid, tier, env, want):
 
 
 @pytest.mark.parametrize("env,want", [
-    ({}, (1080, 2160)),
+    ({}, (720, 2160)),
     ({"YT_MAX_HEIGHT_USER": "0"}, (0, 0)),          # production 28/10
-    ({"YT_MAX_HEIGHT_PRO": "1440"}, (1080, 1440)),
+    ({"YT_MAX_HEIGHT_PRO": "1440"}, (720, 1440)),
 ])
 def test_plans_page_shows_the_paid_youtube_cap(monkeypatch, env, want):
     import fakeredis

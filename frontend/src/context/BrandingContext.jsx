@@ -8,7 +8,7 @@ const DEFAULT_BRANDING = {
   favicon_url: null,
   primary_color: '#6366f1',
   accent_color: '#8b5cf6',
-  support_email: 'support@vidgrab.dev',
+  support_email: 'tranthevanle@gmail.com',
   hide_powered_by: false,
   is_white_label: false,
 };
