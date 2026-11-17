@@ -97,7 +97,7 @@ class TestLimits:
 
     def test_defaults(self):
         assert quotas.platform_limit(anon()) == 5
-        assert quotas.platform_limit(user()) == 20
+        assert quotas.platform_limit(user()) == 10
         assert quotas.platform_limit(QuotaRequester(REQ_ADMIN)) == -1
 
     def test_paid_tiers_keep_their_larger_limits_and_never_get_less_than_free(self, monkeypatch):
@@ -111,11 +111,11 @@ class TestLimits:
 
     def test_free_daily_limit_1000_on_prod_does_not_leak_into_per_platform(self, monkeypatch):
         monkeypatch.setitem(quotas.TIER_PERMISSIONS["free"], "daily_limit", 1000)
-        assert quotas.platform_limit(user()) == 20
+        assert quotas.platform_limit(user()) == 10
         assert quotas.platform_limit(user(tier="pro")) == 300
 
     def test_unknown_tier_is_free(self):
-        assert quotas.platform_limit(user(tier="admin")) == 20
+        assert quotas.platform_limit(user(tier="admin")) == 10
 
     @pytest.mark.parametrize("raw", ["-1", "-5"])
     def test_minus_one_is_unlimited(self, rc, monkeypatch, raw):
@@ -146,7 +146,7 @@ class TestCounting:
         assert q["error_code"] == "quota_exceeded_daily"
         assert q["downloads_today"] == 5 and q["daily_limit"] == 5 and q["remaining"] == 0
         assert q["message"] == ("Khách tải được tối đa 5 lượt/ngày cho TikTok. "
-                                "Đăng nhập để tải 20 lượt/ngày.")
+                                "Đăng nhập để tải 10 lượt/ngày.")
         for p in ("youtube", "instagram", "facebook", "douyin", "other"):
             assert quotas.check_platform_quota(anon(), p)["allowed"], p
         # another guest is unaffected
@@ -154,12 +154,12 @@ class TestCounting:
 
     def test_signed_in_20_per_platform(self, rc, clock):
         u = user()
-        use(u, "tiktok", 19)
+        use(u, "tiktok", 9)
         assert quotas.check_platform_quota(u, "tiktok")["allowed"]
-        use(u, "tiktok", 1, start=19)
+        use(u, "tiktok", 1, start=9)
         q = quotas.check_platform_quota(u, "tiktok")
-        assert not q["allowed"] and q["daily_limit"] == 20
-        assert q["message"] == ("Bạn đã dùng hết 20 lượt hôm nay cho TikTok. "
+        assert not q["allowed"] and q["daily_limit"] == 10
+        assert q["message"] == ("Bạn đã dùng hết 10 lượt hôm nay cho TikTok. "
                                 "Lượt mới được cộng lại lúc 07:00.")
         assert quotas.check_platform_quota(u, "youtube")["allowed"]
         # the user's counter and the guest counter of the same person's IP are separate
@@ -212,7 +212,7 @@ class TestReset:
         tz(tzname)
         u = user()
         clock(datetime(2026, 10, 6, 16, 59, tzinfo=timezone.utc))    # 23:59 in Vietnam
-        use(u, "tiktok", 20)
+        use(u, "tiktok", 10)
         q = quotas.check_platform_quota(u, "tiktok")
         assert not q["allowed"]
         assert "Lượt mới được cộng lại lúc 07:00." in q["message"]
@@ -317,14 +317,14 @@ class TestFetchLink:
 
     def test_signed_in_user_gets_20_then_403(self, app, route, sync_outcomes, monkeypatch, signed_in):
         _ok_extractor(route, monkeypatch)
-        for i in range(20):
+        for i in range(10):
             r = _post(app, TT.format(i))
             assert r.status_code == 200, f"#{i + 1}: {r.text[:200]}"
         r = _post(app, TT.format(99))
         assert r.status_code == 403
         det = r.json()["detail"]
-        assert det["daily_limit"] == 20 and det["requester"] == "user"
-        assert det["message"].startswith("Bạn đã dùng hết 20 lượt hôm nay cho TikTok.")
+        assert det["daily_limit"] == 10 and det["requester"] == "user"
+        assert det["message"].startswith("Bạn đã dùng hết 10 lượt hôm nay cho TikTok.")
         assert _post(app, IG.format("x")).status_code == 200
 
 
@@ -385,7 +385,7 @@ class TestBulk:
         assert [f["original_url"] for f in failed] == [TT.format(102), TT.format(103)]
         assert failed[0]["error_message"] == (
             "Đã hết 5 lượt/ngày của khách cho TikTok, mục này chưa được tải. "
-            "Đăng nhập để tải 20 lượt/ngày.")
+            "Đăng nhập để tải 10 lượt/ngày.")
         # guests are counted at dispatch (unchanged); the worker is told so
         assert quotas.platform_used(anon(), "tiktok") == 5
         assert quotas.platform_used(anon(), "instagram") == 2
@@ -408,14 +408,14 @@ class TestBulk:
 
     def test_signed_in_items_are_counted_by_the_worker(self, app, bulk, rc, monkeypatch, signed_in):
         monkeypatch.setitem(quotas.TIER_PERMISSIONS["free"], "batch_limit", 50)
-        use(user("u-7"), "tiktok", 18)
+        use(user("u-7"), "tiktok", 8)
         r = _bulk(app, [TT.format(i) for i in range(500, 505)])
         assert r.status_code == 200
         assert r.json()["videos_queued"] == 2 and r.json()["quota_refused"] == 3
         failed = [row for _, row in bulk["sb"].inserts if row["status"] == "failed"]
-        assert failed[0]["error_message"] == ("Đã hết 20 lượt hôm nay cho TikTok, mục này chưa được tải. "
+        assert failed[0]["error_message"] == ("Đã hết 10 lượt hôm nay cho TikTok, mục này chưa được tải. "
                                               "Lượt mới được cộng lại lúc 07:00.")
-        assert quotas.platform_used(user("u-7"), "tiktok") == 18     # not yet: on success
+        assert quotas.platform_used(user("u-7"), "tiktok") == 8     # not yet: on success
         assert all(k["kwargs"] == {"_requester": "user:u-7", "_quota_precounted": False}
                    for k in bulk["sent"])
 
@@ -563,11 +563,11 @@ def test_user_usage_keeps_old_fields_and_adds_platform_quota(app, rc, monkeypatc
         assert k in d, k
     assert d["downloads_today"] == 9 and d["limits"]["batch"] == quotas.TIER_PERMISSIONS["free"]["batch_limit"]
     # what account menu / extension read first: the closest-to-limit platform
-    assert d["used"] == 7 and d["limit"] == 20 and d["used_platform"] == "tiktok"
+    assert d["used"] == 7 and d["limit"] == 10 and d["used_platform"] == "tiktok"
     pq = d["platform_quota"]
-    assert pq["scope"] == "per_platform" and pq["limit"] == 20 and pq["reset_time_vn"] == "07:00"
+    assert pq["scope"] == "per_platform" and pq["limit"] == 10 and pq["reset_time_vn"] == "07:00"
     rows = {p["platform"]: p for p in pq["platforms"]}
-    assert rows["tiktok"]["remaining"] == 13 and rows["youtube"]["used"] == 2
+    assert rows["tiktok"]["remaining"] == 3 and rows["youtube"]["used"] == 2
     assert rows["instagram"]["used"] == 0 and rows["other"]["label"] == "các trang khác"
 
 

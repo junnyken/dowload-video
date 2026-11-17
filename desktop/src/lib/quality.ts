@@ -3,12 +3,12 @@ import type { Quality } from './settings';
 
 export type QualityOption = { value: Quality; label: string; format?: ProbeFormat; locked?: boolean };
 
-/** Without an account the app stops at 1080p like the website: 2K/4K need a
- *  (free) account — owner 08/10, task #6134, "make guests sign up". */
-export const GUEST_MAX_HEIGHT = 1080;
-/** 1080p on the SHORT side, so a 1080x1920 portrait video still counts. */
+/** Without an account the app stops at 720p like the website: higher resolutions
+ *  need an account / upgrade. */
+export const GUEST_MAX_HEIGHT = 720;
+/** 720p on the SHORT side, so a 720x1280 portrait video still counts. */
 export const GUEST_FORMAT =
-  'bv*[width<=1080][height>1080]+ba/bv*[height<=1080]+ba/b[width<=1080][height>1080]/b[height<=1080]/b';
+  'bv*[width<=720][height>720]+ba/bv*[height<=720]+ba/b[width<=720][height>720]/b[height<=720]/b';
 const LOCK_SUFFIX = ' · Đăng nhập để tải'; // wording: BA review
 
 const PRESETS = [2160, 1440, 1080, 720, 480, 360] as const;
@@ -75,7 +75,7 @@ export function qualityFormat(q: string, guest = false): { formatId?: string; au
   const label = QUALITY_LABEL[q as Quality] ?? QUALITY_LABEL.best;
   if (q === 'audio') return { audioOnly: true, label };
   if (guest && (q === 'best' || (/^\d+$/.test(q) && Number(q) > GUEST_MAX_HEIGHT))) {
-    return { formatId: GUEST_FORMAT, audioOnly: false, label: QUALITY_LABEL['1080'] };
+    return { formatId: GUEST_FORMAT, audioOnly: false, label: QUALITY_LABEL['720'] };
   }
   if (/^\d+$/.test(q)) return { formatId: presetFormat(Number(q)), audioOnly: false, label };
   return { audioOnly: false, label };
@@ -107,7 +107,7 @@ export function easyFormat(h: number | null): string {
 }
 
 export const GUEST_FORMAT_EASY =
-  `bv*[width<=1080][height>1080][vcodec^=avc1]${AAC}/bv*[height<=1080][vcodec^=avc1]${AAC}/${GUEST_FORMAT}`;
+  `bv*[width<=720][height>720][vcodec^=avc1]${AAC}/bv*[height<=720][vcodec^=avc1]${AAC}/${GUEST_FORMAT}`;
 
 const PRESET_RE = /^bv\*\[height<=(\d+)\]\+ba\/b\[height<=\1\]\/b$/;
 

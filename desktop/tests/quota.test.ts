@@ -203,10 +203,11 @@ test('guest: 2K/4K options are locked, best is capped, defaults resolve below th
   const by = Object.fromEntries(g.map((o) => [o.value, o]));
   assert.equal(by['2160'].locked, true);
   assert.ok(by['2160'].label.includes('Đăng nhập'));
-  assert.equal(by['1080'].locked, undefined);
-  assert.equal(by.best.format.id, 'p1080');
-  assert.ok(by.best.label.includes('1080p'));
-  assert.equal(rq(g, '2160' as any), '1080');
+  assert.equal(by['1080'].locked, true);
+  assert.equal(by['720'].locked, undefined);
+  assert.equal(by.best.format.id, 'p720');
+  assert.ok(by.best.label.includes('720p'));
+  assert.equal(rq(g, '2160' as any), '720');
   const u = qo(fmts, { guest: false });
   assert.ok(u.every((o) => !o.locked) && u[0].format.id === 'p2160');
 });

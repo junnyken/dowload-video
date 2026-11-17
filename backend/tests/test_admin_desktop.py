@@ -197,7 +197,7 @@ def test_devices_shape_order_and_usage(rc, db, admin):
     d2, d1, d3 = body["devices"]
     assert d1["id"] == h(1)[:16] and d1["display_name"].startswith("PC-KETOAN")
     assert d1["today"] == {"counted_as": "device", "used": 3, "limit": 5, "bonus": 0, "refunds": 2, "retro": 0}
-    assert d2["today"]["counted_as"] == "user" and d2["today"]["used"] == 7 and d2["today"]["limit"] == 20
+    assert d2["today"]["counted_as"] == "user" and d2["today"]["used"] == 7 and d2["today"]["limit"] == 10
     assert d2["user_email"] == "an@example.com" and d1["user_email"] is None
     assert d3["today"]["used"] == 0
     # the full 64-hex machine hash never leaves the server
@@ -296,7 +296,7 @@ def test_stats_aggregates_days(rc, db, admin, monkeypatch):
     f = b["flags"]
     assert f["client_quota_enabled"] is True and f["client_quota_mode"] == "shadow"
     assert f["cookie_platforms"] == ["douyin", "instagram"] and f["server_fallback_platforms"] == ["youtube"]
-    assert f["desktop_latest_version"] == "0.8.0" and f["limit_anon"] == 5 and f["limit_user"] == 20
+    assert f["desktop_latest_version"] == "0.8.0" and f["limit_anon"] == 5 and f["limit_user"] == 10
     # task #6125: canary count + update gate (off by default)
     assert f["client_quota_enforce_users_count"] == 0 and f["client_update_gate_enabled"] is False
     assert b["devices"]["storage_ready"] is True and b["devices"]["total"] == 3

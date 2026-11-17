@@ -1,3 +1,8 @@
+## 0.22.10
+- Hỗ trợ tải trực tiếp video từ liên kết chia sẻ PikPak Cloud (`mypikpak.com/s/...`) qua máy chủ VidGrab kết hợp chia khối 10MB.
+- Mở khóa chế độ Tải siêu tốc kiểu IDM (chia khối 10MB, tự nối `.part` khi đứt mạng 90–99%, tự làm mới link 403) cho toàn bộ tài khoản đã đăng ký (từ gói Free trở lên).
+- Hiển thị thông báo rõ ràng khi dán liên kết từ trang web chưa hỗ trợ thay vì báo lỗi không xác định, và đồng bộ giới hạn 720p cho Khách chưa đăng nhập.
+
 ## 0.22.9
 - Tải file đơn trực tiếp (`.mp4`, `.mkv` từ PikPak / Cloud) theo khối `--http-chunk-size 10M` chuẩn IDM, chống bóp băng thông kết nối đơn và chống ngắt socket cuối file.
 - Tự động nối lại ngầm (Auto-Resume `.part` tối đa 3 lần) ngay trong tiến trình tải khi gặp lỗi mạng tạm thời hoặc đứt kết nối SSL/EOF ở 90–99%.

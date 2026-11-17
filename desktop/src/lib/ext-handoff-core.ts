@@ -36,9 +36,9 @@ export type ExtHandoffPlan =
       audioLang: string | null;
     };
 
-const GUEST_MAX_HEIGHT = 1080;
+const GUEST_MAX_HEIGHT = 720;
 const GUEST_FORMAT =
-  'bv*[width<=1080][height>1080]+ba/bv*[height<=1080]+ba/b[width<=1080][height>1080]/b[height<=1080]/b';
+  'bv*[width<=720][height>720]+ba/bv*[height<=720]+ba/b[width<=720][height>720]/b[height<=720]/b';
 
 const QUALITY_LABELS: Record<string, string> = {
   best: 'Tốt nhất',
@@ -291,7 +291,7 @@ function resolveStreamFormat(
     return { audioOnly: true, formatLabel: QUALITY_LABELS.audio, quality: 'audio', audioLang: null };
   }
   if (guest && (q === 'best' || (/^\d+$/.test(q) && Number(q) > GUEST_MAX_HEIGHT))) {
-    return { formatId: GUEST_FORMAT, audioOnly: false, formatLabel: QUALITY_LABELS['1080'], quality: '1080', audioLang: null };
+    return { formatId: GUEST_FORMAT, audioOnly: false, formatLabel: QUALITY_LABELS['720'], quality: '720', audioLang: null };
   }
   const cleanAudio = guest ? null : normalizeAudioLang(audioLang);
   if (/^\d+$/.test(q)) {

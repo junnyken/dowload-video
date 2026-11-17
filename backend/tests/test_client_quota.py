@@ -102,7 +102,7 @@ class TestEnforce:
         as_user("u-1")
         req = quotas.QuotaRequester(quotas.REQ_USER, "u-1")
         quotas.record_platform_download(req, "youtube", "https://www.youtube.com/watch?v=web1")  # web download
-        for i in range(19):
+        for i in range(9):
             assert claim(V(i)).status_code == 200
         r = claim(V(99))
         assert r.status_code == 403 and r.json()["upsell"] == "upgrade"
@@ -220,7 +220,7 @@ class TestCanaryUsers:
     def _use_up(self, uid):
         as_user(uid)
         req = quotas.QuotaRequester(quotas.REQ_USER, uid)
-        for i in range(20):
+        for i in range(10):
             quotas.record_platform_download(req, "tiktok", f"https://www.tiktok.com/@c/video/{i}")
 
     def test_listed_user_is_refused(self, monkeypatch):

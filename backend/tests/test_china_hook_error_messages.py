@@ -34,7 +34,7 @@ class TestMessages:
 
     def test_guest_daily_limit_invites_sign_in(self, clean_env):
         e = _err(_fail("budget_exceeded", "user_quota: ip daily managed limit"))
-        assert str(e) == "Bạn đã dùng hết lượt tải Kuaishou của khách hôm nay. Đăng nhập để có 20 lượt/ngày."
+        assert str(e) == "Bạn đã dùng hết lượt tải Kuaishou của khách hôm nay. Đăng nhập để có 10 lượt/ngày."
         assert e.error_code == "china_daily_limit"
 
     def test_user_daily_limit_names_reset_time(self, clean_env):
