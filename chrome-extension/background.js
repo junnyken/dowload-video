@@ -2535,7 +2535,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const tabId = sender && sender.tab ? sender.tab.id : null;
       if (tabId == null) { sendResponse({ ok: false }); return; }
       const gate = await vgCheckUniversalStreamTier();
-      if (!gate.allowed) {
+      if (!gate.allowed && !gate.authenticated) {
         chrome.tabs.create({ url: 'https://dowloadvideo.io.vn/pricing' }).catch(() => {});
         sendResponse({ ok: false, error: gate.error || 'tier_required', statusText: t('pill_locked_toast') });
         return;
@@ -2563,7 +2563,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
       }
       if (item.kind === 'hls') {
-        const capH = gate.isTeam ? (item.height || null) : Math.min(item.height || 1080, 1080);
+        const maxTierH = gate.tier === 'free' ? 720 : 1080;
+        const capH = gate.isTeam ? (item.height || null) : Math.min(item.height || maxTierH, maxTierH);
         await hlsStart(item, capH, { tabId, isTeam: gate.isTeam });
         sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
         return;
@@ -2584,6 +2585,70 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
       sendResponse({ ok: false, error: 'unsupported' });
+    })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
+  if (msg.type === 'VG_SOCIAL_PILL_CLICK') {
+    (async () => {
+      const tabId = sender && sender.tab ? sender.tab.id : null;
+      const url = typeof msg.url === 'string' && /^https?:\/\//i.test(msg.url)
+        ? msg.url
+        : (sender && sender.tab && sender.tab.url) || '';
+      if (!url) { sendResponse({ ok: false, error: 'invalid_url' }); return; }
+      const title = typeof msg.title === 'string' ? msg.title.slice(0, 200) : '';
+      const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? msg.pageUrl : url;
+
+      // 1. Hand directly to running VidGrab Desktop App if available & enabled
+      const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
+      if (!handoffOff) {
+        const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+        if (appConnected) {
+          const r = await vgSendToApp({ url, title, pageUrl }).catch(() => ({ ok: false }));
+          if (r && r.ok) {
+            sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
+            return;
+          }
+        }
+      }
+
+      // 2. Douyin direct stream from the user's browser session if provided
+      const dy = msg.douyinDirect;
+      if (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url)) {
+        const safeName = await vgFileName(dy.title || title || 'douyin', url);
+        sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
+        const ok = await vgSaveFile(dy.url, safeName);
+        if (ok) {
+          addToHistory({
+            title: dy.title || title || 'Video', thumbnail: '', url,
+            quality: 'HD', fileSize: '', noWatermark: true,
+            hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none',
+          });
+          return;
+        }
+      } else {
+        sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
+      }
+
+      // 3. Full download pipeline in background (vgSaveVideo: browser direct first, server fetch-link fallback)
+      try {
+        const controller = new AbortController();
+        const abortTimer = setTimeout(() => controller.abort(), 150_000);
+        const { data } = await vgSaveVideo(
+          { url, title, quality: 'video', remove_watermark: true, download_subs: false },
+          controller.signal,
+          tabId,
+        ).finally(() => clearTimeout(abortTimer));
+        chrome.notifications.create(`vg-pill-${Date.now()}`, {
+          type: 'basic', iconUrl: 'assets/icon128.png',
+          title: data && data.sent_to_app ? t('sent_to_app') : t('bg_notif_ok', (data && data.title) || title || 'Video'),
+          message: t('bg_notif_msg', new URL(url).hostname),
+          priority: 1,
+        });
+      } catch (err) {
+        if (tabId != null) {
+          chrome.tabs.sendMessage(tabId, { type: 'VG_SHOW_TOAST', text: t('toast_err', err.message || String(err)) }).catch(() => {});
+        }
+      }
     })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }

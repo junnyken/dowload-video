@@ -1238,6 +1238,306 @@ window.addEventListener('message', (event) => {
     return true;
   });
 
+  // ── IDM-Style Floating <video> Hover Pill for Social & Video Platforms ──
+  function vgVideoBadgeLabel(v) {
+    const h = (v && Number(v.videoHeight)) || 0;
+    if (h >= 2160) return '4K';
+    if (h >= 1440) return '2K';
+    if (h >= 1080) return '1080p';
+    if (h >= 720) return '720p';
+    if (h >= 480) return '480p';
+    if (h > 0) return `${h}p`;
+    return 'HD';
+  }
+
+  function vgResolveVideoForElement(v) {
+    if (!v) return null;
+    const href = window.location.href;
+    const host = window.location.hostname;
+    const dyId = vgDouyinIdOf(href);
+    if (dyId) {
+      return { url: `https://www.douyin.com/video/${dyId}`, title: document.title || '', douyinDirect: vgDouyinDirectForPage() };
+    }
+    if (/\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{6,})/.test(href)) {
+      return { url: href, title: document.title || '' };
+    }
+    const nearUrl = vgVideoLinkNear(v);
+    if (nearUrl) {
+      let title = '';
+      for (let n = v, k = 0; n && k < 14 && !title; n = n.parentElement, k++) {
+        const d = n.querySelector && n.querySelector('[data-e2e*="desc"], [data-e2e="browse-video-desc"], #video-title, h1, h3, [class*="caption" i], [class*="desc" i]');
+        if (d && d.textContent.trim().length > 3) title = d.textContent.replace(/\s+/g, ' ').trim().slice(0, 160);
+      }
+      const nearDyId = vgDouyinIdOf(nearUrl);
+      const dyHit = nearDyId && _vgDouyinDirect.get(nearDyId) ? { id: nearDyId, ..._vgDouyinDirect.get(nearDyId) } : null;
+      return { url: nearUrl, title: title || document.title || '', douyinDirect: dyHit };
+    }
+    for (let n = v, depth = 0; n && n !== document.body && depth < 10; n = n.parentElement, depth++) {
+      const e2eVid = n.getAttribute && n.getAttribute('data-e2e-vid');
+      if (e2eVid && /^\d{15,25}$/.test(e2eVid) && /(^|\.)douyin\.com$/i.test(host)) {
+        const dyHit = _vgDouyinDirect.get(e2eVid) ? { id: e2eVid, ..._vgDouyinDirect.get(e2eVid) } : null;
+        return { url: `https://www.douyin.com/video/${e2eVid}`, title: (dyHit && dyHit.title) || document.title || '', douyinDirect: dyHit };
+      }
+      if (!n.querySelectorAll) continue;
+      for (const a of n.querySelectorAll('a[href]')) {
+        const h = a.href || '';
+        let m;
+        if ((m = h.match(/\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{11})(?:[&?#]|$)/))) {
+          const u = /\/shorts\//.test(h) ? `${location.origin}/shorts/${m[1]}` : `${location.origin}/watch?v=${m[1]}`;
+          return { url: u, title: (a.textContent || document.title || '').trim().slice(0, 160) };
+        }
+        if ((m = h.match(/(?:twitter|x)\.com\/([\w.-]+)\/status\/(\d+)/i))) {
+          return { url: `https://x.com/${m[1]}/status/${m[2]}`, title: document.title || '' };
+        }
+        if ((m = h.match(/bilibili\.com\/video\/(BV[\w]+|av\d+)/i))) {
+          return { url: `https://www.bilibili.com/video/${m[1]}`, title: document.title || '' };
+        }
+        if ((m = h.match(/reddit\.com(\/r\/[\w.-]+\/comments\/[\w]+\/[^/?#]*)/i))) {
+          return { url: `https://www.reddit.com${m[1]}`, title: document.title || '' };
+        }
+      }
+      if (n.tagName === 'ARTICLE' || (n.getAttribute && n.getAttribute('role') === 'article')) break;
+    }
+    if (getPageType() === 'video' || /(^|\.)(tiktok|douyin|facebook|instagram|twitter|x|reddit|bilibili|xiaohongshu|rednote|twitch|dailymotion|vk|rumble|odysee)\./i.test(host)) {
+      return { url: href, title: document.title || '', douyinDirect: vgDouyinDirectForPage() };
+    }
+    return null;
+  }
+
+  function injectSocialHoverPill() {
+    if (window.__vgSocialHoverPill) return;
+    let pillEnabled = true;
+    try {
+      chrome.storage.sync.get('vg_floating_pill', (r) => {
+        if (r && r.vg_floating_pill === false) pillEnabled = false;
+      });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.vg_floating_pill) {
+          pillEnabled = changes.vg_floating_pill.newValue !== false;
+        }
+      });
+    } catch { /* default enabled */ }
+
+    const state = {
+      dismissed: false,
+      activeVideo: null,
+      hideTimer: null,
+      overPill: false,
+      busy: false,
+    };
+
+    const hostEl = document.createElement('div');
+    hostEl.id = 'vg-floating-pill-host';
+    hostEl.setAttribute('data-vg-pill', '1');
+    hostEl.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646;pointer-events:none;';
+    const shadow = hostEl.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = `
+      .pill {
+        position: fixed;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px 6px 11px;
+        border-radius: 999px;
+        background: rgba(15, 17, 26, 0.90);
+        border: 1px solid rgba(99, 102, 241, 0.65);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(8px);
+        color: #f8fafc;
+        font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        pointer-events: auto;
+        cursor: pointer;
+        opacity: 0;
+        transform: translateY(-4px);
+        transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.15s ease;
+        user-select: none;
+      }
+      .pill.visible { opacity: 1; transform: translateY(0); }
+      .pill:hover { border-color: #818cf8; background: rgba(22, 25, 38, 0.98); }
+      .main-btn {
+        all: unset;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        color: #f8fafc;
+      }
+      .dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #22d3ee);
+        box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+      }
+      .badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(99, 102, 241, 0.24);
+        color: #c7d2fe;
+      }
+      .close-btn {
+        all: unset;
+        margin-left: 2px;
+        padding: 0 4px;
+        font-size: 14px;
+        line-height: 1;
+        color: #94a3b8;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .close-btn:hover { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+    `;
+    const pill = document.createElement('div');
+    pill.className = 'pill';
+    const mainBtn = document.createElement('button');
+    mainBtn.className = 'main-btn';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    const textSpan = document.createElement('span');
+    textSpan.className = 'lbl';
+    textSpan.textContent = t('pill_btn_label');
+    const badgeSpan = document.createElement('span');
+    badgeSpan.className = 'badge';
+    badgeSpan.textContent = 'HD';
+    mainBtn.append(dot, textSpan, badgeSpan);
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'close-btn';
+    closeBtn.textContent = '×';
+    closeBtn.title = t('common_close');
+    pill.append(mainBtn, closeBtn);
+    shadow.append(style, pill);
+    (document.documentElement || document.body).appendChild(hostEl);
+
+    const findVideoAtPoint = (x, y) => {
+      const vids = document.querySelectorAll('video');
+      let bestVid = null;
+      let bestArea = 0;
+      for (let i = 0; i < vids.length; i++) {
+        const v = vids[i];
+        if (v.mediaKeys) continue;
+        const r = v.getBoundingClientRect();
+        if (r.width < 180 || r.height < 135) continue;
+        if (x != null && y != null) {
+          if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+        } else {
+          if (r.bottom < 60 || r.top > window.innerHeight - 60) continue;
+        }
+        const area = r.width * r.height * (v.paused ? 1 : 2);
+        if (area > bestArea) { bestArea = area; bestVid = v; }
+      }
+      return bestVid;
+    };
+
+    const positionPill = (v) => {
+      if (!pillEnabled || !v || state.dismissed || v.mediaKeys || document.fullscreenElement) {
+        pill.classList.remove('visible');
+        return;
+      }
+      const r = v.getBoundingClientRect();
+      if (r.width < 180 || r.height < 135 || r.bottom < 40 || r.top > window.innerHeight - 40) {
+        pill.classList.remove('visible');
+        return;
+      }
+      if (!state.busy) badgeSpan.textContent = vgVideoBadgeLabel(v);
+      const top = Math.max(8, Math.round(r.top + 12));
+      const right = Math.max(8, Math.round(window.innerWidth - r.right + 12));
+      pill.style.top = `${top}px`;
+      pill.style.right = `${right}px`;
+    };
+
+    const showForVideo = (v) => {
+      if (!pillEnabled || state.dismissed || !v || v.mediaKeys || document.fullscreenElement) return;
+      if (!vgResolveVideoForElement(v)) return;
+      state.activeVideo = v;
+      positionPill(v);
+      pill.classList.add('visible');
+      clearTimeout(state.hideTimer);
+      state.hideTimer = setTimeout(() => {
+        if (!state.overPill && !state.busy) pill.classList.remove('visible');
+      }, 4500);
+    };
+
+    pill.addEventListener('mouseenter', () => {
+      state.overPill = true;
+      clearTimeout(state.hideTimer);
+    });
+    pill.addEventListener('mouseleave', () => {
+      state.overPill = false;
+      state.hideTimer = setTimeout(() => {
+        if (!state.busy) pill.classList.remove('visible');
+      }, 900);
+    });
+
+    closeBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      state.dismissed = true;
+      pill.classList.remove('visible');
+    });
+
+    mainBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (state.busy) return;
+      const v = state.activeVideo || findVideoAtPoint(null, null);
+      const target = vgResolveVideoForElement(v) || { url: window.location.href, title: document.title || '' };
+      if (!target || !target.url) return;
+      state.busy = true;
+      textSpan.textContent = '⏳ VidGrab...';
+      chrome.runtime.sendMessage({
+        type: 'VG_SOCIAL_PILL_CLICK',
+        url: target.url,
+        title: target.title || document.title || '',
+        pageUrl: window.location.href,
+        douyinDirect: target.douyinDirect || null,
+      }, (res) => {
+        void chrome.runtime.lastError;
+        textSpan.textContent = (res && res.statusText) || t('pill_started_browser');
+        setTimeout(() => {
+          state.busy = false;
+          textSpan.textContent = t('pill_btn_label');
+        }, 3200);
+      });
+    });
+
+    document.addEventListener('mousemove', (ev) => {
+      if (!pillEnabled || state.dismissed) return;
+      const v = findVideoAtPoint(ev.clientX, ev.clientY);
+      if (v) showForVideo(v);
+    }, { passive: true });
+
+    document.addEventListener('play', (ev) => {
+      if (!pillEnabled || state.dismissed) return;
+      const v = ev && ev.target;
+      if (v && v.tagName === 'VIDEO') showForVideo(v);
+    }, true);
+
+    window.addEventListener('scroll', () => {
+      if (state.activeVideo && pill.classList.contains('visible')) positionPill(state.activeVideo);
+    }, { passive: true });
+
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) pill.classList.remove('visible');
+      else if (state.activeVideo && !state.dismissed) positionPill(state.activeVideo);
+    });
+
+    setTimeout(() => {
+      const initialVid = findVideoAtPoint(null, null);
+      if (initialVid) showForVideo(initialVid);
+    }, 900);
+
+    window.__vgSocialHoverPill = {
+      resetOnNav() {
+        state.dismissed = false;
+        setTimeout(() => {
+          const v = findVideoAtPoint(null, null);
+          if (v) showForVideo(v);
+        }, 800);
+      },
+    };
+  }
+
   // ── SPA navigation handler ──────────────────────────────────────────
   let lastUrl = window.location.href;
   new MutationObserver(() => {
@@ -1247,6 +1547,7 @@ window.addEventListener('message', (event) => {
     document.getElementById('vg-channel-panel')?.remove();
     stopDomObserver();
     videoSet.clear();
+    if (window.__vgSocialHoverPill) window.__vgSocialHoverPill.resetOnNav();
     setTimeout(() => {
       const pt = getPageType();
       // if (pt === 'video' || window.location.href.includes('spotify.com')) injectVideoButton();
@@ -1256,6 +1557,7 @@ window.addEventListener('message', (event) => {
 
   // ── Init ────────────────────────────────────────────────────────────
   const type = getPageType();
+  injectSocialHoverPill();
   // if (type === 'video' || window.location.href.includes('spotify.com') || window.location.href.includes('instagram.com')) injectVideoButton();
   if (type === 'channel' || type === 'spotify_playlist' || type === 'generic_channel') injectChannelPanel();
 

@@ -608,6 +608,37 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     '[11b] refresh_stream answers { found: false } when no open tab matches',
   );
 
+  // [12] VG_SOCIAL_PILL_CLICK hands TikTok/Facebook/YouTube video to connected Desktop App, and VG_PILL_CLICK allows signed-in Free tier (<=720p)
+  env.posted.length = 0;
+  const socialSender = {
+    id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi',
+    tab: { id: 9, url: 'https://www.tiktok.com/@creator/video/7400000000000000001' },
+    origin: 'https://www.tiktok.com',
+    url: 'https://www.tiktok.com/@creator/video/7400000000000000001',
+  };
+  const socialAppRes = await send({
+    type: 'VG_SOCIAL_PILL_CLICK',
+    url: 'https://www.tiktok.com/@creator/video/7400000000000000001',
+    title: 'TikTok Clip #1',
+    pageUrl: 'https://www.tiktok.com/foryou',
+  }, socialSender);
+  assert(
+    socialAppRes && socialAppRes.ok === true && socialAppRes.via === 'app'
+      && env.posted.some((x) => x.t === 'download' && x.url === 'https://www.tiktok.com/@creator/video/7400000000000000001'),
+    '[12a] VG_SOCIAL_PILL_CLICK sends social video (TikTok/Facebook/YouTube) directly to connected Desktop App',
+    socialAppRes,
+  );
+
+  env.local.vg_auth_token = 'tok-free-user';
+  env.setUsagePayload({ tier: 'free', universal_stream: false, universal_stream_mode: 'none' });
+  vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  const pillFree = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
+  assert(
+    pillFree && pillFree.ok === true && pillFree.via === 'browser',
+    '[12b] VG_PILL_CLICK allows signed-in Free tier user in browser (<=720p)',
+    pillFree,
+  );
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
