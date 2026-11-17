@@ -11,6 +11,8 @@
   "rows": {
     "daily": "Lượt tải mỗi ngày",
     "quality": "Chất lượng tối đa",
+    "turbo": "Tải siêu tốc kiểu IDM (App Windows)",
+    "pikpak": "Tải video từ link chia sẻ PikPak",
     "youtube": "YouTube",
     "trimClip": "Cắt đoạn video theo thời gian",
     "universalStream": "Bắt luồng video mọi trang web + Nút tải nổi trên khung phát",
@@ -57,5 +59,7 @@
   "smartMax": "{{base}} (video đến {{min}} phút)",
   "pinKeep": "{{base}}, giữ {{days}} ngày",
   "apiUnlimited": "Không giới hạn lượt gọi",
-  "apiPerMonth": "{{n}} lượt gọi/tháng"
+  "apiPerMonth": "{{n}} lượt gọi/tháng",
+  "turboAll": "Chia khối 10MB + Tự nối lại khi rớt mạng + Tự làm mới link hết hạn",
+  "pikpakAll": "Có (tính vào lượt tải mỗi ngày)"
 }

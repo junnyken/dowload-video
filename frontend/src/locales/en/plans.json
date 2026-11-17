@@ -18,6 +18,8 @@
   "rows": {
     "daily": "Downloads per day",
     "quality": "Max quality",
+    "turbo": "IDM-style turbo download (Windows App)",
+    "pikpak": "Download videos from PikPak share links",
     "youtube": "YouTube",
     "trimClip": "Clip video by timestamp",
     "universalStream": "Universal Web Stream Capture + Floating <video> Hover Pill",
@@ -64,5 +66,7 @@
   "smartMax": "{{base}} (videos up to {{min}} min)",
   "pinKeep": "{{base}}, kept {{days}} days",
   "apiUnlimited": "Unlimited calls",
-  "apiPerMonth": "{{n}} calls/month"
+  "apiPerMonth": "{{n}} calls/month",
+  "turboAll": "10MB chunks + Auto-resume on drop + Auto-refresh expired links",
+  "pikpakAll": "Yes (counts toward daily downloads)"
 }

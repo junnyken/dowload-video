@@ -20,6 +20,17 @@ export function buildPlanRows(tiers) {
       get: (t) => qualityLabel(t.max_height),
     },
     {
+      // App Windows 0.22.9: --http-chunk-size 10M + auto-resume .part (3 lần) + làm mới link 403.
+      // Hiện mọi gói đều dùng được (chưa gate) — đổi ở đây khi bật giới hạn theo gói.
+      key: 'turbo', label: tp('rows.turbo'),
+      get: () => tp('turboAll'),
+    },
+    {
+      // PikPak share link (video) qua máy chủ VidGrab — tính vào lượt tải mỗi ngày.
+      key: 'pikpak', label: tp('rows.pikpak'),
+      get: () => tp('pikpakAll'),
+    },
+    {
       key: 'youtube', label: tp('rows.youtube'),
       // youtube_max_height 0 = no YouTube-specific cap (production 13/10):
       // the general quality limit applies, so say nothing about height.

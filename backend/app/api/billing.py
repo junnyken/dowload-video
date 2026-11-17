@@ -118,55 +118,34 @@ class LicenseActivateResponse(BaseModel):
 
 
 # =============================================================================
-# Plan metadata
+# Plan metadata — derived from the single source of truth (entitlements.py)
 # =============================================================================
 
-_PLAN_META: Dict[str, Dict[str, Any]] = {
-    "free": {
-        "display_name": "Free",
-        "api_calls_per_month": 0,
-        "seats": 1,
-        "batch_size_max": 5,
-    },
-    "starter": {
-        "display_name": "Starter",
-        "api_calls_per_month": 1_000,
-        "seats": 1,
-        "batch_size_max": 20,
-    },
-    "pro": {
-        "display_name": "Pro",
-        "api_calls_per_month": 3_000,
-        "seats": 1,
-        "batch_size_max": 100,
-    },
-    "growth": {
-        "display_name": "Growth",
-        "api_calls_per_month": 10_000,
-        "seats": 5,
-        "batch_size_max": 50,
-    },
-    "team": {
-        "display_name": "Team",
-        "api_calls_per_month": 15_000,
-        "seats": 10,
-        "batch_size_max": 200,
-    },
-    "api": {
-        "display_name": "Developer API",
-        "api_calls_per_month": 10_000,
-        "seats": 3,
-        "batch_size_max": 100,
-    },
-    "enterprise": {
-        "display_name": "Enterprise",
-        "api_calls_per_month": 100_000,
-        "seats": 100,
-        "batch_size_max": 500,
-    },
-}
+def _build_plan_meta() -> Dict[str, Dict[str, Any]]:
+    """Derive billing plan metadata from entitlements.PLAN_DEFS so the numbers
+    never drift. Each concrete plan gets display_name, api_calls_per_month,
+    seats, and batch_size_max from the authoritative definition."""
+    from app.core.entitlements import PLAN_DEFS
+    meta: Dict[str, Dict[str, Any]] = {}
+    for key, defn in PLAN_DEFS.items():
+        if isinstance(defn, str):  # alias (e.g. growth → pro)
+            continue
+        lim = defn.get("limits", {})
+        meta[key] = {
+            "display_name":       defn.get("name", key.title()),
+            "api_calls_per_month": lim.get("api_calls_per_month", 0),
+            "seats":              lim.get("seats_max", 1),
+            "batch_size_max":     lim.get("batch_size_max", 0),
+        }
+    # Alias entries point to the same dict as their target
+    for key, defn in PLAN_DEFS.items():
+        if isinstance(defn, str) and defn in meta:
+            meta[key] = {**meta[defn], "display_name": key.title()}
+    return meta
 
-_UPGRADE_URL = "https://vidgrab.dev/pricing"
+_PLAN_META: Dict[str, Dict[str, Any]] = _build_plan_meta()
+
+_UPGRADE_URL = os.environ.get("UPGRADE_URL", "https://dowloadvideo.io.vn/pricing")
 
 
 # =============================================================================
@@ -396,7 +375,18 @@ async def billing_summary(user: dict = Depends(get_required_user)):
     downloads_month: int = sum(int(r.get("downloads") or 0) for r in month_rows)
 
     monthly_limit: int = plan_info["api_calls_per_month"]
-    remaining_calls = max(0, monthly_limit - api_calls_month)
+    # The number actually ENFORCED for API-key calls lives in api_quota (admin
+    # setting in plans:settings); show that one so billing never promises more.
+    try:
+        from app.core.api_quota import limit_for_tier as _api_limit
+        from app.core.entitlements import _resolve_tier as _rt
+        _tier = _rt(plan)
+        if _tier in ("free", "starter", "pro", "team", "enterprise"):  # 'api' partners: own quota
+            monthly_limit = _api_limit(_tier)
+    except Exception:
+        pass
+    # -1 = unlimited (enterprise/admin in entitlements.PLAN_DEFS)
+    remaining_calls = -1 if monthly_limit < 0 else max(0, monthly_limit - api_calls_month)
 
     return BillingSummaryResponse(
         plan=plan,
