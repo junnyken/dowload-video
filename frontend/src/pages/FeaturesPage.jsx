@@ -9,7 +9,7 @@ import { CHROME_STORE_URL } from '../lib/chromeExtension';
 import { trackEvent, EVENT } from '../utils/trackEvent';
 
 const PILLAR_ICONS = [Cloud, Puzzle, Monitor];
-const CARD_ICONS = [MousePointerClick, Subtitles, Volume2, RefreshCw, FolderOpen, Wand2];
+const CARD_ICONS = [Zap, Cloud, MousePointerClick, Subtitles, Volume2, RefreshCw, FolderOpen, Wand2];
 
 export default function FeaturesPage({ onNavigate }) {
   const { t } = useTranslation('features');

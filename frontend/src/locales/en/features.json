@@ -2,7 +2,7 @@
   "_note": "wording: BA review — English drafted with AI",
   "badge": "NEW VIDGRAB ECOSYSTEM · WEB STUDIO + EXTENSION + WINDOWS APP",
   "heroTitle": "Beyond Pasting Links — The Complete Cinema, Anime & AI Video Ecosystem",
-  "heroSub": "Discover the pro-grade capabilities that put VidGrab ahead of ordinary downloaders: an IDM-style floating video hover button, 4K HLS/DASH stream capture, zero-reencode soft-subtitle MP4 muxing, multi-audio track selection, and AI post-processing.",
+  "heroSub": "Discover the pro-grade capabilities that put VidGrab ahead of ordinary downloaders: an IDM-style turbo engine (10MB range chunks + automatic .part resume), direct PikPak Cloud video extraction, a floating video hover button, 4K HLS/DASH stream capture, zero-reencode soft-subtitle MP4 muxing, and AI post-processing.",
   "ctaPricing": "View Plans & Unlock Now",
   "ctaWindows": "Download Windows App",
   "ctaExtension": "Install Chrome / Edge Extension",
@@ -21,13 +21,35 @@
     },
     {
       "tag": "Pillar 03",
-      "title": "Windows Desktop App v0.22",
-      "desc": "Combines native yt-dlp + ffmpeg speed on your PC: 4K HEVC/AV1 & DASH merging, ephemeral VIP session cookie handoff, and instant mov_text soft-subtitle MP4 muxing."
+      "title": "Windows Desktop App v0.22.9",
+      "desc": "IDM-style turbo speed + native yt-dlp & ffmpeg on your PC: 10MB HTTP chunking for Cloud/PikPak files, automatic .part resume on 90–99% drops, VIP session cookie handoff, and instant mov_text soft-subtitle MP4 muxing."
     }
   ],
-  "flagshipTitle": "6 High-Value Upgrades Built for Paid Plans",
-  "flagshipSub": "Engineered for movie & anime collectors, content creators, editors, and media teams.",
+  "flagshipTitle": "8 Breakthrough Capabilities Across the VidGrab Ecosystem",
+  "flagshipSub": "From IDM-style turbo downloads (free with sign-in) and direct PikPak Cloud links to 4K cinema/anime streams, Reup tools, and media teams.",
   "cards": [
+    {
+      "tier": "Free on Sign-In (Free+)",
+      "tierTone": "pro",
+      "title": "IDM-Grade Turbo Engine — 10MB Chunks, Auto-Resume .part & 403 Refresh",
+      "desc": "Exclusive acceleration engine in Windows App v0.22.9: splits direct cloud downloads (.mp4/.mkv) into 10MB HTTP Range chunks to defeat CDN throttling, automatically resumes partial .part files up to 3 times on 90–99% SSL/EOF drops, and refreshes expired 403 URLs from your open Chrome tab.",
+      "highlights": [
+        "10MB HTTP Range chunking prevents single-socket CDN speed caps",
+        "Smart Auto-Resume picks up 95% partial transfers cleanly without restarting",
+        "Unlocked for all signed-in accounts (Free tier and above)"
+      ]
+    },
+    {
+      "tier": "All Tiers · Web & Windows App",
+      "tierTone": "starter",
+      "title": "Direct Video Downloader for PikPak Cloud Share Links",
+      "desc": "Paste any public mypikpak.com/s/... share link and VidGrab resolves original video URLs directly via PikPak API, paired with 10MB chunked transfers — no PikPak account required.",
+      "highlights": [
+        "Auto-selects the primary video & original resolutions from shared folders",
+        "Combines with 10MB chunking on Windows App for rock-solid large Cloud transfers",
+        "Works seamlessly on both Web and Windows App (counts toward daily quota)"
+      ]
+    },
     {
       "tier": "Pro & Team",
       "tierTone": "pro",
@@ -105,7 +127,8 @@
       "priceHint": "From $1.99 1st month ($2.99 regular)",
       "who": "Ideal for 4K social video downloads, TikTok/Douyin photo carousels, and everyday AI subtitles.",
       "perks": [
-        "100 downloads/day · Unlock 4K YouTube/TikTok/Social quality",
+        "100 downloads/day · Unlock 4K YouTube/TikTok/Social & PikPak Cloud",
+        "IDM-style turbo downloads on Windows App (10MB chunks + auto-resume .part)",
         "20-link Batch downloader & 1-click .ZIP archive",
         "Full TikTok/Douyin Photo Carousel .ZIP + background MP3",
         "30 min/day AI Speech-to-Subtitle (ASR) & 2,000 translated cues/day",
@@ -123,6 +146,7 @@
       "perks": [
         "Unlocks Browser Universal Stream Capture on any site (up to 1080p)",
         "Unlocks Floating <video> Hover Pill + Clean Titles + .SRT Subtitles",
+        "IDM-style turbo engine (10MB chunks + auto-resume .part) + PikPak Cloud",
         "Anti-Detect Reup Cleaner (Metadata, MD5, Mirror) + Hardsub MP4 Burn-in",
         "300 downloads/day · 100-link Batch (.ZIP) · 120 min/day AI ASR",
         "Includes 3,000 REST API calls/mo (+500 1st-purchase bonus)"
@@ -137,11 +161,11 @@
       "priceHint": "From $11.99 1st month ($15.99 regular)",
       "who": "Everything unlocked: 4K Cinema/Anime streams, Windows App power handoff, Soft-Sub MP4 & Team seats.",
       "perks": [
-        "100% 4K/2160p Universal HLS & DASH + Windows Desktop App Handoff",
+        "100% 4K/2160p Universal HLS & DASH + Windows Desktop App Handoff (IDM Turbo)",
         "Embedded Soft-Subtitle (mov_text) MP4 Muxing + VIP Cookie Handoff",
         "Multi-Audio Track Picker + Series Folder Organizer & Auto-Next Episode",
-        "Non-DRM Livestream Recording + Auto Token-Refresh OPFS Resume",
-        "1,000 downloads/day · 15,000 API calls/mo · 5 Workspace seats"
+        "Non-DRM Livestream Recording + Auto Token-Refresh OPFS & 403 Link Resume",
+        "1,000 downloads/day · 15,000 API calls/mo · PikPak Cloud · 5 Workspace seats"
       ],
       "cta": "Unlock Team Plan →",
       "planParam": "team_month"

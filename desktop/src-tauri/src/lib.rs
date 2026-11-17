@@ -1107,6 +1107,7 @@ async fn start_download(
     subtitles: Option<String>,
     ext_cookie_jar: Option<String>,
     ext_subtitles: Option<Vec<ExtSubArg>>,
+    turbo: Option<bool>,
 ) -> CmdResult<()> {
     if !paths::valid_job_id(&job_id) {
         return Err(CommandError::unknown("invalid job id"));
@@ -1182,6 +1183,8 @@ async fn start_download(
         engine::add_unpaced_cookies(&mut args, eck.path());
     }
     engine::apply_extras(&mut args, &extras, audio_only);
+    let turbo = turbo.unwrap_or(true);
+    engine::apply_turbo(&mut args, turbo);
     if out_name.is_none() && template != engine::OUTPUT_TEMPLATE {
         engine::set_output_template(&mut args, &template);
     }
@@ -1239,7 +1242,8 @@ async fn start_download(
             let cur_bytes = io.max_bytes.load(Ordering::Relaxed);
             let progressed = cur_bytes > prev_bytes;
             let has_partials = !lock(&io.tracked).is_empty();
-            let retryable = attempt < 2
+            let retryable = turbo
+                && attempt < 2
                 && (matches!(code, Code::Network | Code::Timeout)
                     || (progressed && has_partials && code == Code::Unknown));
             if !retryable {

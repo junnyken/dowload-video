@@ -59,6 +59,8 @@ export const api = {
     audioKbps?: string; subtitles?: string;
     // 0.22.4: ephemeral browser-session cookie jar & companion external subtitles from extension handoff.
     extCookieJar?: string; extSubtitles?: ExtSubtitle[];
+    // 0.22.9: IDM-style turbo download (10M HTTP chunking + in-job .part auto-resume); enabled for signed-in users.
+    turbo?: boolean;
   }) =>
     call<null>('start_download', a),
   pauseDownload: (jobId: string) => call<null>('pause_download', { jobId }),

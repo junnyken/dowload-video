@@ -164,19 +164,35 @@ def test_a_guest_gets_1080_and_the_2k_4k_rows_say_sign_in(app, route, monkeypatc
     r = app.post("/api/v1/fetch-link", json={"url": "https://vimeo.com/123", "quality": asked})
     assert r.status_code == 200, r.text[:300]
     body = r.json()
-    assert seen["quality"] == "video_1080"
-    assert body["max_allowed_height"] == 1080 and body["height_cap_reason"] == "signin"
-    assert {f["height"]: f.get("locked") for f in body["available_formats"]} == {2160: "signin", 1440: "signin", 1080: None}
+    assert seen["quality"] == "video_720"
+    assert body["max_allowed_height"] == 720 and body["height_cap_reason"] == "signin"
+    assert {f["height"]: f.get("locked") for f in body["available_formats"]} == {2160: "signin", 1440: "signin", 1080: "signin"}
     if asked == "video_2160":
         assert "Đăng nhập" in body["quality_note"]["message"]
 
 
 def test_a_signed_in_user_gets_2k_4k(app, route, monkeypatch):
     from app.core.auth_middleware import get_optional_user
+    import app.core.quotas as q
     import app.main as main_mod
     seen = {}
     _stub(route, monkeypatch, seen)
+    # Free tier is capped at 720p (locked="plan")
+    monkeypatch.setattr(q, "_get_tier", lambda _uid: "free")
     main_mod.app.dependency_overrides[get_optional_user] = lambda: {"id": "u-1", "tier": "free"}
+    try:
+        r_free = app.post("/api/v1/fetch-link", json={"url": "https://vimeo.com/123", "quality": "video_2160"})
+    finally:
+        main_mod.app.dependency_overrides.pop(get_optional_user, None)
+    assert r_free.status_code == 200, r_free.text[:300]
+    body_free = r_free.json()
+    assert seen["quality"] == "video_720"
+    assert body_free["max_allowed_height"] == 720 and body_free["height_cap_reason"] == "plan"
+    assert {f["height"]: f.get("locked") for f in body_free["available_formats"]} == {2160: "plan", 1440: "plan", 1080: "plan"}
+
+    # Paid tier (pro) gets full 2K/4K
+    monkeypatch.setattr(q, "_get_tier", lambda _uid: "pro")
+    main_mod.app.dependency_overrides[get_optional_user] = lambda: {"id": "u-pro", "tier": "pro"}
     try:
         r = app.post("/api/v1/fetch-link", json={"url": "https://vimeo.com/123", "quality": "video_2160"})
     finally:

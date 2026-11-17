@@ -408,13 +408,13 @@ export default function LandingPage() {
               </div>
               <h2 id="landing-ecosystem-title" className="text-base sm:text-lg font-bold text-fg">
                 {lang === 'en'
-                  ? 'More Than Web Links — Capture 4K Movies, Anime, Multi-Audio & Soft-Sub MP4'
-                  : 'Không chỉ dán link trên web — Bắt luồng Phim/Anime 4K, Đa kênh tiếng & Phụ đề chìm MP4'}
+                  ? 'More Than Web Links — IDM-Grade Turbo Engine, PikPak Cloud, 4K Streams & Soft-Sub MP4'
+                  : 'Không chỉ dán link trên web — Tải siêu tốc kiểu IDM, PikPak Cloud, Bắt luồng 4K & Phụ đề chìm MP4'}
               </h2>
               <p className="text-xs sm:text-sm text-fg-muted max-w-2xl leading-relaxed">
                 {lang === 'en'
-                  ? 'Hover over web video players for 1-click download, mux toggleable subtitles directly into MP4 on Windows with zero re-encode, auto-resume expired tokens, and clean Reup metadata.'
-                  : 'Hiện nút tải nổi ngay khi rê chuột vào khung phát, nhúng thẳng phụ đề mềm vào MP4 trên Windows không giảm chất lượng, tự nối tải khi hết hạn token và làm sạch video Reup.'}
+                  ? 'Accelerate direct files with 10MB HTTP chunks & auto-resume .part at 90–99%, grab public PikPak share videos without logging into PikPak, hover for 1-click download, and mux toggleable subtitles into MP4 on Windows.'
+                  : 'Tăng tốc chia khối 10MB & tự nối lại tệp .part khi rớt mạng lúc 90–99%, tải video link chia sẻ PikPak không cần tài khoản PikPak, hiện nút tải nổi khi xem phim và nhúng thẳng phụ đề mềm vào MP4 trên Windows.'}
               </p>
             </div>
             <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">

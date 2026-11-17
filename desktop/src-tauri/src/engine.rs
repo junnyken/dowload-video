@@ -374,6 +374,17 @@ pub fn add_unpaced_cookies(args: &mut Vec<OsString>, cookies: &Path) {
     args.splice(end..end, [OsString::from("--cookies"), cookies.as_os_str().to_owned()]);
 }
 
+/// Strips `--http-chunk-size` when `turbo` is false (guest user not signed in).
+pub fn apply_turbo(args: &mut Vec<OsString>, turbo: bool) {
+    if turbo {
+        return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--http-chunk-size") {
+        let end = (i + 2).min(args.len());
+        args.drain(i..end);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -652,7 +663,7 @@ mod tests {
     #[test]
     fn direct_media_file_url_enables_http_chunk_size_without_affecting_manifests() {
         let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
-        let direct = strs(&download_args(
+        let mut direct_args = download_args(
             &t,
             "https://cdn.example/video.mp4?token=1",
             Path::new("/out"),
@@ -661,8 +672,15 @@ mod tests {
             &[],
             None,
             None,
-        ));
+        );
+        let direct = strs(&direct_args);
         assert!(direct.windows(2).any(|w| w[0] == "--http-chunk-size" && w[1] == "10M"));
+
+        apply_turbo(&mut direct_args, true);
+        assert!(strs(&direct_args).windows(2).any(|w| w[0] == "--http-chunk-size" && w[1] == "10M"));
+
+        apply_turbo(&mut direct_args, false);
+        assert!(!strs(&direct_args).iter().any(|x| x == "--http-chunk-size"));
 
         for non_direct in ["https://cdn.example/hls/master.m3u8", "https://www.youtube.com/watch?v=abc"] {
             let s = strs(&download_args(&t, non_direct, Path::new("/out"), None, false, &[], None, None));

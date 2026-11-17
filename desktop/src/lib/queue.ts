@@ -305,11 +305,12 @@ async function start(item: QueueItem) {
     // 0.17.0 names everywhere; sub-folders only in the main folder (a channel's folder is already its own).
     const st = settings.get();
     // 0.21.0: then the "Dễ mở / Chất lượng gốc" preference (quality #8)
-    const formatId = applyCodecPref(capForGuest(item.formatId, item.audioOnly, auth.get().status !== 'in'), item.audioOnly, st.codecPref);
+    const signedIn = auth.get().status === 'in';
+    const formatId = applyCodecPref(capForGuest(item.formatId, item.audioOnly, !signedIn), item.audioOnly, st.codecPref);
     const style = { nameStyle: st.nameStyle, folderStyle: st.outDir && samePath(item.outDir, st.outDir) ? st.folderStyle : 'none' };
     // 0.21.0 audio bitrate / subtitles (quality #5, #7)
     const extras = { audioKbps: st.audioKbps, subtitles: st.subtitles };
-    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, ...style, ...extras, ...extra });
+    await api.startDownload({ jobId: item.id, url: item.url, outDir: item.outDir, formatId, audioOnly: item.audioOnly, turbo: signedIn, ...style, ...extras, ...extra });
   } catch (e) {
     finishFailed(item.id, toAppError(e).code);
   }
@@ -462,7 +463,7 @@ export async function initQueue() {
           pump();
           break;
         }
-        if (it.localOnly && (code === 'forbidden' || code === 'network') && !refreshed.has(e.jobId)) {
+        if (it.localOnly && auth.get().status === 'in' && (code === 'forbidden' || code === 'network') && !refreshed.has(e.jobId)) {
           // Browser-sniffed stream link expired (403) or dropped: ask Chrome Extension for a fresh URL/cookie jar once.
           refreshed.add(e.jobId);
           void tryExtRefreshAndRetry(it, e.jobId, code, Boolean(e.cookiesUsed));

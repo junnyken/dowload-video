@@ -1,7 +1,7 @@
 {
   "badge": "RA MẮT HỆ SINH THÁI VIDGRAB MỚI · WEB + EXTENSION + WINDOWS APP",
   "heroTitle": "Không chỉ dán link trên web — Trọn bộ Hệ sinh thái Tải Phim, Anime & Studio AI",
-  "heroSub": "Khám phá loạt vũ khí độc quyền giúp VidGrab vượt xa công cụ tải thông thường: Nút tải nổi ngay trên khung video, giải mã luồng HLS/DASH 4K, ghép phụ đề chìm vào MP4 không giảm nét, chọn đa kênh âm thanh và xử lý AI tự động.",
+  "heroSub": "Khám phá loạt vũ khí độc quyền giúp VidGrab vượt xa công cụ tải thông thường: công nghệ tải siêu tốc kiểu IDM (chia khối 10MB + tự nối .part 90–99%), tải thẳng video chia sẻ PikPak Cloud, nút tải nổi ngay trên khung video, giải mã luồng HLS/DASH 4K, ghép phụ đề chìm vào MP4 không giảm nét và xử lý AI tự động.",
   "ctaPricing": "Xem Bảng giá & Mở khóa ngay",
   "ctaWindows": "Tải App Windows miễn phí",
   "ctaExtension": "Cài Tiện ích Chrome / Edge",
@@ -20,13 +20,35 @@
     },
     {
       "tag": "Mảnh ghép 03",
-      "title": "Ứng dụng Windows v0.22",
-      "desc": "Kết hợp sức mạnh yt-dlp + ffmpeg ngay trên máy: tải 4K HEVC/AV1 tốc độ tối đa, nhận Cookie phiên đăng nhập an toàn và nhúng thẳng phụ đề mềm vào MP4."
+      "title": "Ứng dụng Windows v0.22.9",
+      "desc": "Sức mạnh IDM kết hợp yt-dlp + ffmpeg ngay trên máy: chia khối 10MB cho file Cloud/PikPak, tự nối lại tệp .part khi rớt mạng ở 90–99%, nhận Cookie phiên đăng nhập an toàn và nhúng thẳng phụ đề mềm vào MP4."
     }
   ],
-  "flagshipTitle": "6 Tính năng Đáng tiền Mới nhất dành cho Gói Trả phí",
-  "flagshipSub": "Được thiết kế từ nhu cầu thực chiến của người cày phim, sưu tầm Anime, nhà sáng tạo nội dung Reup và đội ngũ sản xuất media.",
+  "flagshipTitle": "8 Tính năng Đột phá Mới nhất trên Hệ sinh thái VidGrab",
+  "flagshipSub": "Từ động cơ tải siêu tốc kiểu IDM (miễn phí khi đăng ký) đến tải link PikPak Cloud, cày phim/Anime 4K, làm sạch Reup và đội ngũ sản xuất media.",
   "cards": [
+    {
+      "tier": "Miễn phí khi Đăng ký (Free+)",
+      "tierTone": "pro",
+      "title": "Tải Siêu Tốc Kiểu IDM — Chia khối 10MB, Tự nối .part & Làm mới Link 403",
+      "desc": "Công nghệ tăng tốc độc quyền trên App Windows v0.22.9: tự động chia file tải trực tiếp (.mp4/.mkv) thành từng khối 10MB chống bóp băng thông CDN, tự nối tiếp tệp .part tối đa 3 lần khi rớt mạng/SSL/EOF ở 90–99% và làm mới link hết hạn 403 từ tab Chrome đang mở.",
+      "highlights": [
+        "Chia khối HTTP Range 10MB chuẩn IDM: tối đa băng thông đường truyền",
+        "Auto-Resume thông minh: rớt mạng lúc 95% vẫn nối tiếp, không mất dữ liệu",
+        "Mở rộng cho toàn bộ tài khoản đã đăng ký (từ gói Free trở lên)"
+      ]
+    },
+    {
+      "tier": "Mọi gói · Web & App Windows",
+      "tierTone": "starter",
+      "title": "Tải Video Trực Tiếp từ Link Chia Sẻ PikPak Cloud",
+      "desc": "Chỉ cần dán link chia sẻ công khai mypikpak.com/s/..., VidGrab tự động gọi API giải mã tệp video chất lượng gốc và truyền qua công nghệ chia khối 10MB — không cần đăng nhập tài khoản PikPak.",
+      "highlights": [
+        "Tự động chọn tệp video chính & danh sách độ phân giải gốc từ PikPak",
+        "Kết hợp chia khối 10MB trên App Windows giúp tải file Cloud nặng cực ổn định",
+        "Áp dụng trên cả Trình duyệt Web và App Windows (tính vào lượt tải/ngày)"
+      ]
+    },
     {
       "tier": "Pro & Team",
       "tierTone": "pro",
@@ -104,7 +126,8 @@
       "priceHint": "Chỉ từ $1.99 tháng đầu (49.000đ)",
       "who": "Dành cho người tải video mạng xã hội 4K, gom ảnh TikTok/Douyin và cần phụ đề AI cơ bản.",
       "perks": [
-        "100 lượt tải/ngày · Mở khóa 4K YouTube/TikTok/MXH",
+        "100 lượt tải/ngày · Mở khóa 4K YouTube/TikTok/MXH & PikPak Cloud",
+        "Tải siêu tốc kiểu IDM trên App Windows (chia khối 10MB + tự nối .part)",
         "Tải hàng loạt 20 link/lần & nén trọn bộ .ZIP",
         "Tải trọn bộ Album ảnh trượt TikTok/Douyin kèm nhạc (.ZIP)",
         "Phiên âm AI (ASR) 30 phút/ngày & Dịch 2.000 dòng sub/ngày",
@@ -122,6 +145,7 @@
       "perks": [
         "Mở khóa Bắt luồng video mọi trang web trên Trình duyệt (tới 1080p)",
         "Mở khóa Nút tải nổi thông minh trên khung <video> + Phụ đề .SRT",
+        "Tải siêu tốc kiểu IDM (chia khối 10MB, tự nối .part) + PikPak Cloud",
         "Làm sạch Reup (Xóa Metadata, Đổi MD5, Lật gương) + Nung Hardsub MP4",
         "300 lượt tải/ngày · Batch 100 link (.ZIP) · ASR 120 phút/ngày",
         "Tặng 3.000 lượt gọi REST API/tháng (+500 lượt thưởng lần đầu)"
@@ -136,11 +160,11 @@
       "priceHint": "Chỉ từ $11.99 tháng đầu (279.000đ)",
       "who": "Trọn bộ vũ khí mạnh nhất: Phim/Anime 4K, App Windows tốc độ tối đa, Phụ đề chìm MP4 & Đội nhóm.",
       "perks": [
-        "Mở khóa 100% Luồng 4K HLS & DASH + Kết nối thẳng App Windows",
+        "Mở khóa 100% Luồng 4K HLS & DASH + Kết nối thẳng App Windows (IDM Turbo)",
         "Nhúng Phụ đề Chìm (Soft-Sub mov_text) vào MP4 + Handoff Cookie VIP",
         "Chọn Đa kênh Âm thanh (Thuyết minh/Gốc) + Tự gom thư mục & Tải tập kế",
-        "Ghi Livestream không DRM + Tự cấp lại Token nối tải OPFS khi hết hạn",
-        "1.000 lượt/ngày · 15.000 API/tháng · 5 thành viên Workspace"
+        "Ghi Livestream không DRM + Tự cấp lại Token nối tải OPFS & link 403 khi hết hạn",
+        "1.000 lượt/ngày · 15.000 API/tháng · PikPak Cloud · 5 thành viên Workspace"
       ],
       "cta": "Mở khóa Gói Team →",
       "planParam": "team_month"
