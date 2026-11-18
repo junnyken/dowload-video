@@ -29,7 +29,7 @@ test('platform from host: strict suffix, http(s) only', () => {
 
 test('platform table matches the server allowlist (client_api.py COOKIE_PLATFORM_SLUGS)', () => {
   assert.deepEqual(COOKIE_PLATFORMS.map((p) => p.slug),
-    ['douyin', 'instagram', 'facebook', 'twitter', 'youtube', 'bilibili', 'threads', 'reddit', 'pinterest', 'tiktok', 'vimeo']);
+    ['douyin', 'instagram', 'facebook', 'twitter', 'youtube', 'bilibili', 'threads', 'reddit', 'pinterest', 'tiktok', 'vimeo', 'gdrive', 'onedrive', 'terabox']);
   assert.deepEqual(parseCookiePlatforms(['douyin', 'suno', 'douyin', 3, 'instagram']), ['douyin', 'instagram']);
   assert.deepEqual(parseCookiePlatforms(undefined), []);
   assert.deepEqual(parseCookiePlatforms('douyin'), []);

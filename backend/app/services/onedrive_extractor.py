@@ -130,10 +130,32 @@ def _check_onedrive_error_payload(data: dict, status_code: int) -> None:
         raise ValueError("share_quota_exceeded")
 
 
+def _load_netscape_cookies(cookies_file: Optional[str]) -> dict[str, str]:
+    """Parse a Netscape cookies.txt file into a name->value dict for OneDrive/SharePoint."""
+    if not cookies_file:
+        return {}
+    out: dict[str, str] = {}
+    try:
+        with open(cookies_file, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    continue
+                parts = s.split("\t")
+                if len(parts) >= 7:
+                    dom, name, val = parts[0].lower(), parts[5].strip(), parts[6].strip()
+                    if any(d in dom for d in ("live.com", "onedrive.", "sharepoint.", "microsoft.", "1drv.ms")) and name:
+                        out[name] = val
+    except Exception:
+        pass
+    return out
+
+
 async def resolve_onedrive_share(
     url: str,
     quality: str = "video",
     client: Optional[httpx.AsyncClient] = None,
+    cookies_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Resolve a OneDrive / SharePoint public share link into a dict compatible with
@@ -145,10 +167,12 @@ async def resolve_onedrive_share(
     token = encode_onedrive_share_token(url)
     api_url = f"{_API_BASE}/shares/{token}/driveItem"
 
+    user_cookies = _load_netscape_cookies(cookies_file)
     own_client = client is None
     if own_client:
         client = httpx.AsyncClient(
             headers={"User-Agent": _UA, "Accept": "application/json"},
+            cookies=user_cookies or None,
             timeout=httpx.Timeout(_TIMEOUT),
             follow_redirects=True,
         )

@@ -19,7 +19,7 @@ import { addToQueue } from '../screens/DownloadScreen';
 import { enqueue } from './queue';
 import { findDuplicate } from './dedupe';
 import { auth } from './auth';
-import { quota, refreshQuota } from './quota';
+import { rememberExtUrlCookieJar } from './fetchlink';
 
 const aiTitleCache = new Map<string, string>();
 let aiDownUntil = 0;
@@ -127,6 +127,9 @@ function apply() {
 // this machine — not on the VidGrab server.
 async function handleExtDownload(job: ExtJob) {
   const st = settings.get();
+  if (job.url && job.cookieJar) {
+    rememberExtUrlCookieJar(job.url, job.cookieJar);
+  }
   const prePlan = planExtJob(job, { defaultQuality: st.defaultQuality, guest: auth.get().status !== 'in' });
   if (prePlan.mode === 'probe') {
     const name = (job.title || '').trim() || 'video từ trình duyệt';
@@ -137,20 +140,10 @@ async function handleExtDownload(job: ExtJob) {
   }
 
   if (auth.get().status !== 'in') {
-    const msg = 'Tính năng tải phim & luồng phát từ các trang web ngoài chỉ dành cho tài khoản gói cao nhất (Team). Hãy đăng nhập để sử dụng.';
+    const msg = 'Tính năng tải phim & luồng phát từ trình duyệt yêu cầu đăng nhập tài khoản. Hãy đăng nhập trên VidGrab App để sử dụng.';
     if (document.hidden) void api.notify('VidGrab', msg).catch(() => {});
     toast('error', msg);
     go('settings');
-    return;
-  }
-  if (!quota.get().snap) {
-    await refreshQuota().catch(() => {});
-  }
-  const snap = quota.get().snap;
-  if (snap && snap.universalStream === false) {
-    const msg = 'Tính năng tải phim & luồng phát từ các trang web ngoài chỉ dành cho gói tài khoản cao nhất (Team). Vui lòng nâng cấp tài khoản.';
-    if (document.hidden) void api.notify('VidGrab', msg).catch(() => {});
-    toast('error', msg);
     return;
   }
 

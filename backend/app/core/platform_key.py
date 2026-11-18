@@ -35,6 +35,13 @@ PLATFORM_LABELS = {
     "youku":     "Youku",
     "mgtv":      "Mango TV",
     "pikpak":    "PikPak",
+    "gdrive":    "Google Drive",
+    "onedrive":  "OneDrive",
+    "mega":      "Mega.nz",
+    "terabox":   "Terabox",
+    "telegram":  "Telegram",
+    "weibo":     "Weibo",
+    "xigua":     "Xigua",
     "other":     "các trang khác",
 }
 
@@ -51,6 +58,13 @@ _HOST_PLATFORMS = (
     ("youku", ("youku.com",)),
     ("mgtv", ("mgtv.com",)),
     ("pikpak", ("mypikpak.com", "mypikpak.net")),
+    ("gdrive", ("drive.google.com", "docs.google.com", "drive.usercontent.google.com")),
+    ("onedrive", ("1drv.ms", "onedrive.live.com", "sharepoint.com")),
+    ("mega", ("mega.nz", "mega.co.nz")),
+    ("terabox", ("terabox.com", "1024terabox.com", "teraboxapp.com", "4funbox.com", "mirrobox.com", "nephobox.com", "freeterabox.com", "momerybox.com", "tibibox.com")),
+    ("telegram", ("t.me", "telegram.me", "telegram.dog")),
+    ("weibo", ("weibo.com", "weibo.cn")),
+    ("xigua", ("ixigua.com",)),
 )
 
 

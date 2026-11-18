@@ -22,6 +22,9 @@ export const COOKIE_PLATFORMS: readonly CookiePlatform[] = [
   { slug: 'pinterest', label: 'Pinterest', hosts: ['pinterest.com', 'pin.it'] },
   { slug: 'tiktok', label: 'TikTok', hosts: ['tiktok.com'] },
   { slug: 'vimeo', label: 'Vimeo', hosts: ['vimeo.com'] },
+  { slug: 'gdrive', label: 'Google Drive', hosts: ['drive.google.com', 'docs.google.com', 'drive.usercontent.google.com'], hint: 'Đăng nhập tài khoản Google để tải tệp được chia sẻ riêng hoặc vượt giới hạn lượt tải công khai.' },
+  { slug: 'onedrive', label: 'OneDrive', hosts: ['1drv.ms', 'onedrive.live.com', 'sharepoint.com'] },
+  { slug: 'terabox', label: 'Terabox', hosts: ['terabox.com', '1024terabox.com', 'teraboxapp.com', '4funbox.com', 'mirrobox.com', 'nephobox.com', 'freeterabox.com', 'momerybox.com', 'tibibox.com'] },
 ];
 
 const KNOWN = new Set(COOKIE_PLATFORMS.map((p) => p.slug));

@@ -348,10 +348,32 @@ def _parse_folder_html(html_text: str) -> tuple[str, list[dict]]:
     return title, entries
 
 
+def _load_netscape_cookies(cookies_file: Optional[str]) -> dict[str, str]:
+    """Parse a Netscape cookies.txt file into a name->value dict for google.com."""
+    if not cookies_file:
+        return {}
+    out: dict[str, str] = {}
+    try:
+        with open(cookies_file, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    continue
+                parts = s.split("\t")
+                if len(parts) >= 7:
+                    dom, name, val = parts[0].lower(), parts[5].strip(), parts[6].strip()
+                    if ("google." in dom or "googleusercontent." in dom) and name:
+                        out[name] = val
+    except Exception:
+        pass
+    return out
+
+
 async def resolve_gdrive_share(
     url: str,
     quality: str = "video",
     client: Optional[httpx.AsyncClient] = None,
+    cookies_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Resolve a Google Drive file or folder link into a dict compatible with
@@ -362,10 +384,12 @@ async def resolve_gdrive_share(
         raise ValueError("invalid_url")
 
     kind, item_id = parsed
+    user_cookies = _load_netscape_cookies(cookies_file)
     own_client = client is None
     if own_client:
         client = httpx.AsyncClient(
             headers={"User-Agent": _UA},
+            cookies=user_cookies or None,
             timeout=httpx.Timeout(_TIMEOUT),
             follow_redirects=True,
         )

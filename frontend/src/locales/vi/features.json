@@ -1,7 +1,7 @@
 {
   "badge": "RA MẮT VIDGRAB AI STUDIO v2 · WINDOWS · MACOS · MOBILE PWA · EXTENSION",
   "heroTitle": "Không chỉ dán link trên web — Trọn bộ Hệ sinh thái Tải Siêu Tốc & AI Creator Studio",
-  "heroSub": "Vượt xa công cụ tải thông thường: động cơ aria2c 16 kênh kiểu IDM trên Windows & macOS v0.23.0, chia sẻ link 1 chạm từ TikTok/YouTube trên Mobile PWA, AI Tải & Việt hóa 1 chạm, AI Cắt Clip Viral 9:16 và Chống trùng lặp Reup 3 mức độ.",
+  "heroSub": "Vượt xa công cụ tải thông thường: động cơ aria2c 16 kênh kiểu IDM trên Windows & macOS v0.23.1, chia sẻ link 1 chạm từ TikTok/YouTube trên Mobile PWA, AI Tải & Việt hóa 1 chạm, AI Cắt Clip Viral 9:16 và Chống trùng lặp Reup 3 mức độ.",
   "ctaPricing": "Xem Bảng giá & Mở khóa ngay",
   "ctaWindows": "Tải App Windows miễn phí",
   "ctaExtension": "Cài Tiện ích Chrome / Edge",
@@ -20,7 +20,7 @@
     },
     {
       "tag": "Mảnh ghép 03",
-      "title": "App Windows & macOS v0.23.0",
+      "title": "App Windows & macOS v0.23.1",
       "desc": "Sức mạnh aria2c 16 kênh + chia khối 10MB kết hợp yt-dlp & ffmpeg ngay trên máy Windows & Apple Silicon: tự nối .part khi rớt mạng 90–99%, handoff Cookie VIP và ghép phụ đề chìm MP4."
     }
   ],
@@ -30,8 +30,8 @@
     {
       "tier": "Miễn phí khi Đăng ký (Free+)",
       "tierTone": "pro",
-      "title": "Tải Siêu Tốc 16 Kênh aria2c (Windows & macOS v0.23.0) + Multi-Range OPFS",
-      "desc": "Động cơ tăng tốc thế hệ mới trên App Windows & macOS v0.23.0: tích hợp aria2c 16 kết nối song song + chia khối 10MB chống bóp băng thông CDN, tự nối tiếp tệp .part khi rớt mạng 90–99% và làm mới link hết hạn 403.",
+      "title": "Tải Siêu Tốc 16 Kênh aria2c (Windows & macOS v0.23.1) + Multi-Range OPFS",
+      "desc": "Động cơ tăng tốc thế hệ mới trên App Windows & macOS v0.23.1: tích hợp aria2c 16 kết nối song song + chia khối 10MB chống bóp băng thông CDN, tự nối tiếp tệp .part khi rớt mạng 90–99% và làm mới link hết hạn 403.",
       "highlights": [
         "aria2c 16 luồng song song: kéo tối đa băng thông đường truyền cáp quang",
         "Auto-Resume thông minh: rớt mạng lúc 95% vẫn nối tiếp, không mất dữ liệu",
@@ -146,7 +146,7 @@
         "Mở khóa Bắt luồng video mọi trang web trên Trình duyệt (tới 1080p)",
         "Mở khóa AI Tải & Việt hóa 1 chạm + AI Viral Clipper 9:16",
         "Chống trùng lặp Reup v2 (3 mức phá pHash/Audio/MD5) + Smart Metadata",
-        "Tải siêu tốc 16 kênh aria2c (App Windows & macOS v0.23.0) + PikPak Cloud",
+        "Tải siêu tốc 16 kênh aria2c (App Windows & macOS v0.23.1) + PikPak Cloud",
         "300 lượt tải/ngày · Batch 100 link (.ZIP) · ASR 120 phút/ngày · Nút tải nổi",
         "Tặng 3.000 lượt gọi REST API/tháng (+500 lượt thưởng lần đầu)"
       ],

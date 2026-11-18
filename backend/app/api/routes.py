@@ -341,6 +341,7 @@ class FetchLinkRequest(BaseModel):
     user_cookies_b64: Optional[str] = None     # base64-encoded browser cookies for private/members content
     scheduled_at: Optional[str] = None         # ISO-8601 UTC datetime to delay execution
     normalize_audio: Optional[bool] = False    # quality #5: loudness normalise (MP3 only)
+    pass_code: Optional[str] = None            # Share password / extraction code for PikPak, Terabox, etc.
 
 
 class BulkDownloadRequest(BaseModel):
@@ -1004,20 +1005,31 @@ async def fetch_link(
         from app.services.mega_extractor import is_mega_url, resolve_mega_share
         from app.services.terabox_extractor import is_terabox_url, resolve_terabox_share
         from app.services.dropbox_extractor import is_dropbox_url, resolve_dropbox_share
+        from app.services.telegram_extractor import is_telegram_url, extract_telegram_single
+        from app.services.weibo_extractor import is_weibo_url, extract_weibo
+        from app.services.xigua_extractor import is_xigua_url, extract_xigua
+
+        _pass_code = (payload.pass_code or "").strip()
 
         if _get_platform_key(payload.url) == "pikpak":
             from app.services.pikpak_extractor import resolve_pikpak_share
-            info = await resolve_pikpak_share(payload.url, _quality)
+            info = await resolve_pikpak_share(payload.url, _quality, pass_code=_pass_code)
         elif is_gdrive_url(payload.url):
-            info = await resolve_gdrive_share(payload.url, _quality)
+            info = await resolve_gdrive_share(payload.url, _quality, cookies_file=user_cookie_file)
         elif is_onedrive_url(payload.url):
-            info = await resolve_onedrive_share(payload.url, _quality)
+            info = await resolve_onedrive_share(payload.url, _quality, cookies_file=user_cookie_file)
         elif is_mega_url(payload.url):
             info = await resolve_mega_share(payload.url, _quality)
         elif is_terabox_url(payload.url):
-            info = await resolve_terabox_share(payload.url, _quality)
+            info = await resolve_terabox_share(payload.url, _quality, pwd=_pass_code, cookies_file=user_cookie_file)
         elif is_dropbox_url(payload.url):
             info = await resolve_dropbox_share(payload.url, _quality)
+        elif is_telegram_url(payload.url):
+            info = await asyncio.to_thread(extract_telegram_single, payload.url, user_id=str(user_id or ""))
+        elif is_weibo_url(payload.url):
+            info = await asyncio.to_thread(extract_weibo, payload.url)
+        elif is_xigua_url(payload.url):
+            info = await asyncio.to_thread(extract_xigua, payload.url)
         else:
             info = await extract_video_info(
                 payload.url,

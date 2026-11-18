@@ -316,7 +316,8 @@ def _features() -> Dict[str, Any]:
 # Server-side platform slugs (app.core.platform_key) the app may fall back for.
 SERVER_FALLBACK_SLUGS = ("youtube", "tiktok", "instagram", "facebook", "twitter", "threads", "reddit",
                          "pinterest", "vimeo", "bilibili", "soundcloud", "youku", "mgtv", "iqiyi",
-                         "kuaishou", "xiaohongshu", "pikpak")
+                         "kuaishou", "xiaohongshu", "pikpak", "gdrive", "onedrive", "mega", "terabox",
+                         "dropbox", "telegram", "weibo", "xigua")
 
 
 def server_fallback_platforms() -> List[str]:
@@ -329,7 +330,7 @@ def server_fallback_platforms() -> List[str]:
 
 # Slugs the app knows (desktop/src/lib/cookies.ts). Anything else is dropped.
 COOKIE_PLATFORM_SLUGS = ("douyin", "instagram", "facebook", "twitter", "youtube", "bilibili",
-                         "threads", "reddit", "pinterest", "tiktok", "vimeo")
+                         "threads", "reddit", "pinterest", "tiktok", "vimeo", "gdrive", "onedrive", "terabox")
 
 
 def cookie_platforms() -> List[str]:

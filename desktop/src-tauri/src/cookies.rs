@@ -93,6 +93,24 @@ pub const PLATFORMS: &[PlatformDef] = &[
         url_hosts: &["vimeo.com"],
         login_url: "https://vimeo.com/log_in",
     },
+    PlatformDef {
+        slug: "gdrive",
+        cookie_domains: &["google.com", "drive.google.com", "docs.google.com", "googleusercontent.com"],
+        url_hosts: &["drive.google.com", "docs.google.com", "drive.usercontent.google.com"],
+        login_url: "https://accounts.google.com/ServiceLogin?service=wise&continue=https%3A%2F%2Fdrive.google.com%2F",
+    },
+    PlatformDef {
+        slug: "onedrive",
+        cookie_domains: &["live.com", "onedrive.live.com", "sharepoint.com", "microsoftonline.com"],
+        url_hosts: &["1drv.ms", "onedrive.live.com", "sharepoint.com"],
+        login_url: "https://onedrive.live.com/login/",
+    },
+    PlatformDef {
+        slug: "terabox",
+        cookie_domains: &["terabox.com", "1024terabox.com", "teraboxapp.com"],
+        url_hosts: &["terabox.com", "1024terabox.com", "teraboxapp.com", "4funbox.com", "mirrobox.com", "nephobox.com", "freeterabox.com", "momerybox.com", "tibibox.com"],
+        login_url: "https://www.terabox.com/main",
+    },
 ];
 
 pub fn def(slug: &str) -> Option<&'static PlatformDef> {

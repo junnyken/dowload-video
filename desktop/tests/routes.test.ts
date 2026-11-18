@@ -32,7 +32,12 @@ test('platformOf mirrors platform_key.py slugs, on the host only', () => {
   // Host only: not a substring of another host or the query string.
   assert.equal(platformOf('https://evil-youtube.com/x'), 'other');
   assert.equal(platformOf('https://example.com/?u=https://youtube.com/watch'), 'other');
-  assert.equal(platformOf('https://dropbox.com/s/x'), 'other'); // "x.com" inside, like twitter_host.py
+  assert.equal(platformOf('https://dropbox.com/s/x'), 'dropbox');
+  assert.equal(platformOf('https://drive.google.com/file/d/123/view'), 'gdrive');
+  assert.equal(platformOf('https://1drv.ms/v/s!Abc'), 'onedrive');
+  assert.equal(platformOf('https://mega.nz/file/abc#key'), 'mega');
+  assert.equal(platformOf('https://www.terabox.com/s/1abc'), 'terabox');
+  assert.equal(platformOf('https://flexbox.com/s/x'), 'other'); // "x.com" inside, like twitter_host.py
   assert.equal(platformOf('https://netflix.com/title/1'), 'other');
   assert.equal(platformOf('https://bilibili.com.evil.cn/x'), 'other');
   assert.equal(platformOf('ftp://youtube.com/x'), 'other');

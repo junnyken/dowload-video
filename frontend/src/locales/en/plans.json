@@ -18,7 +18,7 @@
   "rows": {
     "daily": "Downloads per day",
     "quality": "Max quality",
-    "turbo": "16-Channel aria2c / IDM Turbo (Windows & macOS App v0.23.0)",
+    "turbo": "16-Channel aria2c / IDM Turbo (Windows & macOS App v0.23.1)",
     "pikpak": "Download videos from PikPak share links",
     "youtube": "YouTube",
     "trimClip": "Clip video by timestamp",

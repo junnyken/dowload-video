@@ -182,6 +182,9 @@ const COOKIE_GATED_DOMAINS = [
   // Douyin gates EVERY video behind signature cookies (ttwid/__ac_nonce/msToken),
   // public ones included — no account needed, just a live browser session.
   'douyin.com',
+  // Cloud Drives & Social platforms where user browser session unlocks private/quota-limited files:
+  'google.com', 'terabox.com', '1024terabox.com', 'teraboxapp.com',
+  'onedrive.live.com', 'sharepoint.com', 'dropbox.com', 'weibo.com', 'weibo.cn',
 ];
 
 function _cookieGatedDomainFor(pageUrl) {
@@ -1860,7 +1863,8 @@ async function vgSendToApp(item, height, audioLang) {
     : undefined;
   const cleanTitle = item.title ? await vgRefineStreamTitleAi(item) : '';
   const isStream = Boolean(item.kind);
-  const cookieJar = isStream ? await vgGetStreamCookieJar(item.url, referer).catch(() => undefined) : undefined;
+  const needsCookieJar = isStream || Boolean(_cookieGatedDomainFor(item.url) || _cookieGatedDomainFor(referer));
+  const cookieJar = needsCookieJar ? await vgGetStreamCookieJar(item.url, referer).catch(() => undefined) : undefined;
   const subtitles = (isStream && Array.isArray(item.subtitles) && item.subtitles.length)
     ? item.subtitles.slice(0, 6).map((s) => ({
       url: s.url,
@@ -2102,7 +2106,7 @@ async function updateBadgeForTab(tabId, skipSniff = false) {
     }
 
     const url = tab.url;
-    const isSupported = /tiktok\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com|twitter\.com|x\.com|reddit\.com|pinterest\.com|threads\.(net|com)|bilibili\.com|xiaohongshu\.com/i.test(url)
+    const isSupported = /tiktok\.com|facebook\.com|douyin\.com|instagram\.com|spotify\.com|twitter\.com|x\.com|reddit\.com|pinterest\.com|threads\.(net|com)|bilibili\.com|xiaohongshu\.com|drive\.google\.com|docs\.google\.com|1drv\.ms|onedrive\.live\.com|sharepoint\.com|mega\.(nz|co\.nz)|terabox\.com|1024terabox\.com|teraboxapp\.com|dropbox\.com|mypikpak\.com|t\.me|weibo\.(com|cn)|ixigua\.com/i.test(url)
       || /\/watch\?(?:[^#]*&)?v=[\w-]{6,}|\/shorts\/[\w-]{6,}/i.test(url);
 
     if (isSupported) {

@@ -5,7 +5,7 @@
     "free": { "name": "Free", "sub": "Free account · 20/day (5 YT)" },
     "starter": { "name": "Starter — Creator Mini", "sub": "100/day · Unlock 4K Social + 20-link Batch (.ZIP) + Photo Album .ZIP + AI ASR" },
     "pro": { "name": "Pro — Creator & Stream", "sub": "300/day · 1080p Stream Capture + Reup v2 Cleaner + AI Vietnamize & 9:16 Viral Clips + 3,000 API" },
-    "team": { "name": "Team — Cinema, Anime & API", "sub": "1,000/day · 4K Cinema/Anime + Windows & macOS App v0.23.0 (16-conn aria2c, Soft-Sub) + 15,000 API" }
+    "team": { "name": "Team — Cinema, Anime & API", "sub": "1,000/day · 4K Cinema/Anime + Windows & macOS App v0.23.1 (16-conn aria2c, Soft-Sub) + 15,000 API" }
   },
   "yes": "Yes",
   "no": "Not included",

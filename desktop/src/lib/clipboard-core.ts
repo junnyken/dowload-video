@@ -31,6 +31,15 @@ const HOSTS: Record<string, string> = {
   'lemon8-app.com': 'Lemon8',
   'odysee.com': 'Odysee',
   'open.spotify.com': 'Spotify',
+  'mypikpak.com': 'PikPak', 'mypikpak.net': 'PikPak',
+  'drive.google.com': 'Google Drive', 'docs.google.com': 'Google Drive',
+  '1drv.ms': 'OneDrive', 'onedrive.live.com': 'OneDrive', 'sharepoint.com': 'OneDrive',
+  'mega.nz': 'Mega.nz', 'mega.co.nz': 'Mega.nz',
+  'terabox.com': 'Terabox', '1024terabox.com': 'Terabox', 'teraboxapp.com': 'Terabox',
+  'dropbox.com': 'Dropbox',
+  't.me': 'Telegram', 'telegram.me': 'Telegram',
+  'weibo.com': 'Weibo', 'weibo.cn': 'Weibo',
+  'ixigua.com': 'Xigua',
 };
 
 /** Platform label for a downloadable link, or null (not ours / not a link). */

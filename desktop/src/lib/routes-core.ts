@@ -54,6 +54,14 @@ const HOSTS: readonly (readonly [string, readonly string[]])[] = [
   ['lemon8', ['lemon8-app.com', 'lemon8.app']],
   ['snapchat', ['snapchat.com']],
   ['pikpak', ['mypikpak.com', 'mypikpak.net']],
+  ['gdrive', ['drive.google.com', 'docs.google.com', 'drive.usercontent.google.com']],
+  ['onedrive', ['1drv.ms', 'onedrive.live.com', 'sharepoint.com']],
+  ['mega', ['mega.nz', 'mega.co.nz']],
+  ['terabox', ['terabox.com', '1024terabox.com', 'teraboxapp.com', '4funbox.com', 'mirrobox.com', 'nephobox.com', 'freeterabox.com', 'momerybox.com', 'tibibox.com']],
+  ['dropbox', ['dropbox.com', 'dl.dropboxusercontent.com']],
+  ['telegram', ['t.me', 'telegram.me', 'telegram.dog']],
+  ['weibo', ['weibo.com', 'weibo.cn']],
+  ['xigua', ['ixigua.com']],
 ];
 
 export const PLATFORM_SLUGS: readonly string[] = [...HOSTS.map(([s]) => s), 'other'];
@@ -104,6 +112,14 @@ const ORDER: Record<string, readonly RouteId[]> = {
   lemon8: ['L0', 'L1', 'S0'],
   snapchat: ['L0', 'S0'],
   pikpak: ['S0'],
+  gdrive: ['L1', 'S0'],
+  onedrive: ['L1', 'S0'],
+  mega: ['S0'],
+  terabox: ['L1', 'S0'],
+  dropbox: ['S0'],
+  telegram: ['S0'],
+  weibo: ['S0'],
+  xigua: ['S0'],
 };
 const DEFAULT_ORDER: readonly RouteId[] = ['L0', 'L1', 'S0'];
 

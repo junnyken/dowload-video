@@ -1,3 +1,8 @@
+## 0.23.1
+- Đồng bộ phiên đăng nhập Cloud Drive (Google Drive, OneDrive, Terabox) trực tiếp trong Desktop App (Cài đặt -> Tài khoản nền tảng, mã hóa DPAPI) và tự động nhận cookie phiên trình duyệt từ Tiện ích Chrome `v5.30.1` giúp tải tệp chia sẻ riêng tư hoặc vượt hạn mức tải công khai.
+- Mở khóa hoàn toàn luồng nhận video & stream từ Tiện ích Chrome sang Desktop App cho mọi tài khoản đã đăng nhập (kể cả gói Free/Starter/Pro) và tự động bắt liên kết Cloud Drive từ Clipboard để tải siêu tốc 16 kênh `aria2c`.
+- Hỗ trợ duyệt thư mục đệ quy hàng loạt (`CloudExpander`) cho Google Drive, PikPak, Terabox, Mega, OneDrive, Dropbox và mở khóa liên kết có mật khẩu (`pass_code`) ngay trên giao diện Web.
+
 ## 0.23.0
 - Mở khóa tính năng "Xem là Tải" (Send-to-App qua cầu nối Native với Tiện ích Chrome `v5.30.0`) cho toàn bộ tài khoản đã đăng nhập: tự động đẩy luồng video (VOD, HLS, DASH, Live) kèm phiên cookie trình duyệt và phụ đề sang App để tải siêu tốc 16 kênh `aria2c`.
 - Mở rộng hỗ trợ tải trực tiếp từ các kho lưu trữ đám mây: Google Drive (tự xử lý cảnh báo quét virus file lớn & hướng dẫn vượt hạn mức chia sẻ), OneDrive/SharePoint, Mega.nz (giải mã AES-CTR cục bộ), Terabox, Dropbox và PikPak v2 (duyệt thư mục đệ quy, mọi định dạng tệp, link có mật khẩu).

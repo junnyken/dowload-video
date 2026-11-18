@@ -103,7 +103,16 @@
       /x\.com\/[\w.-]+\/status\/\d+/.test(url) ||
       /reddit\.com\/r\/[\w.-]+\/comments\/[\w]+/.test(url) ||
       /pinterest\.com\/pin\/\d+/.test(url) ||
-      /threads\.(net|com)\/@[\w.-]+\/post\//.test(url)
+      /threads\.(net|com)\/@[\w.-]+\/post\//.test(url) ||
+      /(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?id=|uc\?)/.test(url) ||
+      /(?:1drv\.ms|onedrive\.live\.com|\.sharepoint\.com)\//.test(url) ||
+      /mega\.(?:nz|co\.nz)\/(?:file\/|#![A-Za-z0-9_-]+)/.test(url) ||
+      /(?:terabox|1024terabox|teraboxapp)\.com\/s\//.test(url) ||
+      /dropbox\.com\/(?:s|scl\/fi)\//.test(url) ||
+      /mypikpak\.com\/s\//.test(url) ||
+      /t\.me\/(?:c\/\d+\/\d+|[\w_]+\/\d+)/.test(url) ||
+      /weibo\.(?:com|cn)\/(?:tv\/show\/|\d+\/)/.test(url) ||
+      /ixigua\.com\/\d+/.test(url)
     ) return 'video';
     
     if (/douyin\.com\/(user\/|@)/.test(url) && !url.includes('modal_id=')) return 'channel';
@@ -133,7 +142,9 @@
       // Xiaohongshu / Kuaishou profiles (task #6171): the server lists them
       // (signed-in users only, at most 20 videos per scan).
       /(xiaohongshu|rednote)\.com\/user\/profile\/[0-9a-fA-F]{24}\/?(\?|#|$)/.test(url) ||
-      /kuaishou\.(com|cn)\/profile\/[\w-]+\/?(\?|#|$)/.test(url)
+      /kuaishou\.(com|cn)\/profile\/[\w-]+\/?(\?|#|$)/.test(url) ||
+      /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\//.test(url) ||
+      /mega\.(?:nz|co\.nz)\/(?:folder\/|#F!)/.test(url)
     ) return 'generic_channel';
 
     if (/open\.spotify\.com\/(playlist|album)\//.test(url)) return 'spotify_playlist';
@@ -1298,7 +1309,7 @@ window.addEventListener('message', (event) => {
       }
       if (n.tagName === 'ARTICLE' || (n.getAttribute && n.getAttribute('role') === 'article')) break;
     }
-    if (getPageType() === 'video' || /(^|\.)(tiktok|douyin|facebook|instagram|twitter|x|reddit|bilibili|xiaohongshu|rednote|twitch|dailymotion|vk|rumble|odysee)\./i.test(host)) {
+    if (getPageType() === 'video' || /(^|\.)(tiktok|douyin|facebook|instagram|twitter|x|reddit|bilibili|xiaohongshu|rednote|twitch|dailymotion|vk|rumble|odysee|google|onedrive|sharepoint|1drv|mega|terabox|1024terabox|dropbox|mypikpak|weibo|ixigua)\./i.test(host)) {
       return { url: href, title: document.title || '', douyinDirect: vgDouyinDirectForPage() };
     }
     return null;

@@ -4,7 +4,7 @@
     "free": { "name": "Free", "sub": "Có tài khoản · 20 lượt/ngày (5 YT)" },
     "starter": { "name": "Starter — Creator Mini", "sub": "100 lượt/ngày · Mở khóa 4K MXH + Batch 20 link (.ZIP) + Album ảnh .ZIP + Phụ đề ASR" },
     "pro": { "name": "Pro — Creator & Stream", "sub": "300 lượt/ngày · Bắt luồng web 1080p + Chống trùng Reup v2 + AI Việt hóa & Viral Clipper 9:16 + 3.000 API" },
-    "team": { "name": "Team — Cinema, Anime & API", "sub": "1.000 lượt/ngày · Phim/Anime 4K + App Windows & macOS v0.23.0 (aria2c 16 kênh, Soft-Sub) + 15.000 API" }
+    "team": { "name": "Team — Cinema, Anime & API", "sub": "1.000 lượt/ngày · Phim/Anime 4K + App Windows & macOS v0.23.1 (aria2c 16 kênh, Soft-Sub) + 15.000 API" }
   },
   "yes": "Có",
   "no": "Không có",

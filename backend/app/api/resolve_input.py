@@ -70,6 +70,15 @@ _PLATFORM_DISPLAY: dict[str, str] = {
     # Only ever looked up when the classifier returned "kuaishou", which it
     # does only while KUAISHOU_ENABLED is on.
     "kuaishou": "Kuaishou",
+    "pikpak": "PikPak Cloud",
+    "gdrive": "Google Drive",
+    "onedrive": "OneDrive / SharePoint",
+    "mega": "Mega.nz",
+    "terabox": "Terabox",
+    "dropbox": "Dropbox",
+    "telegram": "Telegram",
+    "weibo": "Weibo",
+    "xigua": "Xigua / Toutiao",
     "unknown": "Không xác định", "generic": "Generic",
 }
 
@@ -187,6 +196,15 @@ async def platforms_capabilities():
         "vk": ["vk.com", "vkvideo.ru"], "twitch": ["twitch.tv"],
         "rumble": ["rumble.com"], "odysee": ["odysee.com"],
         "dailymotion": ["dailymotion.com"], "podcast_rss": ["podcasts.apple.com"],
+        "pikpak": ["mypikpak.com", "mypikpak.net"],
+        "gdrive": ["drive.google.com", "docs.google.com"],
+        "onedrive": ["1drv.ms", "onedrive.live.com", "sharepoint.com"],
+        "mega": ["mega.nz", "mega.co.nz"],
+        "terabox": ["terabox.com", "1024terabox.com", "teraboxapp.com"],
+        "dropbox": ["dropbox.com", "dl.dropboxusercontent.com"],
+        "telegram": ["t.me", "telegram.me"],
+        "weibo": ["weibo.com", "weibo.cn"],
+        "xigua": ["ixigua.com"],
     }
 
     matrix = get_full_matrix()

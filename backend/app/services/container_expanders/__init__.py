@@ -64,6 +64,7 @@ def _get_map() -> dict[str, BaseExpander]:
     from app.services.container_expanders.twitter_expander import TwitterExpander
     from app.services.container_expanders.reddit_expander import RedditExpander
     from app.services.container_expanders.youtube_expander import YouTubeExpander
+    from app.services.container_expanders.cloud_expander import CloudExpander
 
     return {
         "spotify":    SpotifyExpander(),
@@ -77,4 +78,11 @@ def _get_map() -> dict[str, BaseExpander]:
         "twitter":    TwitterExpander(),
         "reddit":     RedditExpander(),
         "youtube":    YouTubeExpander(),
+        "gdrive":     CloudExpander("gdrive"),
+        "onedrive":   CloudExpander("onedrive"),
+        "mega":       CloudExpander("mega"),
+        "terabox":    CloudExpander("terabox"),
+        "dropbox":    CloudExpander("dropbox"),
+        "pikpak":     CloudExpander("pikpak"),
+        "telegram":   CloudExpander("telegram"),
     }

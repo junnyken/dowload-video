@@ -654,3 +654,28 @@ class TestCloudRegistriesAndErrors:
             cap = get_capability(clf.platform, clf.source_type)
             assert cap.support_level.value == "full"
             assert REGISTRY.platform_for(url) == expected_plat
+
+    def test_cloud_container_expanders_registered(self):
+        from app.services.container_expanders import get_expander
+        for plat in ("gdrive", "onedrive", "mega", "terabox", "dropbox", "pikpak", "telegram"):
+            exp = get_expander(plat)
+            assert exp is not None, f"Missing container expander for {plat}"
+            assert exp.platform == plat
+
+    def test_cloud_netscape_cookie_loading(self, tmp_path):
+        from app.services.gdrive_extractor import _load_netscape_cookies as load_gd
+        from app.services.onedrive_extractor import _load_netscape_cookies as load_od
+        from app.services.terabox_extractor import _load_netscape_cookies as load_tb
+
+        ck_file = tmp_path / "cookies.txt"
+        ck_file.write_text(
+            "# Netscape HTTP Cookie File\n"
+            ".google.com\tTRUE\t/\tTRUE\t1900000000\tSID\tgoogle_sid_123\n"
+            ".onedrive.live.com\tTRUE\t/\tTRUE\t1900000000\tWLSSC\tonedrive_tok_456\n"
+            ".terabox.com\tTRUE\t/\tTRUE\t1900000000\tndus\tterabox_ndus_789\n",
+            encoding="utf-8",
+        )
+        assert load_gd(str(ck_file)) == {"SID": "google_sid_123"}
+        assert load_od(str(ck_file)) == {"WLSSC": "onedrive_tok_456"}
+        assert load_tb(str(ck_file)) == {"ndus": "terabox_ndus_789"}
+

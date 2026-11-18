@@ -144,6 +144,8 @@ export default function DashboardContent() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lastErrorCode, setLastErrorCode] = useState('');
+  const [sharePassCode, setSharePassCode] = useState('');
   const [delayedInfo, setDelayedInfo] = useState(null); // Phase 27D: admission-control delayed state
   const [videoInfo, setVideoInfo] = useState(null);
   // TikWM formats arrive without dimensions; POST /formats/probe measures them
@@ -492,7 +494,7 @@ export default function DashboardContent() {
     const effUrl = (typeof overrideUrl === 'string' && overrideUrl) ? overrideUrl : url;
     if (typeof overrideUrl === 'string' && overrideUrl && overrideUrl !== url) setUrl(overrideUrl);
     if (!effUrl.trim()) { setError(t('errors.enterValidLink')); return; }
-    setIsLoading(true); setError(''); setDelayedInfo(null); setVideoInfo(null); setSpotifyData(null); setArtistData(null); setThreadsData(null); setFormatTab('video');
+    setIsLoading(true); setError(''); setLastErrorCode(''); setDelayedInfo(null); setVideoInfo(null); setSpotifyData(null); setArtistData(null); setThreadsData(null); setFormatTab('video');
     setShowInpaint(false); setInpaintStep('region'); setInpaintTempId(null); setInpaintFrameUrl(null);
     setInpaintVideoDims(null); setInpaintPreset(null); setInpaintPixelRegion(null);
     setInpaintPreviewResult(null); setInpaintFinalUrl(null); setInpaintError('');
@@ -618,8 +620,9 @@ export default function DashboardContent() {
     let fetchErrCode = null;
     try {
       const _schedPayload = scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {};
+      const _pwdPayload = sharePassCode.trim() ? { pass_code: sharePassCode.trim() } : {};
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`,
-        withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim(), quality: 'video', remove_watermark: removeWatermark, download_subs: subtitleMode !== 'off', subtitle_mode: subtitleMode, subtitle_language: subtitleLang, progress_token: progressToken, user_cookies_b64: encodeUserCookies(userCookieText), ..._schedPayload }) })
+        withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim(), quality: 'video', remove_watermark: removeWatermark, download_subs: subtitleMode !== 'off', subtitle_mode: subtitleMode, subtitle_language: subtitleLang, progress_token: progressToken, user_cookies_b64: encodeUserCookies(userCookieText), ..._schedPayload, ..._pwdPayload }) })
       );
       fetchStatus = response.status;
       const data = await safeJson(response);
@@ -642,6 +645,7 @@ export default function DashboardContent() {
           fetchErrCode = data?.error_code
             || (_d && typeof _d === 'object' ? (_d.error_code || _d.error) : null)
             || null;
+          if (fetchErrCode) setLastErrorCode(fetchErrCode);
         }
         // Per-platform daily allowance (guest 429 / signed-in 403): show the
         // server's message — it names the platform and the reset time.
@@ -2491,7 +2495,7 @@ export default function DashboardContent() {
 
       {/* ── Error ────────────────────────────────────────── */}
       {error && (
-        <div className="max-w-2xl mx-auto mb-6 w-full px-4">
+        <div className="max-w-2xl mx-auto mb-6 w-full px-4 space-y-3">
           <div className="flex items-start gap-3 text-danger bg-danger-soft px-5 py-3.5 rounded-2xl border border-danger/20 shadow-sm">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <p className="text-sm font-bold flex-1">{error}</p>
@@ -2504,6 +2508,29 @@ export default function DashboardContent() {
               </button>
             )}
           </div>
+          {lastErrorCode === 'share_password_required' && (
+            <div className="bg-surface border border-line rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shadow-sm">
+              <div className="flex-1">
+                <p className="text-xs font-bold text-fg mb-1">🔑 Nhập mật khẩu liên kết chia sẻ (PikPak / Terabox)</p>
+                <input
+                  type="text"
+                  value={sharePassCode}
+                  onChange={(e) => setSharePassCode(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && sharePassCode.trim()) { setError(''); handleFetchLink(); } }}
+                  placeholder="Ví dụ: 1234 hoặc mã trích xuất..."
+                  className="w-full px-3 py-2 text-sm rounded-xl bg-bg-subtle border border-line text-fg focus:outline-none focus:border-accent"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={!sharePassCode.trim()}
+                onClick={() => { setError(''); handleFetchLink(); }}
+                className="px-4 py-2.5 rounded-xl bg-accent text-white text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap self-end sm:self-center"
+              >
+                Mở khóa & Tải ngay
+              </button>
+            </div>
+          )}
         </div>
       )}
 
