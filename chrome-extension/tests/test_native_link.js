@@ -263,27 +263,29 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   assert(rGuest && rGuest.ok === false && rGuest.error === 'signin_required' && !env.posted.some((x) => x.t === 'download'),
     '[9a] VG_APP_SEND refuses unauthenticated guest with signin_required');
 
-  // 9b: Starter user -> refused with tier_required; Pro user -> refused on VG_APP_SEND with team_required (Desktop App handoff is Team-exclusive)
+  // 9b: Starter and Pro users -> allowed for VG_APP_SEND (any authenticated user can Send to App)
   env.local.vg_auth_token = 'tok-starter-user';
   env.setUsagePayload({ tier: 'starter', universal_stream: false, universal_stream_mode: 'none' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  env.posted.length = 0;
   const rStarter = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
-  assert(rStarter && rStarter.ok === false && rStarter.error === 'tier_required' && rStarter.tier === 'starter' && !env.posted.some((x) => x.t === 'download'),
-    '[9b] VG_APP_SEND refuses Starter tier with tier_required');
+  assert(rStarter && rStarter.ok === true && env.posted.some((x) => x.t === 'download'),
+    '[9b] VG_APP_SEND allows Starter tier (any authenticated user) to send to Desktop App');
 
   env.local.vg_auth_token = 'tok-pro-user';
   env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  env.posted.length = 0;
   const rPro = await send({ type: 'VG_APP_SEND', tabId: 3, id: 'aes1', height: 720 });
   const rProHls720 = await send({ type: 'VG_HLS_START', tabId: 3, id: 'aes1', height: 720 });
   const rProHls4k = await send({ type: 'VG_HLS_START', tabId: 3, id: 'aes1', height: 2160 });
   const rProLive = await send({ type: 'VG_HLS_START', tabId: 3, id: 'live1' });
   assert(
-    rPro && rPro.ok === false && rPro.error === 'team_required' && rPro.tier === 'pro' && !env.posted.some((x) => x.t === 'download')
+    rPro && rPro.ok === true && env.posted.some((x) => x.t === 'download')
       && rProHls720 && rProHls720.ok === true
-      && rProHls4k && rProHls4k.ok === false && rProHls4k.error === 'team_required'
-      && rProLive && rProLive.ok === false && rProLive.error === 'team_required',
-    '[9b] Pro tier allows standard Browser VOD HLS <=1080p while gating Desktop App, 4K, and Live to Team (team_required)',
+      && rProHls4k && rProHls4k.ok === true
+      && rProLive && rProLive.ok === true,
+    '[9b] Pro tier allows Desktop App send, Browser VOD HLS, 4K, and Live (all authenticated users unlocked with App connected)',
   );
 
   // 9c: Team user (highest purchasable tier) -> allowed for AES-128, SAMPLE-AES identity, non-DRM Live, and audioLang forwarding
@@ -407,20 +409,20 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   );
   sandbox.fetch = origSandboxFetch;
 
-  // 10c: Auto-queue next episode toggle (Team gated: Starter -> tier_required, Pro -> team_required, Team -> ok + deduplicated)
+  // 10c: Auto-queue next episode toggle (any authenticated user allowed, Team -> ok + deduplicated)
   env.local.vg_auth_token = 'tok-starter-user';
   env.setUsagePayload({ tier: 'starter', universal_stream: false, universal_stream_mode: 'none' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
-  const autoDeniedStarter = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
+  const autoStarter = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
 
   env.local.vg_auth_token = 'tok-pro-user';
   env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
-  const autoDenied = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
+  const autoPro = await send({ type: 'VG_SNIFF_AUTO_EP_SET', tabId: 9, enabled: true });
   assert(
-    autoDeniedStarter && autoDeniedStarter.ok === false && autoDeniedStarter.error === 'tier_required'
-      && autoDenied && autoDenied.ok === false && autoDenied.error === 'team_required',
-    '[10c] VG_SNIFF_AUTO_EP_SET refuses Starter (tier_required) and Pro (team_required)',
+    autoStarter && autoStarter.ok === true
+      && autoPro && autoPro.ok === true,
+    '[10c] VG_SNIFF_AUTO_EP_SET allows Starter and Pro (any authenticated user)',
   );
 
   env.local.vg_auth_token = 'tok-team-user';
@@ -501,19 +503,20 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     '[10d] VG_HLS_RESUME auto-rebinds fresh signed URL from live tab and restarts checkpointed job at done=12 for Team tier',
   );
 
-  // 10e: VG_PILL_CLICK routes Team user directly to connected Desktop App, and Pro user to Browser HLS
+  // 10e: VG_PILL_CLICK routes any authenticated user to connected Desktop App
   env.posted.length = 0;
   const tabSender = { id: 'gkoepflfmpdmkhmccekmajlfdnfklmgi', tab: { id: 3, url: 'https://cinema.example/watch/ep-01' }, origin: 'https://cinema.example', url: 'https://cinema.example/watch/ep-01' };
   const pillTeam = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
   env.local.vg_auth_token = 'tok-pro-user';
   env.setUsagePayload({ tier: 'pro', universal_stream: false, universal_stream_mode: 'pro' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  env.posted.length = 0;
   const pillPro = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
   assert(
     pillTeam && pillTeam.ok === true && pillTeam.via === 'app'
-      && env.posted.some((x) => x.t === 'download' && x.url === 'https://cdn.x/anime/ep01/master.m3u8?token=fresh_2')
-      && pillPro && pillPro.ok === true && pillPro.via === 'browser',
-    '[10e] VG_PILL_CLICK sends stream to Desktop App for Team tier and starts Browser HLS <=1080p for Pro tier',
+      && pillPro && pillPro.ok === true && pillPro.via === 'app'
+      && env.posted.some((x) => x.t === 'download'),
+    '[10e] VG_PILL_CLICK sends stream to Desktop App for both Team and Pro tier (any authenticated user with App connected)',
   );
 
   // 10f: vgRefineStreamTitleAi matches MetadataCleanRequest ({ title }) & response ({ filename_cleaned, episode_tag })
@@ -632,10 +635,11 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   env.local.vg_auth_token = 'tok-free-user';
   env.setUsagePayload({ tier: 'free', universal_stream: false, universal_stream_mode: 'none' });
   vm.runInContext('vgResetUniversalTierCache()', sandbox);
+  env.posted.length = 0;
   const pillFree = await send({ type: 'VG_PILL_CLICK', itemId: 'ep-hls-1-fresh' }, tabSender);
   assert(
-    pillFree && pillFree.ok === true && pillFree.via === 'browser',
-    '[12b] VG_PILL_CLICK allows signed-in Free tier user in browser (<=720p)',
+    pillFree && pillFree.ok === true && pillFree.via === 'app',
+    '[12b] VG_PILL_CLICK sends signed-in Free tier user to Desktop App when connected',
     pillFree,
   );
 

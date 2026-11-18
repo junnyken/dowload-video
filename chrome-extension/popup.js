@@ -2518,8 +2518,8 @@ function vgSniffReplyText(r, okText, failText) {
 }
 
 function vgSendToApp(tab, it, msg, height = null, audioLang = null) {
-  if (!_vgUniversalGate.isTeam) {
-    if (msg) msg.textContent = t('sniff_teamLockedHint');
+  if (!_vgUniversalGate.authenticated) {
+    if (msg) msg.textContent = t('sniff_tierLockedHint');
     vgOpenPricing();
     return;
   }

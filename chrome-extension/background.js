@@ -963,8 +963,7 @@ self.vgOnSniffStreamReady = async (tabId, item) => {
   if (!item || item.hidden || item.encryption === 'drm' || item.live) return;
   if (!(await vgAutoEpGet(tabId))) return;
   const gate = await vgCheckUniversalStreamTier();
-  if (!gate.isTeam) {
-    await vgAutoEpSet(tabId, false);
+  if (!gate.authenticated) {    await vgAutoEpSet(tabId, false);
     return;
   }
   const canon = self.VGSniff && typeof self.VGSniff.canonicalUrl === 'function'
@@ -2456,8 +2455,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       if (msg.enabled) {
         const gate = await vgCheckUniversalStreamTier();
-        if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
-        if (!gate.isTeam) { sendResponse({ ok: false, error: 'team_required', tier: gate.tier }); return; }
+        if (!gate.authenticated) { sendResponse({ ok: false, error: gate.error || 'signin_required', tier: gate.tier }); return; }
       }
       const enabled = await vgAutoEpSet(msg.tabId, Boolean(msg.enabled));
       sendResponse({ ok: true, enabled });
@@ -2510,8 +2508,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
       if (!gate.isTeam && (item.live || msg.audioTrack || (Number(msg.height) > 1080))) {
-        sendResponse({ ok: false, error: 'team_required', tier: gate.tier });
-        return;
+        // When Desktop App is connected, allow any authenticated user to access live/4k/audioTrack via App
+        const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+        if (!(gate.authenticated && appConnected)) {
+          sendResponse({ ok: false, error: 'team_required', tier: gate.tier });
+          return;
+        }
       }
       const job = await hlsStart(item, msg.height, {
         tabId: msg.tabId,
@@ -2547,20 +2549,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const clean = items.filter((x) => x && !x.hidden && !x.pending && !x.error && x.encryption !== 'drm');
       const item = clean.find((x) => x.id === msg.itemId) || clean[clean.length - 1];
       if (!item) { sendResponse({ ok: false, error: 'not_found' }); return; }
-      if (!gate.isTeam && (item.live || item.kind === 'dash')) {
+      const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+      if (gate.authenticated && appConnected) {
+        const r = await vgSendToApp(item, item.height || undefined);
+        if (r && r.ok) {
+          sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
+          return;
+        }
+      }
+      if (!gate.isTeam && (item.live || item.kind === 'dash') && !appConnected) {
         chrome.tabs.create({ url: 'https://dowloadvideo.io.vn/pricing' }).catch(() => {});
         sendResponse({ ok: false, error: 'team_required', statusText: t('pill_team_only_toast') });
         return;
-      }
-      if (gate.isTeam && !item.live) {
-        const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
-        if (appConnected) {
-          const r = await vgSendToApp(item, item.height || undefined);
-          if (r && r.ok) {
-            sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
-            return;
-          }
-        }
       }
       if (item.kind === 'hls') {
         const maxTierH = gate.tier === 'free' ? 720 : 1080;
@@ -2674,8 +2674,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'VG_APP_SEND') {
     (async () => {
       const gate = await vgCheckUniversalStreamTier();
-      if (!gate.allowed) { sendResponse({ ok: false, error: gate.error || 'tier_required', tier: gate.tier }); return; }
-      if (!gate.isTeam) { sendResponse({ ok: false, error: 'team_required', tier: gate.tier }); return; }
+      if (!gate.authenticated) { sendResponse({ ok: false, error: gate.error || 'signin_required', tier: gate.tier }); return; }
       const items = await self.vgSniffList(msg.tabId);
       const item = items.find((x) => x.id === msg.id);
       if (!item) { sendResponse({ ok: false, error: 'not_found' }); return; }
