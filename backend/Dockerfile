@@ -122,17 +122,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY scripts/patch_bgutil.py /tmp/patch_bgutil.py
 RUN python3 /tmp/patch_bgutil.py && rm /tmp/patch_bgutil.py
 
-# Copy toàn bộ code backend
-COPY . .
-
-# Pre-warm yt-dlp EJS solver cache (deno + yt_dlp_ejs, caches player JS)
+# Pre-warm yt-dlp EJS solver cache (deno + yt_dlp_ejs, caches player JS).
+# Kept BEFORE `COPY . .` so editing Python code never invalidates this layer,
+# and bounded with a short socket timeout so a blocked egress never hangs builds.
 RUN mkdir -p /app/ytdlp_cache && \
     python3 -m yt_dlp \
         --no-download \
         --skip-download \
+        --socket-timeout 8 \
+        --retries 1 \
         --cache-dir /app/ytdlp_cache \
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
     2>/dev/null || true
+
+# Copy toàn bộ code backend
+COPY . .
 
 # Expose port (tuỳ chọn)
 EXPOSE 8000

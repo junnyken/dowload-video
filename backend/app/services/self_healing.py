@@ -27,7 +27,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from threading import Lock
+from threading import Lock, Thread
 from typing import Optional
 
 from app.core.structured_log import get_logger
@@ -106,10 +106,13 @@ class HealthMonitor:
     def record_error(
         self, platform: str, error_code: str, error_message: str,
         url_hash: str = "", http_status: int = 0,
+        async_diagnose: bool = True,
     ) -> Optional[dict]:
         """
-        Record a failed extraction. Returns a diagnosis dict if the error
-        threshold was crossed and an AI diagnosis was triggered.
+        Record a failed extraction. When threshold is crossed, triggers AI
+        diagnosis on a background daemon thread (async_diagnose=True) so
+        request/extraction callers are never blocked, or synchronously when
+        async_diagnose=False.
         """
         if not ENABLED:
             return None
@@ -148,9 +151,18 @@ class HealthMonitor:
                 return None
 
             health.last_diagnosis_time = now
+            samples_snapshot = list(health.errors[-10:])
 
-        # Threshold crossed — trigger diagnosis (outside lock)
-        return self._trigger_diagnosis(platform, health.errors[:10], error_rate)
+        # Threshold crossed — run diagnosis outside lock
+        if async_diagnose:
+            Thread(
+                target=self._trigger_diagnosis,
+                args=(platform, samples_snapshot, error_rate),
+                daemon=True,
+            ).start()
+            return None
+
+        return self._trigger_diagnosis(platform, samples_snapshot, error_rate)
 
     def get_active_reroute(self, platform: str) -> Optional[str]:
         """Return the active fallback method for a platform, or None."""

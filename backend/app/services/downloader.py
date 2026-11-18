@@ -302,12 +302,23 @@ def cobalt_first(platform: str | None, quality: str) -> bool:
         wanted.add("twitter")
     if platform not in wanted:
         # platform_health puts Cobalt first for a few hours when yt-dlp can
-        # no longer read the platform (2026-10-19); env still decides otherwise.
+        # no longer read the platform (2026-10-19); self_healing reroutes can
+        # also temporarily prefer cobalt; env still decides otherwise.
+        _override = False
         try:
             from app.core.platform_health import prefer_cobalt
-            if not prefer_cobalt(platform):
-                return False
+            if prefer_cobalt(platform):
+                _override = True
         except Exception:
+            pass
+        if not _override:
+            try:
+                from app.core.extraction_errors import check_self_healing_reroute
+                if check_self_healing_reroute(platform) == "cobalt":
+                    _override = True
+            except Exception:
+                pass
+        if not _override:
             return False
     from app.services.cobalt_service import cobalt_platform_tripped
     return not cobalt_platform_tripped(platform)   # task #6133: skipped while it keeps failing

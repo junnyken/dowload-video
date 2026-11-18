@@ -163,79 +163,90 @@ async def _download_video(url: str, work_dir: str) -> tuple[str, dict]:
 
 
 async def _extract_audio(video_path: str, work_dir: str) -> str:
-    """Extract audio track as WAV for ASR."""
-    audio_path = os.path.join(work_dir, "audio.wav")
-    cmd = [
-        "ffmpeg", "-y", "-i", video_path,
-        "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-        audio_path,
-    ]
-    result = await asyncio.to_thread(
-        subprocess.run, cmd, capture_output=True, timeout=120
-    )
-    if result.returncode != 0 or not os.path.exists(audio_path):
+    """Extract audio track as MP3 (48kbps mono) compatible with ASR providers."""
+    from app.services.asr.chunking import extract_audio
+    from app.services.asr.types import AsrError
+
+    audio_path = os.path.join(work_dir, "audio.mp3")
+    try:
+        await asyncio.to_thread(extract_audio, video_path, audio_path, timeout=300)
+    except AsrError as e:
+        logger.warning("vietnamize audio extract failed: %s", e)
+        raise HTTPException(status_code=500, detail="Không trích xuất được audio từ video")
+    if not os.path.exists(audio_path):
         raise HTTPException(status_code=500, detail="Không trích xuất được audio từ video")
     return audio_path
 
 
-async def _run_asr(audio_path: str, work_dir: str, source_lang: str) -> str:
-    """Run ASR on audio file. Returns path to SRT file."""
-    from app.services.asr import config as asr_config
+async def _run_asr(
+    audio_path: str, work_dir: str, source_lang: str, duration_sec: float = 0.0
+) -> str:
+    """Run ASR on audio file via app.services.asr. Returns path to SRT file."""
+    from app.services.asr import (
+        AsrError,
+        ERROR_MESSAGES_VI,
+        NoSpeechError,
+        ProviderUnavailable,
+        config as asr_config,
+        get_provider,
+    )
+    from app.services.asr.chunking import probe_duration_sec
+    from app.services.asr.pipeline import CostTracker, transcribe_chunked
+    from app.services.asr_service import segments_to_cues
+    from app.services.subtitle_format import serialize_srt
 
-    if not asr_config.enabled():
+    if not asr_config.asr_enabled():
         raise HTTPException(
             status_code=503,
-            detail="Dịch vụ nhận dạng giọng nói (ASR) chưa được bật trên server."
+            detail="Dịch vụ nhận dạng giọng nói (ASR) chưa được bật trên server.",
         )
 
-    provider = asr_config.provider()
     srt_path = os.path.join(work_dir, "transcript.srt")
+    lang_arg = None if not source_lang or source_lang == "auto" else source_lang
 
-    if provider == "gemini":
-        await _asr_gemini(audio_path, srt_path, source_lang)
-    else:
-        await _asr_whisper(audio_path, srt_path, source_lang)
+    try:
+        if duration_sec <= 0:
+            duration_sec = await asyncio.to_thread(probe_duration_sec, audio_path)
+        provider = get_provider()
+        result = await asyncio.to_thread(
+            lambda: transcribe_chunked(
+                provider,
+                audio_path,
+                max(duration_sec, 1.0),
+                work_dir=work_dir,
+                tracker=CostTracker(),
+                language=lang_arg,
+            )
+        )
+    except ProviderUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e) or "Dịch vụ ASR chưa sẵn sàng.")
+    except NoSpeechError:
+        raise HTTPException(
+            status_code=422,
+            detail="Video không có giọng nói hoặc ASR không nhận dạng được nội dung.",
+        )
+    except AsrError as e:
+        msg = ERROR_MESSAGES_VI.get(e.code, "Lỗi nhận dạng giọng nói.")
+        raise HTTPException(status_code=502, detail=msg)
+
+    if not result.segments:
+        raise HTTPException(
+            status_code=422,
+            detail="Video không có giọng nói hoặc ASR không nhận dạng được nội dung.",
+        )
+
+    cues = segments_to_cues(result.segments)
+    srt_text = serialize_srt(cues)
+    with open(srt_path, "w", encoding="utf-8") as f:
+        f.write(srt_text)
 
     if not os.path.exists(srt_path) or os.path.getsize(srt_path) < 10:
         raise HTTPException(
             status_code=422,
-            detail="Video không có giọng nói hoặc ASR không nhận dạng được nội dung."
+            detail="Video không có giọng nói hoặc ASR không nhận dạng được nội dung.",
         )
 
     return srt_path
-
-
-async def _asr_whisper(audio_path: str, srt_path: str, lang: str) -> None:
-    """Run Whisper ASR."""
-    try:
-        from app.services.asr.whisper_provider import transcribe_to_srt
-        await asyncio.to_thread(transcribe_to_srt, audio_path, srt_path, lang)
-    except ImportError:
-        # Fallback: try faster-whisper or whisper CLI
-        lang_arg = [] if lang == "auto" else ["--language", lang]
-        cmd = [
-            "whisper", audio_path,
-            "--model", "base",
-            "--output_format", "srt",
-            "--output_dir", os.path.dirname(srt_path),
-            *lang_arg,
-        ]
-        result = await asyncio.to_thread(
-            subprocess.run, cmd, capture_output=True, timeout=600
-        )
-        # Whisper outputs as audio.srt, rename
-        whisper_out = audio_path.rsplit(".", 1)[0] + ".srt"
-        if os.path.exists(whisper_out):
-            shutil.move(whisper_out, srt_path)
-
-
-async def _asr_gemini(audio_path: str, srt_path: str, lang: str) -> None:
-    """Run Gemini ASR."""
-    try:
-        from app.services.asr.gemini_provider import transcribe_to_srt
-        await asyncio.to_thread(transcribe_to_srt, audio_path, srt_path, lang)
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Gemini ASR provider chưa được cấu hình")
 
 
 async def _translate_srt(srt_path: str, target_lang: str) -> str:
@@ -388,13 +399,17 @@ async def _translate_with_google(texts: list[str], target_lang: str) -> Optional
 async def _burn_subtitles(
     video_path: str, srt_path: str, output_path: str, font_size: int = 22
 ) -> bool:
-    """Burn SRT subtitles into video using FFmpeg."""
+    """Burn SRT subtitles into video using FFmpeg (cwd-relative SRT path)."""
     from app.core.ffmpeg_budget import thread_args
 
-    escaped = srt_path.replace("\\", "/").replace(":", "\\:")
+    sub_dir = os.path.dirname(os.path.abspath(srt_path))
+    burn_srt = os.path.join(sub_dir, "burn.srt")
+    if os.path.abspath(srt_path) != burn_srt:
+        shutil.copy2(srt_path, burn_srt)
+
     vf = (
-        f"subtitles={escaped}:force_style="
-        f"'FontSize={font_size},FontName=Arial,"
+        f"subtitles=burn.srt:force_style="
+        f"'FontSize={int(font_size)},FontName=Arial,"
         f"PrimaryColour=&H00FFFFFF&,"
         f"OutlineColour=&H00000000&,"
         f"BackColour=&H80000000&,"
@@ -403,17 +418,17 @@ async def _burn_subtitles(
     )
 
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
+        "ffmpeg", "-y", "-i", os.path.abspath(video_path),
         "-vf", vf,
         *thread_args(),
         "-c:a", "copy",
         "-c:v", "libx264", "-crf", "21", "-preset", "fast",
         "-movflags", "+faststart",
-        output_path,
+        os.path.abspath(output_path),
     ]
 
     result = await asyncio.to_thread(
-        subprocess.run, cmd, capture_output=True, timeout=_TIMEOUT_SEC
+        subprocess.run, cmd, cwd=sub_dir, capture_output=True, timeout=_TIMEOUT_SEC
     )
 
     if result.returncode != 0:
@@ -475,7 +490,7 @@ async def vietnamize(
         audio_path = await _extract_audio(video_path, work_dir)
 
         # Step 3: Run ASR
-        srt_path = await _run_asr(audio_path, work_dir, payload.source_lang)
+        srt_path = await _run_asr(audio_path, work_dir, payload.source_lang, duration)
 
         # Step 4: Translate to target language
         translated_srt = await _translate_srt(srt_path, target_lang)
@@ -487,6 +502,8 @@ async def vietnamize(
             slug = _slugify(payload.filename or title, "video")
             out_filename = f"{slug}_{target_lang}.srt"
             _schedule_cleanup(final_srt)
+            with open(translated_srt, "r", encoding="utf-8", errors="replace") as _f:
+                cue_count = sum(1 for line in _f if "-->" in line)
             return {
                 "success": True,
                 "download_url": _build_download_url(final_srt, out_filename),
@@ -495,7 +512,7 @@ async def vietnamize(
                 "expires_in_seconds": _EXPIRES_IN_SECONDS,
                 "type": "subtitle",
                 "language": target_lang,
-                "cue_count": len([1 for l in open(translated_srt).readlines() if "-->" in l]),
+                "cue_count": cue_count,
             }
 
         # Step 5: Burn subtitles into video
@@ -522,14 +539,17 @@ async def vietnamize(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("vietnamize failed")
         if output_path and os.path.exists(output_path):
             try:
                 os.remove(output_path)
             except Exception:
                 pass
-        raise HTTPException(status_code=500, detail=f"AI Việt hóa thất bại: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="AI Việt hóa thất bại do lỗi xử lý nội bộ. Vui lòng thử lại sau.",
+        )
     finally:
         # Cleanup work directory (source video, audio, temp SRT)
         try:

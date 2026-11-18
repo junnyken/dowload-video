@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -95,6 +96,23 @@ def get_level_info() -> list[dict]:
 # FFmpeg command builder
 # ---------------------------------------------------------------------------
 
+def has_audio_stream(path: str) -> bool:
+    """Return False only when ffprobe confirms the file has no audio stream."""
+    try:
+        res = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "a",
+                "-show_entries", "stream=index", "-of", "csv=p=0", path,
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        if res.returncode == 0:
+            return bool(res.stdout.strip())
+    except Exception:
+        pass
+    return True
+
+
 def _build_ffmpeg_cmd(
     input_path: str,
     output_path: str,
@@ -103,6 +121,7 @@ def _build_ffmpeg_cmd(
     custom_speed: Optional[float] = None,
     custom_hue: Optional[int] = None,
     crf: int = 18,
+    has_audio: bool = True,
 ) -> list[str]:
     """
     Build an FFmpeg command for the given anti-duplicate level.
@@ -185,20 +204,23 @@ def _build_ffmpeg_cmd(
         af_parts.append("aecho=0.8:0.9:6:0.18")
 
     # --- Assemble command ---
-    cmd = ["ffmpeg", "-y", "-i", input_path, *meta_args]
+    cmd = [
+        "ffmpeg", "-y", "-i", input_path, *meta_args,
+        "-map", "0:v:0", "-map", "0:a?",
+    ]
 
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
-    if af_parts:
+    if has_audio and af_parts:
         cmd.extend(["-af", ",".join(af_parts)])
 
     cmd.extend(thread_args())
-    cmd.extend([
-        "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
-        "-c:a", "aac", "-b:a", "192k",
-        "-movflags", "+faststart",
-        output_path,
-    ])
+    cmd.extend(["-c:v", "libx264", "-crf", str(crf), "-preset", "fast"])
+    if has_audio:
+        cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+    else:
+        cmd.append("-an")
+    cmd.extend(["-movflags", "+faststart", output_path])
 
     return cmd
 

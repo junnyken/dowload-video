@@ -45,3 +45,8 @@ scripts/.env.local
 scripts/cron.log
 database/_full_rebuild_TEMP_DO_NOT_COMMIT.sql
 chrome-extension/store-assets/*.zip
+
+# Local AI workspace notes
+.claude/
+CLAUDE.md
+Claude outputs/

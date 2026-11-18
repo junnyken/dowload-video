@@ -914,7 +914,8 @@ async def reup_clean(
     """
     import hashlib
     from app.services.anti_duplicate import (
-        _build_ffmpeg_cmd, validate_input, compute_file_hash, LEVELS, ANTI_DUP_TIMEOUT_SEC,
+        _build_ffmpeg_cmd, validate_input, compute_file_hash, has_audio_stream,
+        LEVELS, ANTI_DUP_TIMEOUT_SEC,
     )
 
     _enforce_paid_processing_tier(
@@ -964,6 +965,7 @@ async def reup_clean(
         if not custom_speed and payload.speed_105x and level == "medium":
             custom_speed = 1.05  # legacy flag override
 
+        has_audio = await asyncio.to_thread(has_audio_stream, input_path)
         ffmpeg_cmd = _build_ffmpeg_cmd(
             input_path=input_path,
             output_path=output_path,
@@ -971,6 +973,7 @@ async def reup_clean(
             mirror=mirror,
             custom_speed=custom_speed,
             custom_hue=payload.custom_hue,
+            has_audio=has_audio,
         )
 
         result = await asyncio.to_thread(
@@ -984,8 +987,8 @@ async def reup_clean(
             raise ValueError("Output cleaned video file was not created")
 
         # Compute hashes of both files for comparison
-        new_md5 = compute_file_hash(output_path, "md5")
-        original_md5 = compute_file_hash(input_path, "md5")
+        new_md5 = await asyncio.to_thread(compute_file_hash, output_path, "md5")
+        original_md5 = await asyncio.to_thread(compute_file_hash, input_path, "md5")
 
         level_info = LEVELS[level]
         slug = _slugify(payload.filename or "video", "video")
@@ -995,6 +998,10 @@ async def reup_clean(
             output_path,
             out_filename,
             extra={
+                "md5": new_md5,
+                "stripped_metadata": bool(payload.strip_metadata),
+                "mirror_flip": bool(mirror),
+                "speed_105x": bool(payload.speed_105x),
                 "anti_duplicate": {
                     "level": level,
                     "level_label": level_info["label"],
@@ -1027,7 +1034,8 @@ async def reup_clean(
 
 
 @router.get("/process/anti-duplicate-levels")
-async def anti_duplicate_levels():
+@limiter.limit("30/minute")
+async def anti_duplicate_levels(request: Request):
     """Return available anti-duplicate intensity levels for the UI."""
     from app.services.anti_duplicate import get_level_info
     return {"success": True, "levels": get_level_info()}

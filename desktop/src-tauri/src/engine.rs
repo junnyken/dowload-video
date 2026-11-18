@@ -274,12 +274,7 @@ pub fn download_args(
                 a.push("--downloader".into());
                 a.push(aria2c_path.as_os_str().to_owned());
                 a.push("--downloader-args".into());
-                a.push(
-                    "aria2c:--auto-file-renaming=false -x16 -s16 -k1M \
-                     --file-allocation=none --console-log-level=warn \
-                     --summary-interval=0 --connect-timeout=10"
-                        .into(),
-                );
+                a.push("aria2c:-x16 -s16 -k1M --connect-timeout=10".into());
             } else {
                 a.push("8".into());
             }
@@ -401,14 +396,24 @@ pub fn add_unpaced_cookies(args: &mut Vec<OsString>, cookies: &Path) {
     args.splice(end..end, [OsString::from("--cookies"), cookies.as_os_str().to_owned()]);
 }
 
-/// Strips `--http-chunk-size` when `turbo` is false (guest user not signed in).
+/// Strips `--http-chunk-size` and aria2c multi-connection acceleration when
+/// `turbo` is false (guest user not signed in).
 pub fn apply_turbo(args: &mut Vec<OsString>, turbo: bool) {
     if turbo {
         return;
     }
-    if let Some(i) = args.iter().position(|a| a == "--http-chunk-size") {
-        let end = (i + 2).min(args.len());
-        args.drain(i..end);
+    for flag in ["--http-chunk-size", "--downloader", "--downloader-args"] {
+        while let Some(i) = args.iter().position(|a| a == flag) {
+            let end = (i + 2).min(args.len());
+            args.drain(i..end);
+        }
+    }
+    if let Some(i) = args.iter().position(|a| a == "--concurrent-fragments") {
+        if let Some(v) = args.get_mut(i + 1) {
+            if *v == "16" {
+                *v = "8".into();
+            }
+        }
     }
 }
 
@@ -721,11 +726,19 @@ mod tests {
         let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: Some(aria2c_path) };
 
         // Direct media file → aria2c with 16 connections
-        let s = strs(&download_args(&t, "https://cdn.example/video.mp4", Path::new("/out"), None, false, &[], None, None));
+        let mut direct_aria_args = download_args(&t, "https://cdn.example/video.mp4", Path::new("/out"), None, false, &[], None, None);
+        let s = strs(&direct_aria_args);
         assert!(s.windows(2).any(|w| w[0] == "--downloader" && w[1] == "/app/aria2c"), "should use aria2c path: {s:?}");
         assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "16"), "should use 16 fragments: {s:?}");
         assert!(s.iter().any(|x| x.contains("-x16")), "should pass -x16 to aria2c: {s:?}");
         assert!(!s.iter().any(|x| x == "--http-chunk-size"), "should not use http-chunk-size with aria2c: {s:?}");
+
+        // Guest mode (`turbo = false`) strips aria2c acceleration & drops fragments to 8
+        apply_turbo(&mut direct_aria_args, false);
+        let s_guest = strs(&direct_aria_args);
+        assert!(!s_guest.iter().any(|x| x == "--downloader"), "guest should strip --downloader: {s_guest:?}");
+        assert!(!s_guest.iter().any(|x| x == "--downloader-args"), "guest should strip --downloader-args: {s_guest:?}");
+        assert!(s_guest.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "8"), "guest should drop fragments to 8: {s_guest:?}");
 
         // HLS/DASH (non-direct) → 8 fragments, NO aria2c
         let s = strs(&download_args(&t, "https://cdn.example/hls/master.m3u8", Path::new("/out"), None, false, &[], None, None));

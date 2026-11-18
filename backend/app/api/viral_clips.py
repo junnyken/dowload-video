@@ -152,8 +152,17 @@ async def _download_video(url: str, work_dir: str) -> tuple[str, dict]:
 
 
 async def _analyze_video(video_path: str) -> dict:
-    """Run ffprobe + heuristic analysis on the video."""
-    # Get video info via ffprobe
+    """Run full heuristic media_analyzer first, falling back to ffprobe."""
+    try:
+        from app.core.media_analyzer import build_analysis
+
+        analysis = await asyncio.to_thread(build_analysis, video_path)
+        if analysis and (analysis.get("probe") or {}).get("duration_s", 0) > 0:
+            return analysis
+    except Exception as exc:
+        logger.warning("viral_clips build_analysis failed, falling back to ffprobe: %s", exc)
+
+    # Fallback: Get video info via ffprobe
     cmd = [
         "ffprobe", "-v", "quiet", "-print_format", "json",
         "-show_format", "-show_streams", video_path,
@@ -168,7 +177,6 @@ async def _analyze_video(video_path: str) -> dict:
     try:
         probe = json.loads(result.stdout)
         duration = float(probe.get("format", {}).get("duration", 0))
-        # Find video stream dimensions
         width, height = 1920, 1080
         for stream in probe.get("streams", []):
             if stream.get("codec_type") == "video":
@@ -180,6 +188,107 @@ async def _analyze_video(video_path: str) -> dict:
         }
     except Exception:
         return {"probe": {"duration_s": 0}}
+
+
+async def _try_fetch_transcript(url: str, work_dir: str) -> Optional[str]:
+    """Best-effort subtitle fetch (manual or auto captions) as SRT text."""
+    import glob as _glob
+    import yt_dlp
+
+    ydl_opts = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": ["vi", "vi-VN", "en", "en-US"],
+        "subtitlesformat": "srt/vtt/best",
+        "outtmpl": os.path.join(work_dir, "cap.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 15,
+        "retries": 1,
+    }
+
+    def _do() -> None:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+
+    try:
+        await asyncio.to_thread(_do)
+    except Exception as exc:
+        logger.debug("viral_clips caption fetch skipped: %s", exc)
+        return None
+
+    candidates: list[str] = []
+    for ext in ("srt", "vtt"):
+        candidates.extend(sorted(_glob.glob(os.path.join(work_dir, f"cap*.{ext}"))))
+    if not candidates:
+        return None
+
+    # Prefer Vietnamese if available, otherwise first match
+    chosen = next(
+        (p for p in candidates if ".vi" in os.path.basename(p).lower()),
+        candidates[0],
+    )
+    try:
+        with open(chosen, "r", encoding="utf-8", errors="replace") as f:
+            raw = f.read()
+        if chosen.endswith(".vtt"):
+            from app.services.subtitle_format import vtt_to_clean_srt
+            return vtt_to_clean_srt(raw)
+        return raw if raw.strip() else None
+    except Exception:
+        return None
+
+
+def _slice_srt_for_clip(
+    srt_content: str, start: float, end: float, out_srt_path: str
+) -> Optional[str]:
+    """Slice SRT cues falling within [start, end], shift by -start, and write file."""
+    from app.services.subtitle_format import (
+        Cue,
+        parse_srt,
+        seconds_to_srt_timestamp,
+        serialize_srt,
+        timestamp_to_seconds,
+    )
+
+    clip_len = max(0.0, end - start)
+    if clip_len <= 0:
+        return None
+
+    try:
+        cues = parse_srt(srt_content)
+    except Exception:
+        return None
+
+    sliced: list[Cue] = []
+    for cue in cues:
+        try:
+            cs = timestamp_to_seconds(cue.start)
+            ce = timestamp_to_seconds(cue.end)
+        except ValueError:
+            continue
+        if ce <= start or cs >= end:
+            continue
+        ns = max(0.0, cs - start)
+        ne = min(clip_len, ce - start)
+        if ne <= ns or not cue.text.strip():
+            continue
+        sliced.append(
+            Cue(
+                index=len(sliced) + 1,
+                start=seconds_to_srt_timestamp(ns),
+                end=seconds_to_srt_timestamp(ne),
+                text=cue.text.strip(),
+            )
+        )
+
+    if not sliced:
+        return None
+
+    with open(out_srt_path, "w", encoding="utf-8") as f:
+        f.write(serialize_srt(sliced))
+    return out_srt_path
 
 
 async def _detect_highlights_ai(
@@ -312,8 +421,9 @@ def _fallback_even_clips(duration: float, max_clips: int, clip_duration: int) ->
 async def _cut_clip(
     video_path: str, start: float, end: float, output_path: str,
     aspect: str, font_size: int, subtitle_text: Optional[str] = None,
+    subtitle_srt: Optional[str] = None, cwd: Optional[str] = None,
 ) -> bool:
-    """Cut a single clip with aspect ratio crop and optional subtitle."""
+    """Cut a single clip with aspect ratio crop and optional subtitle burn-in."""
     from app.core.ffmpeg_budget import thread_args
 
     vf_parts = []
@@ -333,11 +443,22 @@ async def _cut_clip(
         vf_parts.append("scale=1080:1080:force_original_aspect_ratio=decrease")
         vf_parts.append("pad=1080:1080:(ow-iw)/2:(oh-ih)/2")
 
+    if subtitle_srt:
+        vf_parts.append(
+            f"subtitles={subtitle_srt}:force_style="
+            f"'FontSize={int(font_size)},FontName=Arial,"
+            f"PrimaryColour=&H00FFFFFF&,"
+            f"OutlineColour=&H00000000&,"
+            f"BackColour=&H80000000&,"
+            f"Outline=2,Shadow=1,"
+            f"MarginV=35'"
+        )
+
     cmd = [
         "ffmpeg", "-y",
         "-ss", f"{start:.3f}",
         "-to", f"{end:.3f}",
-        "-i", video_path,
+        "-i", os.path.abspath(video_path),
     ]
 
     if vf_parts:
@@ -348,11 +469,11 @@ async def _cut_clip(
         "-c:v", "libx264", "-crf", "21", "-preset", "fast",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
-        output_path,
+        os.path.abspath(output_path),
     ])
 
     result = await asyncio.to_thread(
-        subprocess.run, cmd, capture_output=True, timeout=120
+        subprocess.run, cmd, cwd=cwd, capture_output=True, timeout=120
     )
 
     if result.returncode != 0:
@@ -406,12 +527,13 @@ async def viral_clips(
 
         title = (info or {}).get("title", "video") or "video"
 
-        # Step 2: Analyze video
+        # Step 2: Analyze video + best-effort captions
         analysis = await _analyze_video(video_path)
+        transcript_srt = await _try_fetch_transcript(payload.url, work_dir)
 
         # Step 3: Detect highlights (heuristic + AI)
         highlights = await _detect_highlights_ai(
-            video_path, analysis, None, payload.max_clips, payload.clip_duration
+            video_path, analysis, transcript_srt, payload.max_clips, payload.clip_duration
         )
 
         if not highlights:
@@ -423,23 +545,38 @@ async def viral_clips(
         for idx, hl in enumerate(highlights, 1):
             clip_name = f"clip_{idx:02d}_{uid}.mp4"
             clip_path = os.path.join(work_dir, clip_name)
+            clip_start = float(hl.get("start", 0))
+            clip_end = float(hl.get("end", 30))
+
+            clip_srt_name: Optional[str] = None
+            if payload.burn_subtitles and transcript_srt:
+                srt_rel = f"clip_{idx:02d}.srt"
+                if _slice_srt_for_clip(
+                    transcript_srt,
+                    clip_start,
+                    clip_end,
+                    os.path.join(work_dir, srt_rel),
+                ):
+                    clip_srt_name = srt_rel
 
             ok = await _cut_clip(
                 video_path,
-                hl.get("start", 0),
-                hl.get("end", 30),
+                clip_start,
+                clip_end,
                 clip_path,
                 payload.aspect_ratio,
                 payload.font_size,
+                subtitle_srt=clip_srt_name,
+                cwd=work_dir if clip_srt_name else None,
             )
 
             if ok and os.path.exists(clip_path):
                 clip_paths.append(clip_path)
                 clip_info.append({
                     "index": idx,
-                    "start": round(hl.get("start", 0), 1),
-                    "end": round(hl.get("end", 0), 1),
-                    "duration": round(hl.get("end", 0) - hl.get("start", 0), 1),
+                    "start": round(clip_start, 1),
+                    "end": round(clip_end, 1),
+                    "duration": round(clip_end - clip_start, 1),
                     "confidence": round(hl.get("confidence", 0.5), 2),
                     "reason": hl.get("reason", ""),
                     "hook_text": hl.get("hook_text", ""),
@@ -476,9 +613,12 @@ async def viral_clips(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("viral_clips failed")
-        raise HTTPException(status_code=500, detail=f"AI Viral Clipper thất bại: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="AI Viral Clipper thất bại do lỗi xử lý nội bộ. Vui lòng thử lại sau.",
+        )
     finally:
         try:
             shutil.rmtree(work_dir, ignore_errors=True)

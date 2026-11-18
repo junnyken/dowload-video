@@ -43,6 +43,12 @@ def _track_download(url: str, success: bool, error_code: Optional[str] = None,
         if success and duration_ms is not None:
             kw["duration_ms"] = int(duration_ms)
         record_async(plat, success, error_code, **kw)
+        if success and plat != "other":
+            try:
+                from app.services.self_healing import monitor as _sh_mon
+                _sh_mon.record_success(plat)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1302,8 +1308,11 @@ async def fetch_link(
         msg = str(e)
         # Status is decided from the RAW message (it carries yt-dlp's own
         # reason), before the friendly rewrite below discards it.
-        from app.core.extraction_errors import classify_extraction_error, ExtractionHTTPException
+        from app.core.extraction_errors import (
+            classify_extraction_error, ExtractionHTTPException, notify_self_healing,
+        )
         _status, _err_code = classify_extraction_error(msg, e)
+        notify_self_healing(_get_platform_key(payload.url), _err_code, msg, _status)
         # Task #6148: the raw reason, readable on the admin Overview — the
         # API's logs are not, and the message below is rewritten for users.
         _keep_recent_error(request, payload, user_id, x_vg_source, _status, _err_code,
