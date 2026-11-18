@@ -2,7 +2,7 @@
   "_note": "wording: BA review — English drafted with AI",
   "badge": "VIDGRAB AI STUDIO v2 · WINDOWS · MACOS · MOBILE PWA · EXTENSION",
   "heroTitle": "Beyond Pasting Links — Full High-Speed Downloader & AI Creator Ecosystem",
-  "heroSub": "Engineered to outperform ordinary downloaders: 16-connection aria2c IDM turbo speed on Windows & macOS v0.22.11, 1-tap Mobile PWA Share from TikTok/YouTube, AI 1-Click Vietnamize, AI 9:16 Viral Clipper, and 3-level Anti-Detect Reup Cleaner.",
+  "heroSub": "Engineered to outperform ordinary downloaders: 16-connection aria2c IDM turbo speed on Windows & macOS v0.23.0, 1-tap Mobile PWA Share from TikTok/YouTube, AI 1-Click Vietnamize, AI 9:16 Viral Clipper, and 3-level Anti-Detect Reup Cleaner.",
   "ctaPricing": "View Plans & Unlock Now",
   "ctaWindows": "Download Windows App",
   "ctaExtension": "Install Chrome / Edge Extension",
@@ -21,7 +21,7 @@
     },
     {
       "tag": "Pillar 03",
-      "title": "Windows & macOS Desktop App v0.22.11",
+      "title": "Windows & macOS Desktop App v0.23.0",
       "desc": "16-connection aria2c + 10MB chunking with native yt-dlp & ffmpeg on Windows & Apple Silicon Macs: automatic .part resume on 90–99% drops, VIP cookie handoff, and soft-subtitle MP4 muxing."
     }
   ],
@@ -31,8 +31,8 @@
     {
       "tier": "Free on Sign-In (Free+)",
       "tierTone": "pro",
-      "title": "16-Channel aria2c Turbo Engine (Windows & macOS v0.22.11) + Multi-Range OPFS",
-      "desc": "Next-gen acceleration in Desktop v0.22.11: bundled 16-connection aria2c + 10MB HTTP Range chunking defeats CDN single-socket caps, automatically resumes partial .part files on 90–99% drops, and refreshes expired 403 URLs.",
+      "title": "16-Channel aria2c Turbo Engine (Windows & macOS v0.23.0) + Multi-Range OPFS",
+      "desc": "Next-gen acceleration in Desktop v0.23.0: bundled 16-connection aria2c + 10MB HTTP Range chunking defeats CDN single-socket caps, automatically resumes partial .part files on 90–99% drops, and refreshes expired 403 URLs.",
       "highlights": [
         "16-connection aria2c saturates full fiber bandwidth on large cloud files",
         "Smart Auto-Resume picks up 95% partial transfers cleanly without restarting",
@@ -147,7 +147,7 @@
         "Unlocks Browser Universal Stream Capture on any site (up to 1080p)",
         "Unlocks AI 1-Click Sub & Translate + AI 9:16 Viral Clipper",
         "Anti-Detect Reup Cleaner v2 (3-level pHash/Audio/MD5) + Smart Metadata",
-        "16-Channel aria2c Turbo Engine (Windows & macOS v0.22.11) + PikPak Cloud",
+        "16-Channel aria2c Turbo Engine (Windows & macOS v0.23.0) + PikPak Cloud",
         "300 downloads/day · 100-link Batch (.ZIP) · 120m/day AI ASR · Hover Pill",
         "Includes 3,000 REST API calls/mo (+500 1st-purchase bonus)"
       ],

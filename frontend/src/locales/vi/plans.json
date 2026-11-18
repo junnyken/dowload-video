@@ -11,7 +11,7 @@
   "rows": {
     "daily": "Lượt tải mỗi ngày",
     "quality": "Chất lượng tối đa",
-    "turbo": "Tải siêu tốc 16 kênh aria2c / IDM (App Windows & macOS v0.22.11)",
+    "turbo": "Tải siêu tốc 16 kênh aria2c / IDM (App Windows & macOS v0.23.0)",
     "pikpak": "Tải video từ link chia sẻ PikPak",
     "youtube": "YouTube",
     "trimClip": "Cắt đoạn video theo thời gian",

@@ -1,3 +1,9 @@
+## 0.23.0
+- Mở khóa tính năng "Xem là Tải" (Send-to-App qua cầu nối Native với Tiện ích Chrome `v5.30.0`) cho toàn bộ tài khoản đã đăng nhập: tự động đẩy luồng video (VOD, HLS, DASH, Live) kèm phiên cookie trình duyệt và phụ đề sang App để tải siêu tốc 16 kênh `aria2c`.
+- Mở rộng hỗ trợ tải trực tiếp từ các kho lưu trữ đám mây: Google Drive (tự xử lý cảnh báo quét virus file lớn & hướng dẫn vượt hạn mức chia sẻ), OneDrive/SharePoint, Mega.nz (giải mã AES-CTR cục bộ), Terabox, Dropbox và PikPak v2 (duyệt thư mục đệ quy, mọi định dạng tệp, link có mật khẩu).
+- Bổ sung nguồn mạng xã hội & Livestream mới: Telegram (kênh công khai & đăng nhập MTProto tài khoản cá nhân an toàn), Weibo, Xigua/Toutiao và ghi hình Livestream trực tiếp (TikTok, YouTube, Twitch, Kick).
+- Hỗ trợ chính thức bản cài đặt macOS Apple Silicon (`.dmg` M1/M2/M3/M4) song song với Windows x64.
+
 ## 0.22.11
 - Tích hợp sẵn bộ tăng tốc đa luồng `aria2c` (`1.37.0`, kiểm chứng toàn vẹn SHA-256) đẩy tốc độ tải file lẻ lớn (`.mp4`, `.mkv` từ PikPak / Cloud) lên 16 kết nối song song chuẩn IDM.
 - Hiển thị trạng thái sẵn sàng của bộ tăng tốc đa luồng 16 kênh và phiên bản `aria2c` ngay trong màn hình Cài đặt.
