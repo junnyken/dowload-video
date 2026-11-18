@@ -2867,8 +2867,8 @@ export default function DashboardContent() {
                     <h5 className="text-sm font-bold text-fg flex items-center gap-2">
                       <ImageDown className="w-4 h-4 text-accent-text" />
                       {isEnUi
-                        ? `Photo Slideshow (${videoInfo.images.length} HD Photos)`
-                        : `Album ảnh trượt TikTok / Douyin (${videoInfo.images.length} ảnh gốc HD)`}
+                        ? `Photo Album / Carousel (${videoInfo.images.length} HD Photos)`
+                        : `Album ảnh bài viết (${videoInfo.images.length} ảnh gốc HD)`}
                     </h5>
                     <p className="text-xs text-fg-muted mt-0.5">
                       {!isPaidUser

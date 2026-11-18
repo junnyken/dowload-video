@@ -1218,6 +1218,9 @@ document.getElementById('downloadBtn').addEventListener('click', async () => {
       if (msg.dlUrl) _lastDownloadData._resolvedUrl = msg.dlUrl;
       showPreviewCard(data, targetUrl);
       showMultiFormat(data);
+      if (Array.isArray(data?.images) && data.images.length > 0) {
+        vgRenderPhotoAlbum(data.images.map((u) => ({ url: u, width: 0, height: 0 })), data.title || 'Album');
+      }
       document.getElementById('error-card')?.classList.add('hidden');
       const isMp3Done = quality && quality.startsWith('mp3');
       const isCleanTikTok = isWatermarkPlatform(targetUrl) && noWm;
@@ -2980,6 +2983,99 @@ document.getElementById('vg-qr-btn')?.addEventListener('click', async () => {
   img.style.cssText = 'width:168px;height:168px;image-rendering:pixelated;';
   holder.appendChild(img);
   box.classList.remove('hidden');
+});
+
+function vgCleanFolderTitle(raw) {
+  return String(raw || 'Album')
+    .replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 50) || 'Album';
+}
+
+function vgRenderPhotoAlbum(items, pageTitle) {
+  const box = document.getElementById('vg-photos');
+  const info = document.getElementById('vg-photos-info');
+  const grid = document.getElementById('vg-photos-grid');
+  const dlAllBtn = document.getElementById('vg-photos-dl-all');
+  if (!box || !info || !grid || !dlAllBtn) return;
+
+  box.classList.remove('hidden');
+  grid.textContent = '';
+  const list = Array.isArray(items) ? items.filter((x) => x && x.url) : [];
+  if (!list.length) {
+    info.textContent = t('photos_empty');
+    dlAllBtn.classList.add('hidden');
+    return;
+  }
+
+  const folder = vgCleanFolderTitle(pageTitle);
+  info.textContent = `📸 ${folder} (${list.length} HD)`;
+  dlAllBtn.textContent = t('photos_dl_all', String(list.length));
+  dlAllBtn.classList.remove('hidden');
+
+  const downloadSinglePhoto = (imgUrl, idx) => {
+    const num = String(idx + 1).padStart(2, '0');
+    const ext = ((imgUrl.split('?')[0].match(/\.(webp|png|jpeg|jpg)$/i) || [])[1] || 'jpg').toLowerCase();
+    chrome.downloads.download({
+      url: imgUrl,
+      filename: `VidGrab/${folder}/${folder}_${num}.${ext}`,
+      saveAs: false,
+      conflictAction: 'uniquify',
+    });
+  };
+
+  list.forEach((it, idx) => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'position:relative;border-radius:7px;overflow:hidden;border:1px solid #1e2333;background:#13151f;aspect-ratio:1/1;cursor:pointer;';
+    const img = document.createElement('img');
+    img.src = it.url;
+    img.loading = 'lazy';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    const badge = document.createElement('span');
+    badge.textContent = it.width >= 200 ? `${it.width}p` : `#${idx + 1}`;
+    badge.style.cssText = 'position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,0.75);color:#fff;font-size:8px;font-weight:700;padding:1px 4px;border-radius:4px;';
+    cell.append(img, badge);
+    cell.addEventListener('click', () => downloadSinglePhoto(it.url, idx));
+    grid.appendChild(cell);
+  });
+
+  dlAllBtn.onclick = () => {
+    list.forEach((it, idx) => downloadSinglePhoto(it.url, idx));
+  };
+}
+
+document.getElementById('vg-photos-btn')?.addEventListener('click', async () => {
+  const box = document.getElementById('vg-photos');
+  const info = document.getElementById('vg-photos-info');
+  if (!box || !info) return;
+  if (!box.classList.contains('hidden')) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  info.textContent = t('photos_scanning');
+  const tab = await getActiveTab().catch(() => null);
+  if (!tab || !tab.id) {
+    info.textContent = t('photos_empty');
+    return;
+  }
+  chrome.tabs.sendMessage(tab.id, { type: 'VG_SCAN_PAGE_IMAGES' }, (res) => {
+    void chrome.runtime.lastError;
+    const domImgs = (res && Array.isArray(res.images)) ? res.images : [];
+    const apiImgs = Array.isArray(_lastDownloadData?.images)
+      ? _lastDownloadData.images.map((u) => ({ url: u, width: 0, height: 0 }))
+      : [];
+    const merged = [...apiImgs];
+    const seen = new Set(merged.map((x) => x.url));
+    for (const d of domImgs) {
+      if (d && d.url && !seen.has(d.url)) {
+        seen.add(d.url);
+        merged.push(d);
+      }
+    }
+    vgRenderPhotoAlbum(merged, (res && res.pageTitle) || _lastDownloadData?.title || tab.title || 'Album');
+  });
 });
 
 async function vgRecRender() {

@@ -2080,5 +2080,22 @@
   },
   "pill_team_only_toast": {
     "message": "🔒 Cần gói Team"
+  },
+  "tool_photos": {
+    "message": "🖼️ Album ảnh"
+  },
+  "photos_scanning": {
+    "message": "Đang quét ảnh gốc HD trên trang…"
+  },
+  "photos_empty": {
+    "message": "Không tìm thấy ảnh lớn trong bài viết này."
+  },
+  "photos_dl_all": {
+    "message": "⬇️ Tải tất cả $p1$ ảnh HD",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   }
 }

@@ -1308,9 +1308,47 @@ async function vgFetchAndSave({ url, quality, remove_watermark, download_subs },
     ? (vgFileId(data.local_mp3_file_id, data.local_mp3_path) || vgFileId(data.local_file_id, data.local_file_path) || data.direct_mp4_url)
     : (data.direct_mp4_url || vgFileId(data.local_file_id, data.local_file_path) || vgFileId(data.local_mp3_file_id, data.local_mp3_path));
 
+  const safeName = await vgFileName(data.title || 'video', url);
+
+  // Photo Album / Carousel post (Douyin Note, TikTok Photo Mode, Xiaohongshu, Instagram, etc.)
+  if (!dlUrl && Array.isArray(data.images) && data.images.length > 0) {
+    const albumFolder = safeName.slice(0, 60) || 'Album';
+    const photos = data.images.slice(0, 50);
+    photos.forEach((imgUrl, idx) => {
+      if (!imgUrl || typeof imgUrl !== 'string') return;
+      const num = String(idx + 1).padStart(2, '0');
+      const imgExt = ((imgUrl.split('?')[0].match(/\.(webp|png|jpeg|jpg)$/i) || [])[1] || 'jpg').toLowerCase();
+      chrome.downloads.download({
+        url: imgUrl,
+        filename: `VidGrab/${albumFolder}/${albumFolder}_${num}.${imgExt}`,
+        saveAs: false,
+        conflictAction: 'uniquify',
+      });
+    });
+    if (data.audio_url && /^https?:\/\//i.test(data.audio_url)) {
+      chrome.downloads.download({
+        url: data.audio_url,
+        filename: `VidGrab/${albumFolder}/${albumFolder}_audio.mp3`,
+        saveAs: false,
+        conflictAction: 'uniquify',
+      });
+    }
+    addToHistory({
+      title: `${data.title || 'Album'} (${photos.length} photos)`,
+      thumbnail: data.thumbnail_url || photos[0] || '',
+      url,
+      quality: `${photos.length} HD`,
+      fileSize: '',
+      noWatermark: true,
+      hasSubtitle: false,
+      subtitleLanguages: [],
+      subtitleSource: 'none',
+    });
+    return { data, dlUrl: photos[0], finalExt: 'jpg', safeName };
+  }
+
   if (!dlUrl) throw new Error(t('err_no_dl_link'));
 
-  const safeName = await vgFileName(data.title || 'video', url);
   const finalExt = (data.is_audio_only || dlUrl.endsWith('.mp3') || dlUrl.endsWith('.m4a')) ? 'mp3' : ext;
 
   // E1: prefer direct (user IP), fall back to server proxy on failure

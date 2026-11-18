@@ -324,6 +324,7 @@ def _parse_note_data(data: dict, note_id: str) -> dict:
             "duration_ms": 0,
             "formats": [],
             "direct_url": "",
+            "images": [m["url"] for m in media_items if m.get("url")],
             "media_items": media_items,
             "requires_zip": len(media_items) > 1,
             "source_type": "mixed" if len(media_items) > 1 else "image",

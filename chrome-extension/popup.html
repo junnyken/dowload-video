@@ -644,11 +644,17 @@
 
     <div id="statusMsg" class="status-msg" data-i18n="status_idle">Downloaded by your browser · VidGrab server fallback</div><!-- wording: BA review -->
 
-    <!-- 5.20.0: preview · send to phone · record the tab. wording: BA review -->
-    <div id="vg-tools" style="display:flex;gap:6px;margin-top:8px;">
+    <!-- 5.20.0: preview · send to phone · record the tab · HD photo album. wording: BA review -->
+    <div id="vg-tools" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
       <button id="vg-preview-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_preview">👁 Preview</button>
+      <button id="vg-photos-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_photos">🖼️ Photos</button>
       <button id="vg-qr-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_qr">📱 Send to phone</button>
       <button id="vg-rec-btn" type="button" class="vg-chip" style="flex:1;padding:6px;" data-i18n="tool_record">⏺ Record tab</button>
+    </div>
+    <div id="vg-photos" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
+      <div id="vg-photos-info" style="font-size:10px;color:#cbd5e1;margin-bottom:6px;"></div>
+      <div id="vg-photos-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;max-height:185px;overflow-y:auto;"></div>
+      <button id="vg-photos-dl-all" type="button" class="btn-primary hidden" style="margin-top:8px;padding:7px 10px;font-size:11px;"></button>
     </div>
     <div id="vg-preview" class="hidden" style="margin-top:8px;background:#0f1119;border:1px solid #1e2333;border-radius:10px;padding:8px;">
       <video id="vg-preview-video" controls muted playsinline preload="metadata" style="width:100%;max-height:200px;border-radius:8px;background:#000;"></video>

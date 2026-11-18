@@ -2080,5 +2080,22 @@
   },
   "pill_team_only_toast": {
     "message": "🔒 Team plan required"
+  },
+  "tool_photos": {
+    "message": "🖼️ Photos"
+  },
+  "photos_scanning": {
+    "message": "Scanning HD photos on this page…"
+  },
+  "photos_empty": {
+    "message": "No large post photos found on this page."
+  },
+  "photos_dl_all": {
+    "message": "⬇️ Download all $p1$ HD photos",
+    "placeholders": {
+      "p1": {
+        "content": "$1"
+      }
+    }
   }
 }

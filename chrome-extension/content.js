@@ -1198,10 +1198,94 @@ window.addEventListener('message', (event) => {
     return Array.from(out).sort((a, b) => (/\.mp4/i.test(b) ? 1 : 0) - (/\.mp4/i.test(a) ? 1 : 0));
   }
 
+  // ── Scan current post/page for original HD album/carousel images ──
+  function _vgUpgradeImageUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    let u = rawUrl.trim();
+    if (u.startsWith('//')) u = 'https:' + u;
+    if (!/^https?:\/\//i.test(u)) return '';
+    try {
+      const parsed = new URL(u);
+      const host = parsed.hostname.toLowerCase();
+      // X / Twitter: upgrade name=small|medium|large to name=orig
+      if (host.endsWith('twimg.com') && parsed.pathname.includes('/media/')) {
+        parsed.searchParams.set('name', 'orig');
+        if (!parsed.searchParams.get('format') && /\.(jpg|jpeg|png|webp)$/i.test(parsed.pathname)) {
+          const ext = parsed.pathname.split('.').pop();
+          parsed.searchParams.set('format', ext);
+        }
+        return parsed.toString();
+      }
+      // Pinterest: upgrade /236x/ /474x/ /564x/ /736x/ to /originals/
+      if (host.endsWith('pinimg.com')) {
+        return u.replace(/\/(?:236|474|564|736)x\//, '/originals/');
+      }
+      return parsed.toString();
+    } catch {
+      return u;
+    }
+  }
+
+  function _vgBestFromSrcset(srcset) {
+    if (!srcset || typeof srcset !== 'string') return '';
+    let bestUrl = '';
+    let bestScore = -1;
+    for (const part of srcset.split(',')) {
+      const tokens = part.trim().split(/\s+/);
+      if (!tokens[0]) continue;
+      let score = 0;
+      const desc = tokens[1] || '';
+      if (/^\d+w$/i.test(desc)) score = parseInt(desc, 10);
+      else if (/^\d+(?:\.\d+)?x$/i.test(desc)) score = Math.round(parseFloat(desc) * 1000);
+      if (score >= bestScore) {
+        bestScore = score;
+        bestUrl = tokens[0];
+      }
+    }
+    return bestUrl;
+  }
+
+  function _vgScanPageImages() {
+    const seen = new Set();
+    const results = [];
+    const pushImg = (rawUrl, w, h) => {
+      const up = _vgUpgradeImageUrl(rawUrl);
+      if (!up || seen.has(up)) return;
+      if (/\.(svg|ico|gif)(\?|$)/i.test(up) || /avatar|profile_pic|emoji|sprite|logo/i.test(up)) return;
+      seen.add(up);
+      results.push({ url: up, width: w || 0, height: h || 0 });
+    };
+
+    document.querySelectorAll('img').forEach((img) => {
+      const nw = img.naturalWidth || img.width || 0;
+      const nh = img.naturalHeight || img.height || 0;
+      const rect = img.getBoundingClientRect();
+      const dispW = Math.max(nw, Math.round(rect.width || 0));
+      const dispH = Math.max(nh, Math.round(rect.height || 0));
+      if (dispW < 200 || dispH < 200) return;
+      // Skip tiny square avatars
+      if (dispW <= 260 && dispH <= 260 && Math.abs(dispW - dispH) <= 8 && /50%|999/.test(getComputedStyle(img).borderRadius || '')) return;
+      const bestSrc = _vgBestFromSrcset(img.getAttribute('srcset')) || img.getAttribute('data-src') || img.currentSrc || img.src;
+      pushImg(bestSrc, nw || dispW, nh || dispH);
+    });
+
+    if (results.length === 0) {
+      document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]').forEach((m) => {
+        if (m && m.content) pushImg(m.content, 1080, 1080);
+      });
+    }
+
+    return results.slice(0, 60);
+  }
+
   // ── Message handler từ popup ───────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'VG_SCAN_PAGE_MEDIA') {
       sendResponse({ media: _vgScanPageMedia(), pageTitle: document.title });
+      return true;
+    }
+    if (msg.type === 'VG_SCAN_PAGE_IMAGES') {
+      sendResponse({ images: _vgScanPageImages(), pageTitle: document.title });
       return true;
     }
     if (msg.type === 'VG_GET_PAGE_INFO') {
