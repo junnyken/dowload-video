@@ -442,8 +442,35 @@ function vgActiveVideoCaption(v) {
   return '';
 }
 
-function vgDouyinDirectForPage(preferredVideo) {
-  const id = vgDouyinIdOf(location.href);
+function vgDouyinIdForElement(v) {
+  if (!v) return null;
+  for (let n = v, depth = 0; n && n !== document.body && depth < 14; n = n.parentElement, depth++) {
+    const vid = n.getAttribute && (n.getAttribute('data-e2e-vid') || n.getAttribute('data-aweme-id') || n.dataset?.e2eVid || n.dataset?.awemeId);
+    if (vid && /^\d{15,25}$/.test(vid)) return vid;
+    if (n.querySelectorAll) {
+      const links = n.querySelectorAll('a[href*="/video/"], a[href*="modal_id="]');
+      for (const a of links) {
+        const m = (a.href || '').match(/\/(?:video|note)\/(\d{15,25})/);
+        if (m) return m[1];
+        const q = (a.href || '').match(/[?&]modal_id=(\d{15,25})/);
+        if (q) return q[1];
+      }
+    }
+  }
+  const src = v.currentSrc || v.src || v.querySelector?.('source')?.src;
+  if (src && _vgDouyinDirect.size) {
+    for (const [id, data] of _vgDouyinDirect.entries()) {
+      if (data && data.url && (data.url === src || (src.includes('/video/') && data.url.includes(src)))) {
+        return id;
+      }
+    }
+  }
+  return null;
+}
+
+function vgDouyinDirectForPage(preferredVideo, explicitId) {
+  const vid = preferredVideo || vgPickActiveVideoEl();
+  const id = explicitId || (vid && vgDouyinIdForElement(vid)) || vgDouyinIdOf(location.href);
   if (!id) return null;
   const hit = _vgDouyinDirect.get(id);
   if (hit) return { id, ...hit };
@@ -454,9 +481,9 @@ function vgDouyinDirectForPage(preferredVideo) {
       if (r) return { id, ...r };
     }
   } catch { /* page format changed: fall through */ }
-  const vid = preferredVideo || vgPickActiveVideoEl();
   const src = vid && (vid.currentSrc || vid.src || vid.querySelector('source')?.src);
-  const caption = vgActiveVideoCaption(vid) || document.title || '';
+  let caption = vgActiveVideoCaption(vid) || '';
+  if (/^抖音(?:精选)?(?:电脑版)?$/i.test(caption.trim())) caption = '';
   if (src && _VG_DOUYIN_MEDIA_HOST.test(src)) return { id, url: src, title: caption };
   return null;
 }
@@ -1383,12 +1410,24 @@ window.addEventListener('message', (event) => {
     if (!v) return null;
     const href = window.location.href;
     const host = window.location.hostname;
-    const dyId = vgDouyinIdOf(href);
-    if (dyId) {
-      const dyDirect = vgDouyinDirectForPage(v);
-      const cleanCaption = (dyDirect && dyDirect.title) || vgActiveVideoCaption(v) || document.title || '';
-      return { url: `https://www.douyin.com/video/${dyId}`, title: cleanCaption, douyinDirect: dyDirect };
+
+    // Douyin: prioritize video element container ID over page/modal URL
+    if (/(^|\.)douyin\.com$/i.test(host)) {
+      const elId = vgDouyinIdForElement(v);
+      const urlId = vgDouyinIdOf(href);
+      const dyId = elId || urlId;
+      if (dyId) {
+        const dyDirect = vgDouyinDirectForPage(v, dyId);
+        let cleanCaption = (dyDirect && dyDirect.title) || vgActiveVideoCaption(v) || '';
+        if (/^抖音(?:精选)?(?:电脑版)?$/i.test(cleanCaption.trim())) cleanCaption = '';
+        return {
+          url: `https://www.douyin.com/video/${dyId}`,
+          title: cleanCaption || `Video Douyin ${dyId}`,
+          douyinDirect: dyDirect,
+        };
+      }
     }
+
     if (/\/(?:watch\?(?:[^#]*&)?v=|shorts\/)([\w-]{6,})/.test(href)) {
       return { url: href, title: document.title || '' };
     }

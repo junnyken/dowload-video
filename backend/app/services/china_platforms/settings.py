@@ -123,7 +123,7 @@ def dedupe_ttl_sec() -> int:
 
 
 def dedupe_wait_sec() -> float:
-    return max(0.0, _float("CHINA_ACCESS_DEDUPE_WAIT_SEC", 20.0))
+    return max(0.0, _float("CHINA_ACCESS_DEDUPE_WAIT_SEC", 45.0))
 
 
 def managed_probes_enabled() -> bool:

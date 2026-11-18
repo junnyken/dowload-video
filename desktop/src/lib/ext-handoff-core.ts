@@ -1,5 +1,6 @@
 // Pure logic for browser-extension -> desktop-app stream handoff.
 // Zero runtime imports so `node --test --experimental-strip-types` runs it directly.
+import { platformOf } from './routes-core.ts';
 
 export type ExtSubtitlePlan = { url: string; lang: string; format: string };
 
@@ -354,7 +355,8 @@ export function planExtJob(
 
   const ref = parseHttpUrl(job.referer);
   if (!isSniffedStream(job, target, ref)) {
-    return { mode: 'probe', url: target.toString(), platform: 'từ trình duyệt' };
+    const isDy = platformOf(target.toString()) === 'douyin';
+    return { mode: 'probe', url: target.toString(), platform: isDy ? 'douyin' : 'từ trình duyệt' };
   }
 
   const title = cleanMediaTitle(job.title, job.referer) || cleanLine(job.title, 140) || 'Video từ trình duyệt';
@@ -381,11 +383,12 @@ export function planExtJob(
   const parsedEp = parseSeriesEpisode(title);
   const seriesFolder = parsedEp ? sanitizeSeriesFolder(parsedEp.seriesTitle) : null;
   const subtitles = normalizeSubtitles(job.subtitles);
+  const detectedPlatform = ref ? platformOf(ref.toString()) : platformOf(target.toString());
   return {
     mode: 'direct_queue',
     url: target.toString(),
     title,
-    platform: 'other',
+    platform: detectedPlatform !== 'other' ? detectedPlatform : 'other',
     headers,
     fileTitle: title,
     fileId: streamFileId(target.toString()),

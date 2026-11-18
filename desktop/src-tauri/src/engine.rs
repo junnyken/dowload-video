@@ -183,6 +183,17 @@ pub fn is_direct_media_file_url(url: &str) -> bool {
     EXTS.iter().any(|ext| path.ends_with(ext))
 }
 
+pub fn is_sensitive_cdn_url(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    lower.contains("douyinvod.com")
+        || lower.contains("douyincdn.com")
+        || lower.contains("bytecdn.cn")
+        || lower.contains("amemv.com")
+        || lower.contains("snssdk.com")
+        || lower.contains("zjcdn.com")
+        || lower.contains("iesdouyin.com")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn download_args(
     tools: &Tools<'_>,
@@ -266,7 +277,7 @@ pub fn download_args(
         // For HLS/DASH (non-direct), yt-dlp's native fragment downloader is
         // already parallelized by --concurrent-fragments 8.
         if let Some(aria2c_path) = tools.aria2c {
-            if is_direct_media_file_url(url) {
+            if is_direct_media_file_url(url) && !is_sensitive_cdn_url(url) {
                 // 16 concurrent fragments × 16 aria2c connections = IDM-level
                 // throughput. aria2c handles HTTP Range splitting natively,
                 // so --http-chunk-size is not needed (-k controls piece size).
@@ -277,6 +288,10 @@ pub fn download_args(
                 a.push("aria2c:-x16 -s16 -k1M --connect-timeout=10".into());
             } else {
                 a.push("8".into());
+                if is_direct_media_file_url(url) {
+                    a.push("--http-chunk-size".into());
+                    a.push("10M".into());
+                }
             }
         } else {
             a.push("8".into());

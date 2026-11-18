@@ -44,12 +44,12 @@ export function douyinError(status: number, data: unknown): { code: string; mess
   return { code, message: detail };
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, timeoutMs = 60_000): Promise<T> {
   let token = await getAccessToken();
-  let r = await apiFetch<T>(path, { method: 'POST', body, token });
+  let r = await apiFetch<T>(path, { method: 'POST', body, token, timeoutMs });
   if (r.status === 401 && token) { // expired access token: refresh once, otherwise carry on as the server decides
     token = await getAccessToken(true);
-    r = await apiFetch<T>(path, { method: 'POST', body, token });
+    r = await apiFetch<T>(path, { method: 'POST', body, token, timeoutMs });
   }
   if (r.status >= 200 && r.status < 300 && r.data) return r.data;
   throw douyinError(r.status, r.data);
@@ -58,17 +58,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 const clampLimit = (limit: number) => Math.max(1, Math.min(DOUYIN_ALL, Math.round(limit)));
 
 export const douyinChannel = (url: string, limit: number) =>
-  post<DouyinChannel>('/api/v1/client/douyin/channel', { url, limit: clampLimit(limit) });
+  post<DouyinChannel>('/api/v1/client/douyin/channel', { url, limit: clampLimit(limit) }, 90_000);
 
 /** Xiaohongshu / RedNote profile through the server (signed-in only, ≤ 20 per scan, paid per scan). */
 export const xhsChannel = (url: string, limit: number) =>
-  post<DouyinChannel>('/api/v1/client/xiaohongshu/channel', { url, limit: Math.max(1, Math.min(20, Math.round(limit))) });
+  post<DouyinChannel>('/api/v1/client/xiaohongshu/channel', { url, limit: Math.max(1, Math.min(20, Math.round(limit))) }, 90_000);
 
 export async function fetchXhsListing(url: string, limit: number): Promise<ChannelListing> {
   return toListing(await xhsChannel(url, limit));
 }
 
-export const douyinVideo = (url: string) => post<DouyinVideo>('/api/v1/client/douyin/video', { url });
+export const douyinVideo = (url: string) => post<DouyinVideo>('/api/v1/client/douyin/video', { url }, 60_000);
 
 /** The server's channel answer in the shape the Channels screen already uses. */
 export function toListing(c: DouyinChannel): ChannelListing {

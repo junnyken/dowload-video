@@ -2666,7 +2666,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         : (sender && sender.tab && sender.tab.url) || '';
       const url = vgNormalizeSocialUrl(rawUrl);
       if (!url) { sendResponse({ ok: false, error: 'invalid_url' }); return; }
-      const title = typeof msg.title === 'string' ? msg.title.slice(0, 200) : '';
+      let title = typeof msg.title === 'string' ? msg.title.slice(0, 200) : '';
+      if (/^抖音(?:精选)?(?:电脑版)?$/i.test(title.trim())) title = '';
       const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? vgNormalizeSocialUrl(msg.pageUrl) : url;
       const dy = msg.douyinDirect;
 
@@ -2678,7 +2679,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           // If Douyin direct CDN URL is already captured in the browser, send that direct MP4 stream with Douyin Referer to Desktop App!
           const appPayload = (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url))
             ? { url: dy.url, title: dy.title || title || 'Douyin Video', pageUrl: 'https://www.douyin.com/', refererUrl: 'https://www.douyin.com/', kind: 'file' }
-            : { url, title, pageUrl: url };
+            : { url, title: title || 'Douyin Video', pageUrl: url };
           const r = await vgSendToApp(appPayload).catch(() => ({ ok: false }));
           if (r && r.ok) {
             sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
