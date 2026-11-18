@@ -1,5 +1,5 @@
 """
-Video Downloader - FastAPI Backend
+Video Downloader - FastAPI Backend  (AI Upgrade v2.1)
 ====================================
 Main application entry point with CORS configuration,
 Security hardening, and Supabase database initialization.
