@@ -233,3 +233,17 @@ test('cleanMediaTitle & parseSeriesEpisode handle hashtag chains, [Server VIP], 
     episodeLabel: 'E08',
   });
 });
+
+test('planExtJob & cleanMediaTitle: handles Google Drive view-only video handoff', () => {
+  const gdrivePlan = planExtJob(
+    {
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp12345/view',
+      title: 'Kỷ Yếu Lớp 12A.mp4 - Google Drive',
+      referer: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp12345/view',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(gdrivePlan.mode, 'probe');
+  assert.equal(gdrivePlan.platform, 'gdrive');
+  assert.equal(cleanMediaTitle('Kỷ Yếu Lớp 12A.mp4 - Google Drive', 'https://drive.google.com/file/d/123/view'), 'Kỷ Yếu Lớp 12A');
+});

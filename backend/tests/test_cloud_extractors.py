@@ -195,6 +195,55 @@ class TestGDriveExtractor:
                     client=client,
                 )
 
+    @pytest.mark.anyio
+    async def test_gdrive_view_only_stream_extraction(self):
+        """View-only Google Drive video (owner disabled download) falls back to player preview stream."""
+        uc_disabled_html = """
+        <html><body>
+        Only the owner and editors can download this file.
+        </body></html>
+        """
+        preview_player_html = """
+        <html>
+        <head>
+          <title>Lop_12A_Ky_Yeu.mp4 - Google Drive</title>
+          <meta property="og:title" content="Lop_12A_Ky_Yeu.mp4">
+        </head>
+        <body>
+          <script>
+            var _DRIVE_IVD = [1, "Lop_12A_Ky_Yeu.mp4"];
+            window['ytplayer'] = {
+              config: {
+                args: {
+                  "fmt_stream_map": "22|https://drive.google.com/videoplayback?id=1ViewOnly123&itag=22|sig1,18|https://drive.google.com/videoplayback?id=1ViewOnly123&itag=18|sig2"
+                }
+              }
+            };
+          </script>
+        </body>
+        </html>
+        """
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if "export=download" in url_str:
+                return httpx.Response(403, headers={"Content-Type": "text/html"}, text=uc_disabled_html)
+            if "/preview" in url_str or "/view" in url_str:
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text=preview_player_html)
+            return httpx.Response(404)
+
+        async with _mock_client(handler) as client:
+            info = await resolve_gdrive_share(
+                "https://drive.google.com/file/d/1ViewOnly123/view",
+                client=client,
+            )
+            assert info["title"] == "Lop_12A_Ky_Yeu"
+            assert info["direct_mp4_url"] == "https://drive.google.com/videoplayback?id=1ViewOnly123&itag=22"
+            assert len(info["available_formats"]) == 2
+            assert info["available_formats"][0]["height"] == 720
+            assert info["available_formats"][0]["ext"] == "mp4"
+            assert info["available_formats"][1]["height"] == 360
+
     def test_gdrive_folder_batch_extraction(self):
         folder_html = """
         <html>

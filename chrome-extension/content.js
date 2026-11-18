@@ -1411,6 +1411,31 @@ window.addEventListener('message', (event) => {
     const href = window.location.href;
     const host = window.location.hostname;
 
+    // Google Drive: view-only or standard player
+    if (/(^|\.)(drive|docs)\.google\.com$/i.test(host)) {
+      let gdTitle = '';
+      const headingEl = document.querySelector('[data-tooltip*="."], div[role="heading"], .drive-viewer-toolstrip-name, [aria-label*="."]');
+      if (headingEl) {
+        const raw = headingEl.getAttribute('data-tooltip') || headingEl.getAttribute('aria-label') || headingEl.textContent;
+        if (raw && raw.trim().length > 1) {
+          gdTitle = raw.replace(/\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$/i, '').trim();
+        }
+      }
+      if (!gdTitle) {
+        gdTitle = (document.title || '').replace(/\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$/i, '').trim();
+      }
+      const mId = href.match(/\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]{15,})/);
+      const fileId = mId ? mId[1] : '';
+      const gdSrc = (v && (v.currentSrc || v.src)) || '';
+      const isStream = gdSrc.startsWith('https://') && (gdSrc.includes('/videoplayback') || /\.(mp4|webm)/i.test(gdSrc));
+      const gdHit = isStream ? { url: gdSrc, title: gdTitle } : null;
+      return {
+        url: fileId ? `https://drive.google.com/file/d/${fileId}/view` : href,
+        title: gdTitle || (fileId ? `Google Drive ${fileId}` : 'Google Drive Video'),
+        gdriveDirect: gdHit,
+      };
+    }
+
     // Douyin: prioritize video element container ID over page/modal URL
     if (/(^|\.)douyin\.com$/i.test(host)) {
       const elId = vgDouyinIdForElement(v);
@@ -1661,6 +1686,7 @@ window.addEventListener('message', (event) => {
         title: target.title || document.title || '',
         pageUrl: window.location.href,
         douyinDirect: target.douyinDirect || null,
+        gdriveDirect: target.gdriveDirect || null,
       }, (res) => {
         void chrome.runtime.lastError;
         textSpan.textContent = (res && res.statusText) || t('pill_started_browser');

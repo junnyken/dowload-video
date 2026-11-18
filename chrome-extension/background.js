@@ -251,7 +251,8 @@ function _isBrowserDirectUrl(u) {
   if (!u || !u.startsWith('http')) return false;
   const low = u.toLowerCase();
   if (isFirstPartyUrl(u)) return false;              // already our server
-  if (/\/videoplayback\b|[?&]ip=/i.test(low)) return false; // IP-locked stream
+  const isGDriveStream = /(?:drive|docs)\.google\.com\/videoplayback\b/i.test(low);
+  if (!isGDriveStream && (/\/videoplayback\b|[?&]ip=/i.test(low))) return false; // IP-locked stream
   if (low.includes('.m3u8')) return false;           // HLS — needs server merge
   return true;
 }
@@ -2670,16 +2671,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (/^抖音(?:精选)?(?:电脑版)?$/i.test(title.trim())) title = '';
       const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? vgNormalizeSocialUrl(msg.pageUrl) : url;
       const dy = msg.douyinDirect;
+      const gd = msg.gdriveDirect;
+      let host = '';
+      try { host = new URL(url).hostname; } catch {}
+      const isGDrive = /(^|\.)(drive|docs)\.google\.com$/i.test(host);
 
       // 1. Hand directly to running VidGrab Desktop App if available & enabled
       const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
       if (!handoffOff) {
         const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
         if (appConnected) {
-          // If Douyin direct CDN URL is already captured in the browser, send that direct MP4 stream with Douyin Referer to Desktop App!
-          const appPayload = (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url))
-            ? { url: dy.url, title: dy.title || title || 'Douyin Video', pageUrl: 'https://www.douyin.com/', refererUrl: 'https://www.douyin.com/', kind: 'file' }
-            : { url, title: title || 'Douyin Video', pageUrl: url };
+          let appPayload = null;
+          if (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url)) {
+            appPayload = { url: dy.url, title: dy.title || title || 'Douyin Video', pageUrl: 'https://www.douyin.com/', refererUrl: 'https://www.douyin.com/', kind: 'file' };
+          } else if (isGDrive) {
+            appPayload = (gd && typeof gd.url === 'string' && /^https:\/\//i.test(gd.url))
+              ? { url: gd.url, title: gd.title || title || 'Google Drive Video', pageUrl: url, refererUrl: 'https://drive.google.com/', kind: 'file' }
+              : { url, title: title || 'Google Drive Video', pageUrl: url, refererUrl: 'https://drive.google.com/' };
+          } else {
+            appPayload = { url, title: title || 'Video', pageUrl: url };
+          }
           const r = await vgSendToApp(appPayload).catch(() => ({ ok: false }));
           if (r && r.ok) {
             sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
@@ -2688,14 +2699,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
       }
 
-      // 2. Douyin direct stream from the user's browser session if provided
-      if (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url)) {
-        const safeName = await vgFileName(dy.title || title || 'douyin', url);
+      // 2. Direct stream from the user's browser session if provided (Douyin or Google Drive)
+      const directStream = (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url))
+        ? { url: dy.url, title: dy.title || title || 'douyin' }
+        : (gd && typeof gd.url === 'string' && /^https:\/\//i.test(gd.url))
+          ? { url: gd.url, title: gd.title || title || 'gdrive' }
+          : null;
+
+      if (directStream) {
+        const safeName = await vgFileName(directStream.title, url);
         sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
-        const ok = await vgSaveFile(dy.url, safeName);
+        const ok = await vgSaveFile(directStream.url, safeName);
         if (ok) {
           addToHistory({
-            title: dy.title || title || 'Video', thumbnail: '', url,
+            title: directStream.title || title || 'Video', thumbnail: '', url,
             quality: 'HD', fileSize: '', noWatermark: true,
             hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none',
           });

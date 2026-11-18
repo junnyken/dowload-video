@@ -55,7 +55,7 @@
     const h = hostOf(url);
     if (SERVER_ONLY.test(h) || SHORT_REDIRECT_HOST_RE.test(h)) return false;
     if (!/(^|\.)facebook\.com$/i.test(h) && SERVER_PATH_RE.test(pathOf(url))) return false;
-    if (/\/videoplayback\b/i.test(url)) return false;
+    if (/\/videoplayback\b/i.test(url) && !/(^|\.)(drive|docs)\.google\.com$/i.test(h)) return false;
     if (download_subs) return false;                       // the server fetches subtitles
     const q = String(quality || 'video').toLowerCase();
     return q === 'video' || q === 'best' || q === '';      // MP3 / a chosen height: the server converts
@@ -73,6 +73,23 @@
     const meta = (p) => { const m = document.querySelector(`meta[property="${p}"], meta[name="${p}"]`); return m ? m.content || '' : ''; };
     const title = (meta('og:title') || document.title || '').trim().slice(0, 200);
     const ok = (u) => typeof u === 'string' && /^https:\/\//.test(u) && !/\.(m3u8|mpd)(\?|$)/i.test(u);
+
+    if (/(^|\.)(drive|docs)\.google\.com$/.test(host)) {
+      const gdTitle = (meta('og:title') || document.title || '')
+        .replace(/\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$/i, '')
+        .trim();
+      for (const v of Array.from(document.querySelectorAll('video'))) {
+        const s = v.currentSrc || v.src || '';
+        if (ok(s) && (s.includes('/videoplayback') || /\.(mp4|webm)/i.test(s))) {
+          return { url: s, title: gdTitle || 'Google Drive Video', via: 'gdrive_video' };
+        }
+      }
+      const m = html.match(/https:\/\/(?:drive|docs)\.google\.com\/videoplayback\?[^"'\s<>\\]+/);
+      if (m) {
+        const u = un(m[0]);
+        if (ok(u)) return { url: u, title: gdTitle || 'Google Drive Video', via: 'gdrive_html' };
+      }
+    }
 
     if (/(^|\.)facebook\.com$/.test(host)) {
       for (const k of ['browser_native_hd_url', 'browser_native_sd_url', 'playable_url_quality_hd', 'playable_url']) {

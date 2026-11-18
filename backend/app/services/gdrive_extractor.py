@@ -374,6 +374,214 @@ def _load_netscape_cookies(cookies_file: Optional[str]) -> dict[str, str]:
     return out
 
 
+_ITAG_MAP: dict[int, tuple[int, str, str, bool]] = {
+    # itag: (height, quality_label, ext, is_muxed)
+    37: (1080, "1080p (Full HD)", "mp4", True),
+    22: (720, "720p (HD)", "mp4", True),
+    59: (480, "480p", "mp4", True),
+    18: (360, "360p", "mp4", True),
+    137: (1080, "1080p (Full HD)", "mp4", False),
+    136: (720, "720p (HD)", "mp4", False),
+    135: (480, "480p", "mp4", False),
+    134: (360, "360p", "mp4", False),
+    140: (0, "128k (Audio)", "m4a", False),
+}
+
+
+async def _extract_drive_player_stream(
+    item_id: str,
+    client: httpx.AsyncClient,
+    quality: str = "video",
+    original_url: str = "",
+) -> Optional[Dict[str, Any]]:
+    """
+    Fallback extractor for view-only Google Drive videos where downloads are disabled by owner.
+    Extracts HTML5 videoplayback streams from Google Drive player preview/view pages.
+    """
+    for endpoint in (
+        f"https://drive.google.com/file/d/{item_id}/preview",
+        f"https://drive.google.com/file/d/{item_id}/view",
+    ):
+        try:
+            resp = await client.get(
+                endpoint,
+                headers={
+                    "Referer": "https://drive.google.com/",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
+            )
+        except Exception as e:
+            logger.warning("Failed to fetch Google Drive player page %s: %s", endpoint, e)
+            continue
+
+        if resp.status_code >= 400:
+            continue
+
+        html_text = resp.text or ""
+        lower = html_text.lower()
+        if "you need access" in lower or "request access" in lower or "servicelogin" in lower:
+            raise ValueError("owner_disabled_download")
+
+        # Extract title
+        title = ""
+        og_m = re.search(r'<meta\b[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']', html_text, re.I)
+        if not og_m:
+            og_m = re.search(r'<meta\b[^>]*content=["\']([^"\']+)["\'][^>]*property=["\']og:title["\']', html_text, re.I)
+        if og_m:
+            title = _html.unescape(og_m.group(1).strip())
+
+        if not title:
+            t_m = re.search(r"<title>([^<]+)</title>", html_text, re.I)
+            if t_m:
+                raw_t = _html.unescape(t_m.group(1).strip())
+                title = re.sub(r"\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$", "", raw_t, flags=re.I).strip()
+
+        if not title:
+            title_m = re.search(r'["\']title["\']\s*:\s*["\']([^"\']+)["\']', html_text)
+            if title_m:
+                title = title_m.group(1).encode().decode("unicode-escape", errors="ignore")
+
+        if not title or title.lower() in ("google drive", "google drive - file preview"):
+            title = f"gdrive_{item_id}"
+
+        unescaped = (
+            html_text
+            .replace("\\u0026", "&")
+            .replace("\\u003d", "=")
+            .replace("\\u0025", "%")
+            .replace("\\/", "/")
+            .replace(r"\/", "/")
+        )
+
+        streams_by_itag: dict[int, str] = {}
+
+        # 1. Parse fmt_stream_map: e.g. "22|https://...|...,18|https://..."
+        fmt_m = re.search(r'["\']?fmt_stream_map["\']?\s*[:=]\s*["\']([^"\']+)["\']', unescaped)
+        if fmt_m:
+            raw_map = fmt_m.group(1)
+            for part in raw_map.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                tokens = part.split("|")
+                if len(tokens) >= 2 and tokens[0].isdigit():
+                    itag = int(tokens[0])
+                    url = tokens[1]
+                    if url.startswith("http") and itag not in streams_by_itag:
+                        streams_by_itag[itag] = url
+
+        # 2. Parse url_encoded_fmt_stream_map or adaptive_fmts
+        for field in ("url_encoded_fmt_stream_map", "adaptive_fmts"):
+            m = re.search(rf'["\']?{field}["\']?\s*[:=]\s*["\']([^"\']+)["\']', unescaped)
+            if m:
+                for entry in m.group(1).split(","):
+                    qs = parse_qs(entry)
+                    itag_list = qs.get("itag") or []
+                    url_list = qs.get("url") or []
+                    if itag_list and url_list and itag_list[0].isdigit():
+                        itag = int(itag_list[0])
+                        url = url_list[0]
+                        if url.startswith("http") and itag not in streams_by_itag:
+                            streams_by_itag[itag] = url
+
+        # 3. Direct regex search for videoplayback URLs
+        vp_urls = re.findall(
+            r'https?://(?:drive|docs)\.google\.com/videoplayback\?[^"\'\\<>,\s]+',
+            unescaped,
+        ) + re.findall(
+            r'https?://[^"\'\\<>,\s]+\.googlevideo\.com/videoplayback\?[^"\'\\<>,\s]+',
+            unescaped,
+        )
+
+        for u in vp_urls:
+            u = u.rstrip("\\\';\"")
+            try:
+                parsed_qs = parse_qs(urlsplit(u).query)
+                itag_val = parsed_qs.get("itag")
+                if itag_val and itag_val[0].isdigit():
+                    itag = int(itag_val[0])
+                    if itag not in streams_by_itag:
+                        streams_by_itag[itag] = u
+            except Exception:
+                continue
+
+        if not streams_by_itag:
+            continue
+
+        formats: list[dict[str, Any]] = []
+        best_muxed_url: Optional[str] = None
+        best_muxed_height = 0
+        best_video_url: Optional[str] = None
+        best_video_height = 0
+        audio_url = ""
+
+        sorted_itags = sorted(
+            streams_by_itag.keys(),
+            key=lambda it: _ITAG_MAP.get(it, (0, "", "", False))[0],
+            reverse=True,
+        )
+
+        for it in sorted_itags:
+            stream_url = streams_by_itag[it]
+            meta = _ITAG_MAP.get(it)
+            height = meta[0] if meta else 0
+            label = meta[1] if meta else f"{it}p"
+            ext = meta[2] if meta else "mp4"
+            is_muxed = meta[3] if meta else True
+
+            if it == 140 or "audio" in label.lower():
+                audio_url = stream_url
+
+            if is_muxed:
+                if height > best_muxed_height or not best_muxed_url:
+                    best_muxed_url = stream_url
+                    best_muxed_height = height
+            else:
+                if height > best_video_height or not best_video_url:
+                    best_video_url = stream_url
+                    best_video_height = height
+
+            formats.append({
+                "quality": f"{height}p" if height > 0 else label,
+                "height": height,
+                "width": round(height * 16 / 9) if height > 0 else 0,
+                "url": stream_url,
+                "ext": ext,
+            })
+
+        chosen_url = best_muxed_url or best_video_url or list(streams_by_itag.values())[0]
+        chosen_height = best_muxed_height or best_video_height
+        clean_title = title.rsplit(".", 1)[0] if "." in title else title
+
+        return {
+            "title": clean_title,
+            "thumbnail_url": "",
+            "direct_mp4_url": chosen_url,
+            "original_url": original_url or f"https://drive.google.com/file/d/{item_id}/view",
+            "quality": quality,
+            "duration": 0,
+            "file_size_mb": 0.0,
+            "available_formats": formats,
+            "max_merge_height": chosen_height,
+            "downloaded_height": chosen_height,
+            "downloaded_vcodec": "h264",
+            "downloaded_universal": None,
+            "downloaded_media": {"measured": False},
+            "is_audio_only": False,
+            "uploader": "Google Drive",
+            "has_subtitles": False,
+            "has_auto_captions": False,
+            "available_subtitle_languages": [],
+            "subtitle_source": "none",
+            "chapters": [],
+            "tags": [],
+            "images": [],
+            "audio_url": audio_url,
+        }
+
+    return None
+
+
 async def resolve_gdrive_share(
     url: str,
     quality: str = "video",
@@ -459,7 +667,16 @@ async def resolve_gdrive_share(
 
         if resp.status_code >= 400 or "text/html" in ct:
             html_text = resp.text or ""
-            _check_html_errors(html_text, final_url, resp.status_code)
+            try:
+                _check_html_errors(html_text, final_url, resp.status_code)
+            except ValueError as err:
+                if str(err) == "owner_disabled_download":
+                    player_info = await _extract_drive_player_stream(
+                        item_id, client, quality=quality, original_url=url
+                    )
+                    if player_info:
+                        return player_info
+                raise
 
             cookies_dict = dict(resp.cookies)
             confirmed = _parse_confirm_page(html_text, item_id, cookies=cookies_dict)
@@ -468,6 +685,11 @@ async def resolve_gdrive_share(
                 title = confirmed["title"] or f"gdrive_{item_id}"
                 size_mb = confirmed["size_mb"]
             else:
+                player_info = await _extract_drive_player_stream(
+                    item_id, client, quality=quality, original_url=url
+                )
+                if player_info:
+                    return player_info
                 dl_url = uc_url
                 title = f"gdrive_{item_id}"
                 size_mb = 0.0

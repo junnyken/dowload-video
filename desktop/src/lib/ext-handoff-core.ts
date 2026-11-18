@@ -131,10 +131,20 @@ export function cleanMediaTitle(raw: string | null | undefined, pageUrl?: string
   s = s.replace(/^(?:\(\d+\)\s*|▶\s*)+/, '').trim();
   s = s.replace(SHARE_COPY_NOISE_RE, '').trim();
   s = s.replace(BRACKET_SERVER_NOISE_RE, ' ').replace(CJK_BRACKET_NOISE_RE, ' ').trim();
+  s = s.replace(/\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$/i, '').trim();
+  if (/drive\.google\.com|docs\.google\.com/i.test(pageUrl || '')) {
+    s = s.replace(/\.(?:mp4|m4v|webm|mov|mkv|m3u8?|mpd)$/i, '').trim();
+  }
   const withoutHashtagChain = s.replace(HASHTAG_CHAIN_RE, '').replace(VIRAL_HASHTAG_RE, '').trim();
   if (withoutHashtagChain.length >= 3) s = withoutHashtagChain;
   s = s.replace(/#([\w\u00C0-\u024F\u1E00-\u1EFF\u4e00-\u9fff-]+)/gu, '$1').trim();
-  if (!s || JUNK_TITLE_RE.test(s) || FILE_LIKE_TITLE_RE.test(s)) return '';
+  if (!s || JUNK_TITLE_RE.test(s)) return '';
+  if (FILE_LIKE_TITLE_RE.test(s)) {
+    if (/drive\.google\.com|docs\.google\.com/i.test(pageUrl || '')) {
+      return s.replace(/\.(?:mp4|m4v|webm|mov|mkv|m3u8?|mpd)$/i, '').trim() || s;
+    }
+    return '';
+  }
 
   const stems = hostStems(pageUrl);
   const parts = s.split(/\s+(?:\||::|—|–|•|»|-)\s+/).map((p) => p.trim()).filter(Boolean);
@@ -355,8 +365,9 @@ export function planExtJob(
 
   const ref = parseHttpUrl(job.referer);
   if (!isSniffedStream(job, target, ref)) {
-    const isDy = platformOf(target.toString()) === 'douyin';
-    return { mode: 'probe', url: target.toString(), platform: isDy ? 'douyin' : 'từ trình duyệt' };
+    const plat = platformOf(target.toString());
+    const isKnown = plat === 'douyin' || plat === 'gdrive';
+    return { mode: 'probe', url: target.toString(), platform: isKnown ? plat : 'từ trình duyệt' };
   }
 
   const title = cleanMediaTitle(job.title, job.referer) || cleanLine(job.title, 140) || 'Video từ trình duyệt';

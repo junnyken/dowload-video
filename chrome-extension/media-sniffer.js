@@ -23,9 +23,10 @@
   const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 
   // Never listed: IP-locked playback chunks and the media pieces of a stream the
-  // manifest already stands for.
+  // manifest already stands for. (Google Drive / Docs streams are allowed).
   function isBlockedStream(url) {
     const h = hostOf(url), p = pathOf(url);
+    if (h === 'drive.google.com' || h === 'docs.google.com') return false;
     if (p === '/videoplayback' || p.startsWith('/videoplayback/') || p.startsWith('/api/manifest/')) return true;
     if (/^rr\d+---sn-/i.test(h) || /^[a-z]{5}\.be$/i.test(h)) return true;
     if (/^(www\.|m\.)?y[o]ut/i.test(h) || /(^|\.)y[t]img\./i.test(h)) return true;
