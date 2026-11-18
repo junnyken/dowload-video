@@ -352,6 +352,10 @@ class ReupCleanRequest(BaseModel):
     mirror_flip: bool = False
     speed_105x: bool = False
     filename: Optional[str] = "video"
+    # ── Anti-Duplicate v2 fields ─────────────────────────────────────
+    level: Optional[str] = None       # "light" | "medium" | "strong" — overrides legacy flags
+    custom_hue: Optional[int] = None  # manual hue shift override (degrees)
+    custom_speed: Optional[float] = None  # manual speed override (e.g. 1.008)
 
 
 class FrameThumbRequest(BaseModel):
@@ -898,21 +902,41 @@ async def reup_clean(
     user: Optional[dict] = Depends(_auth_optional_user),
 ):
     """
-    Anti-Detect / Reup Video Cleaner (Pro feature):
-    - Strips all source container/stream metadata (-map_metadata -1 -map_chapters -1)
-    - Injects a unique random comment atom so the file's MD5/SHA256 hash is 100% unique
-    - Optional horizontal mirror flip (hflip)
-    - Optional 1.05x speed shift (video + audio) to evade fingerprint matching
+    Anti-Detect / Reup Video Cleaner v2 (Pro feature):
+
+    Three intensity levels (new v2 API):
+      - "light"  — strip metadata + re-mux (< 2s, zero quality loss)
+      - "medium" — hue +2°, crop 2px, speed 1.005x, highpass 20Hz
+      - "strong" — hue +3°, crop 4px, brightness, contrast, echo, speed 1.01x
+
+    Legacy API (backward-compatible): strip_metadata, change_md5, mirror_flip, speed_105x
+    When `level` is provided, it overrides legacy flags.
     """
     import hashlib
-    from app.core.ffmpeg_budget import thread_args
+    from app.services.anti_duplicate import (
+        _build_ffmpeg_cmd, validate_input, compute_file_hash, LEVELS, ANTI_DUP_TIMEOUT_SEC,
+    )
 
     _enforce_paid_processing_tier(
-        request, user, ("pro", "team", "enterprise", "api"), "Reup Anti-Detect Cleaner (Lách bản quyền)"
+        request, user, ("pro", "team", "enterprise", "api"), "Reup Anti-Detect Cleaner (Chống trùng lặp)"
     )
 
     if not payload.url and not payload.local_path:
         raise HTTPException(status_code=400, detail="url or local_path is required")
+
+    # Validate level
+    level = payload.level
+    if level and level not in LEVELS:
+        raise HTTPException(status_code=400, detail=f"level phải là: {', '.join(LEVELS.keys())}")
+
+    # Map legacy flags to level if level not explicitly set
+    if not level:
+        if payload.mirror_flip or payload.speed_105x:
+            level = "medium"
+        elif payload.strip_metadata and payload.change_md5:
+            level = "light"
+        else:
+            level = "medium"
 
     download_dir = _safe_download_dir()
     uid = new_token()
@@ -929,56 +953,41 @@ async def reup_clean(
             await _download_url_async(payload.url, input_path)
             _downloaded = True
 
-        v_filters = []
-        a_filters = []
-        if payload.mirror_flip:
-            v_filters.append("hflip")
-        if payload.speed_105x:
-            v_filters.append("setpts=PTS/1.05")
-            a_filters.append("atempo=1.05")
+        # Validate input file
+        validation = validate_input(input_path)
+        if not validation["valid"]:
+            raise HTTPException(status_code=400, detail=validation["error"])
 
-        meta_args = []
-        if payload.strip_metadata:
-            meta_args.extend(["-map_metadata", "-1", "-map_chapters", "-1"])
-        if payload.change_md5:
-            meta_args.extend([
-                "-metadata", f"comment=vg_clean_{uuid.uuid4().hex}",
-                "-metadata", f"creation_time={datetime.now(timezone.utc).isoformat()}",
-            ])
+        # Build FFmpeg command using anti_duplicate module
+        mirror = payload.mirror_flip
+        custom_speed = payload.custom_speed
+        if not custom_speed and payload.speed_105x and level == "medium":
+            custom_speed = 1.05  # legacy flag override
 
-        if v_filters or a_filters:
-            filter_args = []
-            if v_filters:
-                filter_args.extend(["-vf", ",".join(v_filters)])
-            if a_filters:
-                filter_args.extend(["-af", ",".join(a_filters)])
-            codec_args = [
-                *filter_args,
-                *thread_args(),
-                "-c:v", "libx264", "-crf", "22", "-preset", "veryfast",
-                "-c:a", "aac", "-b:a", "192k",
-                "-movflags", "+faststart",
-            ]
-        else:
-            # Ultra-fast stream copy (< 1 second, zero quality loss)
-            codec_args = ["-c", "copy", "-movflags", "+faststart"]
+        ffmpeg_cmd = _build_ffmpeg_cmd(
+            input_path=input_path,
+            output_path=output_path,
+            level=level,
+            mirror=mirror,
+            custom_speed=custom_speed,
+            custom_hue=payload.custom_hue,
+        )
 
-        ffmpeg_cmd = ["ffmpeg", "-y", "-i", input_path, *meta_args, *codec_args, output_path]
-        result = await asyncio.to_thread(subprocess.run, ffmpeg_cmd, capture_output=True, timeout=240)
+        result = await asyncio.to_thread(
+            subprocess.run, ffmpeg_cmd, capture_output=True, timeout=ANTI_DUP_TIMEOUT_SEC
+        )
         if result.returncode != 0:
-            raise ValueError(f"FFmpeg error: {result.stderr.decode(errors='replace')[-300:]}")
+            stderr = result.stderr.decode(errors='replace')[-500:]
+            print(f"[processing] reup-clean ffmpeg failed: {stderr}")
+            raise ValueError(f"FFmpeg error: {stderr}")
         if not os.path.exists(output_path):
             raise ValueError("Output cleaned video file was not created")
 
-        # Compute new MD5 hash (first 8MB + size for speed on huge files, or full file if <= 50MB)
-        md5_hash = hashlib.md5()
-        with open(output_path, "rb") as f_out:
-            while True:
-                chunk = f_out.read(1024 * 1024)
-                if not chunk:
-                    break
-                md5_hash.update(chunk)
+        # Compute hashes of both files for comparison
+        new_md5 = compute_file_hash(output_path, "md5")
+        original_md5 = compute_file_hash(input_path, "md5")
 
+        level_info = LEVELS[level]
         slug = _slugify(payload.filename or "video", "video")
         out_filename = f"{slug}_clean.mp4"
         _schedule_cleanup(output_path)
@@ -986,10 +995,18 @@ async def reup_clean(
             output_path,
             out_filename,
             extra={
-                "md5": md5_hash.hexdigest(),
-                "stripped_metadata": bool(payload.strip_metadata),
-                "mirror_flip": bool(payload.mirror_flip),
-                "speed_105x": bool(payload.speed_105x),
+                "anti_duplicate": {
+                    "level": level,
+                    "level_label": level_info["label"],
+                    "original_md5": original_md5,
+                    "new_md5": new_md5,
+                    "md5_changed": original_md5 != new_md5,
+                    "hue_shift": payload.custom_hue or level_info["hue_shift"],
+                    "speed": custom_speed or level_info["speed"],
+                    "crop_px": level_info["crop_px"],
+                    "mirror": mirror,
+                    "re_encoded": level_info["re_encode"],
+                },
             },
         )
     except HTTPException:
@@ -1007,6 +1024,13 @@ async def reup_clean(
                 os.remove(input_path)
             except Exception:
                 pass
+
+
+@router.get("/process/anti-duplicate-levels")
+async def anti_duplicate_levels():
+    """Return available anti-duplicate intensity levels for the UI."""
+    from app.services.anti_duplicate import get_level_info
+    return {"success": True, "levels": get_level_info()}
 
 
 @router.post("/process/frame-thumb")

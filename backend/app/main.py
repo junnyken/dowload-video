@@ -759,6 +759,10 @@ app.include_router(admin_partners_api.router, prefix="/api/v1/admin", tags=["Adm
 from app.api import admin_platform_health as admin_platform_health_api
 app.include_router(admin_platform_health_api.router, prefix="/api/v1/admin", tags=["Admin Platform Health"])
 
+# AI Self-Healing Extractor — admin monitoring & control
+from app.api import admin_self_healing as admin_self_healing_api
+app.include_router(admin_self_healing_api.router, prefix="/api/v1/admin", tags=["Admin Self-Healing"])
+
 # Phase 20's /api/v1/admin/billing router is gone. Its auth guard read
 # profiles.is_admin, a column that does not exist on this database, so the
 # lookup raised on every request and the guard's except turned that into 403 —
@@ -787,6 +791,14 @@ app.include_router(format_probe_api.router, prefix="/api/v1", tags=["Format Prob
 # Referral & Affiliate program (/api/v1/referrals/*)
 from app.api import referrals as referrals_api
 app.include_router(referrals_api.router, prefix="/api/v1", tags=["Referrals"])
+
+# AI Vietnamize — "Tải & Việt hóa 1 chạm" (/api/v1/process/vietnamize)
+from app.api import vietnamize as vietnamize_api
+app.include_router(vietnamize_api.router, prefix="/api/v1", tags=["AI Vietnamize"])
+
+# AI Viral Clipper — Cắt clip ngắn viral tự động (/api/v1/process/viral-clips)
+from app.api import viral_clips as viral_clips_api
+app.include_router(viral_clips_api.router, prefix="/api/v1", tags=["AI Viral Clipper"])
 
 
 # ── Health Check ─────────────────────────────────────────────────────

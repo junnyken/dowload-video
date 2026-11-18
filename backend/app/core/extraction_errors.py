@@ -211,6 +211,35 @@ def extraction_exception(message: str, exc: Optional[BaseException] = None) -> E
     return ExtractionHTTPException(status, message, code)
 
 
+def notify_self_healing(
+    platform: str, error_code: str, error_message: str, http_status: int = 0,
+) -> None:
+    """
+    Feed extraction errors into the Self-Healing monitor.
+    Called from the extraction pipeline after classify_extraction_error.
+    Non-blocking, never raises.
+    """
+    try:
+        from app.services.self_healing import monitor
+        import hashlib
+        url_hash = hashlib.md5(error_message[:60].encode()).hexdigest()[:12]
+        monitor.record_error(platform, error_code, error_message, url_hash, http_status)
+    except Exception:
+        pass  # Self-healing must never break extraction
+
+
+def check_self_healing_reroute(platform: str) -> Optional[str]:
+    """
+    Check if a platform has an active self-healing reroute.
+    Returns the fallback method name or None.
+    """
+    try:
+        from app.services.self_healing import monitor
+        return monitor.get_active_reroute(platform)
+    except Exception:
+        return None
+
+
 async def extraction_http_exception_handler(request, exc: ExtractionHTTPException):
     from fastapi.responses import JSONResponse
     from app.core.error_codes import get_error_meta
