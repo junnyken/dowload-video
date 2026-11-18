@@ -14,6 +14,7 @@ YT = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
     ("mp3", "mp3", "128"),                                   # old shorthand keeps its meaning
     ("audio_best", "best", "192"), ("audio_m4a", "m4a", "192"),
     ("audio_opus", "opus", "192"), ("audio_vorbis", "vorbis", "192"),
+    ("audio_wav", "wav", "192"), ("audio_flac", "flac", "192"),
     ("audio_webm", "opus", "192"),                           # old name: webm audio is Opus
 ])
 def test_postprocessor_table(q, codec, kbps):

@@ -1242,9 +1242,9 @@ def _cobalt_high_res(quality: str) -> bool:
 #   audio_webm             old name: a webm audio stream IS Opus → audio_opus
 #   …_norm                 loudness normalised (MP3 only: a copied stream cannot be filtered)
 MP3_KBPS = ("128", "192", "256", "320")
-_AUDIO_CODECS = {"best": "best", "m4a": "m4a", "opus": "opus", "vorbis": "vorbis", "webm": "opus"}
+_AUDIO_CODECS = {"best": "best", "m4a": "m4a", "opus": "opus", "vorbis": "vorbis", "webm": "opus", "wav": "wav", "flac": "flac"}
 LOUDNORM = ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]   # same as /process/extract-audio
-AUDIO_EXTS = (".mp3", ".m4a", ".opus", ".ogg")
+AUDIO_EXTS = (".mp3", ".m4a", ".opus", ".ogg", ".wav", ".flac")
 
 
 def audio_quality_valid(quality: str) -> bool:

@@ -142,6 +142,7 @@ export default function DashboardContent() {
     ? { Authorization: `Bearer ${session.access_token}` }
     : {};
   const [url, setUrl] = useState('');
+  const [ytQuickQuality, setYtQuickQuality] = useState('video');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastErrorCode, setLastErrorCode] = useState('');
@@ -621,8 +622,9 @@ export default function DashboardContent() {
     try {
       const _schedPayload = scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {};
       const _pwdPayload = sharePassCode.trim() ? { pass_code: sharePassCode.trim() } : {};
+      const _reqQuality = /(?:youtube\.com|youtu\.be)\//i.test(effUrl) ? (ytQuickQuality || 'video') : 'video';
       const response = await fetch(`${API_BASE}/api/v1/fetch-link`,
-        withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim(), quality: 'video', remove_watermark: removeWatermark, download_subs: subtitleMode !== 'off', subtitle_mode: subtitleMode, subtitle_language: subtitleLang, progress_token: progressToken, user_cookies_b64: encodeUserCookies(userCookieText), ..._schedPayload, ..._pwdPayload }) })
+        withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: effUrl.trim(), quality: _reqQuality, remove_watermark: removeWatermark, download_subs: subtitleMode !== 'off', subtitle_mode: subtitleMode, subtitle_language: subtitleLang, progress_token: progressToken, user_cookies_b64: encodeUserCookies(userCookieText), ..._schedPayload, ..._pwdPayload }) })
       );
       fetchStatus = response.status;
       const data = await safeJson(response);
@@ -2114,6 +2116,24 @@ export default function DashboardContent() {
                 </button>
               )}
             </div>
+            {/(?:youtube\.com|youtu\.be)\//i.test(url) && (
+              <select
+                value={ytQuickQuality}
+                onChange={(e) => setYtQuickQuality(e.target.value)}
+                disabled={isLoading}
+                aria-label={isEnUi ? 'Quick format selector for YouTube' : 'Chọn nhanh định dạng YouTube'}
+                className="h-11 px-3 rounded-control bg-surface-2 border border-line text-fg text-xs font-bold cursor-pointer focus:outline-none focus:border-accent"
+              >
+                <option value="video">{isEnUi ? '🎬 Auto (Best by Plan)' : '🎬 Tự động (Cao nhất theo gói)'}</option>
+                <option value="video_1080">🎬 MP4 (1080p Full HD)</option>
+                <option value="video_720">🎬 MP4 (720p HD)</option>
+                <option value="video_2160">🎬 MP4 (4K Ultra HD)</option>
+                <option value="mp3_320">🎵 MP3 (320kbps)</option>
+                <option value="audio_m4a">🎵 M4A (AAC Original)</option>
+                <option value="audio_wav">🎵 WAV (Lossless)</option>
+                <option value="audio_flac">🎵 FLAC (Lossless)</option>
+              </select>
+            )}
             <button
               onClick={handleFetchLink}
               disabled={isLoading || !url.trim()}
@@ -2538,6 +2558,19 @@ export default function DashboardContent() {
       {videoInfo && (
         <div className="w-full max-w-3xl mb-12">
           <div className="bg-surface/50 border border-line backdrop-blur-md rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
+
+            {/* ── Inline Ready Bar (y2down-style instant status) ── */}
+            <div className="mb-4">
+              <div className="h-1.5 w-full rounded-full bg-surface-2 overflow-hidden mb-1.5">
+                <div className="h-full w-full bg-emerald-500 rounded-full transition-all duration-300" />
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-500">
+                <span>✓ {isEnUi ? 'Download ready' : 'Sẵn sàng tải xuống (Download ready)'}</span>
+                {videoInfo.file_size_mb > 0 && (
+                  <span className="text-fg-muted font-mono">{videoInfo.file_size_mb.toFixed(1)} MB</span>
+                )}
+              </div>
+            </div>
 
             {/* Thumbnail & Title */}
             <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start w-full mb-6">
