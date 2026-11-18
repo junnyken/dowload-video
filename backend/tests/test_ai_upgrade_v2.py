@@ -123,3 +123,16 @@ def test_anti_duplicate_levels_endpoint():
     data = resp.json()
     assert data["success"] is True
     assert len(data["levels"]) == 3
+
+
+def test_smart_metadata_clean_filename_and_hashtags():
+    from app.services.smart_metadata import clean_filename, suggest_tags
+
+    raw = "Meo nau com ngon [Official HD] #fyp #viral #trending"
+    cleaned = clean_filename(raw, metadata={"platform": "tiktok"})
+    assert "#fyp" not in cleaned["title_cleaned"].lower()
+    assert "official" not in cleaned["title_cleaned"].lower()
+    assert cleaned["filename"]
+
+    tags = suggest_tags("tiktok", cleaned["title_cleaned"])
+    assert "tiktok" in tags["tags"]

@@ -2667,6 +2667,36 @@ export default function DashboardContent() {
                 </button>
               )}
 
+              {/* AI #1: One-click AI Vietnamize */}
+              {!videoInfo.is_audio_only && (videoInfo.original_url || url) && (
+                <button
+                  onClick={() => {
+                    setProcessingHubTab('vietnamize');
+                    setShowProcessingHub(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
+                >
+                  <Languages className="w-3.5 h-3.5 text-accent-text" />
+                  {isEnUi ? 'AI Subtitles 1-Click' : 'AI Việt hóa 1 chạm'}
+                  <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+                </button>
+              )}
+
+              {/* AI #2: Viral Clipper 9:16 */}
+              {!videoInfo.is_audio_only && (videoInfo.duration || 0) >= 30 && (videoInfo.original_url || url) && (
+                <button
+                  onClick={() => {
+                    setProcessingHubTab('viral');
+                    setShowProcessingHub(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-surface text-fg-2 border border-line hover:border-accent/40 hover:text-accent-text transition-all cursor-pointer"
+                >
+                  <Clapperboard className="w-3.5 h-3.5 text-accent-text" />
+                  {isEnUi ? 'Viral Clips 9:16' : 'Cắt Clip Viral 9:16'}
+                  <span className="bg-accent text-accent-fg text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight">PRO</span>
+                </button>
+              )}
+
               {/* GIF Converter */}
               {videoInfo.duration > 0 && !videoInfo.is_audio_only && (videoInfo.direct_mp4_url || localFileId(videoInfo)) && (
                 <button

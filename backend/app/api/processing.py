@@ -356,6 +356,8 @@ class ReupCleanRequest(BaseModel):
     level: Optional[str] = None       # "light" | "medium" | "strong" — overrides legacy flags
     custom_hue: Optional[int] = None  # manual hue shift override (degrees)
     custom_speed: Optional[float] = None  # manual speed override (e.g. 1.008)
+    clean_name: bool = True           # clean filename & strip spam hashtags via smart_metadata
+    platform: Optional[str] = None    # platform hint for smart tag suggestions
 
 
 class FrameThumbRequest(BaseModel):
@@ -917,6 +919,10 @@ async def reup_clean(
         _build_ffmpeg_cmd, validate_input, compute_file_hash, has_audio_stream,
         LEVELS, ANTI_DUP_TIMEOUT_SEC,
     )
+    from app.services.smart_metadata import (
+        clean_filename as smart_clean_filename,
+        suggest_tags as smart_suggest_tags,
+    )
 
     _enforce_paid_processing_tier(
         request, user, ("pro", "team", "enterprise", "api"), "Reup Anti-Detect Cleaner (Chống trùng lặp)"
@@ -991,8 +997,28 @@ async def reup_clean(
         original_md5 = await asyncio.to_thread(compute_file_hash, input_path, "md5")
 
         level_info = LEVELS[level]
-        slug = _slugify(payload.filename or "video", "video")
-        out_filename = f"{slug}_clean.mp4"
+        raw_name = payload.filename or "video"
+        if payload.clean_name:
+            cleaned_meta = smart_clean_filename(
+                raw_name, metadata={"platform": payload.platform or ""}
+            )
+            tag_info = smart_suggest_tags(
+                payload.platform or "", cleaned_meta["title_cleaned"]
+            )
+            slug = _slugify(cleaned_meta["filename"] or raw_name, "video")
+            out_filename = f"{slug}.mp4"
+        else:
+            slug = _slugify(raw_name, "video")
+            out_filename = f"{slug}_clean.mp4"
+            cleaned_meta = {"title_cleaned": raw_name}
+            tag_info = {"tags": []}
+
+        suggested_hashtags = [
+            f"#{t.replace(' ', '')}"
+            for t in tag_info.get("tags", [])
+            if not str(t).startswith("language:")
+        ][:6]
+
         _schedule_cleanup(output_path)
         return _success_response(
             output_path,
@@ -1013,6 +1039,9 @@ async def reup_clean(
                     "crop_px": level_info["crop_px"],
                     "mirror": mirror,
                     "re_encoded": level_info["re_encode"],
+                    "clean_title": cleaned_meta["title_cleaned"],
+                    "clean_filename": out_filename,
+                    "suggested_hashtags": suggested_hashtags,
                 },
             },
         )

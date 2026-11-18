@@ -230,15 +230,12 @@ async fn verified_sidecars() -> CmdResult<Vec<PathBuf>> {
     .map_err(|e| CommandError::unknown(e.to_string()))?
 }
 
-/// Optional aria2c binary next to the app executable. Unlike the required
-/// sidecars, aria2c is a performance add-on: when present it accelerates
-/// single-file HTTP downloads (16 connections, IDM-level). When absent
-/// the existing yt-dlp engine is used unchanged.
-fn probe_aria2c() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?;
-    let candidate = dir.join(format!("aria2c{}", std::env::consts::EXE_SUFFIX));
-    if candidate.is_file() { Some(candidate) } else { None }
+/// Optional SHA-256-verified aria2c sidecar next to the app executable.
+/// Unlike the required sidecars, aria2c is an accelerator add-on: verified
+/// against the compiled-in SHA-256 pin before executing; when absent or
+/// unpinned (e.g. dev builds) the existing yt-dlp engine is used unchanged.
+fn verified_aria2c() -> Option<PathBuf> {
+    checksum::verify("aria2c").ok()
 }
 
 /// The yt-dlp for one run (task #6333): the server-approved download when a
@@ -1166,7 +1163,7 @@ async fn start_download(
     }
 
     let paths = verified_sidecars().await?;
-    let aria2c = probe_aria2c();
+    let aria2c = tauri::async_runtime::spawn_blocking(verified_aria2c).await.ok().flatten();
     let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3], aria2c: aria2c.as_deref() };
     // Random file name per run (not the job id): a second start of the same job
     // that is refused below must not delete the file the first run is using.
@@ -1996,7 +1993,7 @@ async fn tool_versions(app: AppHandle, jobs: State<'_, Jobs>) -> CmdResult<ToolV
             }),
             deno: first_line(&paths[3], &["--version"])
                 .map(|l| l.strip_prefix("deno ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()),
-            aria2c: probe_aria2c().and_then(|p| first_line(&p, &["--version"]))
+            aria2c: verified_aria2c().and_then(|p| first_line(&p, &["--version"]))
                 .and_then(|l| l.strip_prefix("aria2 version ").map(|r| r.to_string())),
         }
     })

@@ -72,6 +72,7 @@ export type ToolVersions = {
   ytdlpSource?: 'bundled' | 'server';
   ffmpeg: string;
   deno: string;
+  aria2c?: string | null;
 };
 
 export type ClientVersionInfo = {

@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
 
 /// Sidecars the app checks at runtime. Must match bundle.externalBin.
-const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno"];
+const SIDECARS: &[&str] = &["yt-dlp", "ffmpeg", "ffprobe", "deno", "aria2c"];
 
 /// Our own commands. Declaring them here makes tauri-build generate
 /// `allow-<command>` permissions, so a command is callable from the webview

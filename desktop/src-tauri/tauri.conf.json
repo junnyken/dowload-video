@@ -70,7 +70,8 @@
       "binaries/yt-dlp",
       "binaries/ffmpeg",
       "binaries/ffprobe",
-      "binaries/deno"
+      "binaries/deno",
+      "binaries/aria2c"
     ],
     "windows": {
       "webviewInstallMode": {

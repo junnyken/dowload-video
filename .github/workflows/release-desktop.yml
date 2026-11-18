@@ -91,7 +91,7 @@ jobs:
           workspaces: "desktop/src-tauri -> target"
           cache-on-failure: "true"
 
-      - name: Cache pinned sidecar archives (yt-dlp, ffmpeg, ffprobe, deno)
+      - name: Cache pinned sidecar archives (yt-dlp, ffmpeg, ffprobe, deno, aria2c)
         uses: actions/cache@v4
         with:
           path: desktop/.cache/binaries

@@ -324,9 +324,10 @@ export function SettingsScreen() {
             <Row label="Bộ xử lý tải"><span className="text-sm text-fg-2">{tools?.ytdlp ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
             <Row label="Xử lý âm thanh và video"><span className="text-sm text-fg-2">{tools?.ffmpeg ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
             <Row label="Hỗ trợ tương thích"><span className="text-sm text-fg-2">{tools?.deno ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
+            <Row label="Tăng tốc đa luồng (16 kênh)"><span className="text-sm text-fg-2">{tools?.aria2c ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span></Row>
             <details className="px-4 py-3 text-[13px] text-fg-2">
               <summary>Thông tin chẩn đoán dành cho hỗ trợ</summary>
-              <p className="mt-2">yt-dlp: {ytdlpLabel(tools)} · ffmpeg: {tools?.ffmpeg ?? '—'} · deno: {tools?.deno ?? '—'}</p>
+              <p className="mt-2">yt-dlp: {ytdlpLabel(tools)} · ffmpeg: {tools?.ffmpeg ?? '—'} · deno: {tools?.deno ?? '—'} · aria2c: {tools?.aria2c ?? '—'}</p>
             </details>
           </Section>
         </div>

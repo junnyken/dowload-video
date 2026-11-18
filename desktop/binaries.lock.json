@@ -91,6 +91,28 @@
           "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.sha256sum"
         }
       }
+    },
+    "aria2c": {
+      "version": "1.37.0-1",
+      "targets": {
+        "x86_64-pc-windows-msvc": {
+          "url": "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip",
+          "sha256": "67d015301eef0b612191212d564c5bb0a14b5b9c4796b76454276a4d28d9b288",
+          "checksumSource": "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/aria2.json",
+          "archive": {
+            "type": "zip",
+            "member": "aria2-1.37.0-win-64bit-build1/aria2c.exe"
+          },
+          "extractedSha256": "be2099c214f63a3cb4954b09a0becd6e2e34660b886d4c898d260febfe9d70c2"
+        },
+        "x86_64-unknown-linux-gnu": {
+          "url": "REPLACE_ME",
+          "sha256": "REPLACE_ME",
+          "checksumSource": "not chosen yet (Linux is dev-only)",
+          "archive": null,
+          "extractedSha256": "REPLACE_ME"
+        }
+      }
     }
   }
 }

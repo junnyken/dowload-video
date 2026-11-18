@@ -168,6 +168,238 @@ function HistoryItem({ h }: { h: HistoryEntry }) {
   )
 }
 
+interface SelfHealingPlatformRow {
+  total_requests: number
+  total_errors: number
+  window_errors: number
+  window_total: number
+  error_rate_pct: number
+  active_reroute: string | null
+  reroute_expires: string | null
+  status: 'healthy' | 'degraded' | 'rerouted'
+}
+
+interface SelfHealingStatus {
+  enabled: boolean
+  platforms: Record<string, SelfHealingPlatformRow>
+}
+
+interface SelfHealingConfig {
+  enabled: boolean
+  window_minutes: number
+  error_threshold_pct: number
+  min_samples: number
+  cooldown_minutes: number
+  telegram_enabled: boolean
+  fallback_routes: Record<string, string[]>
+}
+
+const SH_TONE: Record<string, string> = {
+  healthy: 'text-success border-success/30 bg-success-soft',
+  degraded: 'text-danger border-danger/30 bg-danger-soft',
+  rerouted: 'text-warning border-warning/30 bg-warning-soft',
+}
+const SH_LABEL: Record<string, string> = {
+  healthy: 'Ổn định',
+  degraded: 'Lỗi cao',
+  rerouted: 'Đã chuyển hướng',
+}
+
+function SelfHealingSection() {
+  const qc = useQueryClient()
+  const [selectedPlatform, setSelectedPlatform] = useState('')
+  const [selectedMethod, setSelectedMethod] = useState('cobalt')
+  const [shNotice, setShNotice] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const statusQ = useQuery<SelfHealingStatus>({
+    queryKey: ['admin', 'self-healing', 'status'],
+    queryFn: () => adminFetch<SelfHealingStatus>('/self-healing/status'),
+    retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  const configQ = useQuery<SelfHealingConfig>({
+    queryKey: ['admin', 'self-healing', 'config'],
+    queryFn: () => adminFetch<SelfHealingConfig>('/self-healing/config'),
+    retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  const rerouteMut = useMutation({
+    mutationFn: (payload: { platform: string; method: string | null; duration_minutes?: number }) =>
+      adminPost('/self-healing/reroute', payload),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'self-healing', 'status'] })
+      setShNotice({
+        ok: true,
+        text: vars.method
+          ? `Đã chuyển hướng ${vars.platform} sang "${vars.method}" trong 60 phút.`
+          : `Đã gỡ chuyển hướng cho ${vars.platform}.`,
+      })
+    },
+    onError: e => setShNotice({ ok: false, text: (e as Error).message }),
+  })
+
+  if (statusQ.isError || configQ.isError) {
+    return (
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-fg">AI Self-Healing Extractor</h2>
+        <div className="rounded-card border border-line bg-surface p-4 text-xs text-fg-muted">
+          Mô-đun AI Self-Healing sẽ hiển thị sau khi backend hoàn tất triển khai bản mới.
+        </div>
+      </section>
+    )
+  }
+
+  if (statusQ.isLoading || configQ.isLoading) {
+    return (
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-fg">AI Self-Healing Extractor</h2>
+        <div className="rounded-card border border-line bg-surface p-4 text-xs text-fg-muted animate-pulse">
+          Đang tải trạng thái AI Self-Healing…
+        </div>
+      </section>
+    )
+  }
+
+  const statusData = statusQ.data
+  const configData = configQ.data
+  const fallbackKeys = Object.keys(configData?.fallback_routes || {})
+  const activePlatform = selectedPlatform || fallbackKeys[0] || ''
+  const availableMethods = Array.from(
+    new Set([
+      ...(configData?.fallback_routes?.[activePlatform] || []),
+      'cobalt',
+      'browser_direct',
+      'proxy_pool',
+      'proxy_cn',
+    ]),
+  )
+  const platformRows = Object.entries(statusData?.platforms || {})
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-fg">AI Self-Healing Extractor</h2>
+          <span className={cn(BADGE, statusData?.enabled ? 'text-success border-success/30 bg-success-soft' : 'text-fg-muted border-line-strong bg-surface-2')}>
+            {statusData?.enabled ? 'Đang bật' : 'Đang tắt'}
+          </span>
+        </div>
+        {configData && (
+          <p className="text-xs text-fg-muted">
+            Ngưỡng: <span className="font-mono text-fg-2">{configData.error_threshold_pct}%</span> · tối thiểu <span className="font-mono text-fg-2">{configData.min_samples}</span> mẫu / <span className="font-mono text-fg-2">{configData.window_minutes} phút</span> · Telegram: <span className="font-mono text-fg-2">{configData.telegram_enabled ? 'bật' : 'tắt'}</span>
+          </p>
+        )}
+      </div>
+
+      {shNotice && (
+        <div className={cn('rounded-control border px-3 py-2 text-xs', shNotice.ok ? 'border-success/30 bg-success-soft text-success' : 'border-danger/30 bg-danger-soft text-danger')}>
+          {shNotice.text}
+        </div>
+      )}
+
+      {/* Quick manual reroute bar */}
+      {fallbackKeys.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3">
+          <span className="text-xs font-medium text-fg-2">Chuyển hướng thủ công:</span>
+          <select
+            value={activePlatform}
+            onChange={e => setSelectedPlatform(e.target.value)}
+            className="rounded-control border border-line-strong bg-surface-2 px-2.5 py-1.5 text-xs text-fg"
+          >
+            {fallbackKeys.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <select
+            value={availableMethods.includes(selectedMethod) ? selectedMethod : availableMethods[0]}
+            onChange={e => setSelectedMethod(e.target.value)}
+            className="rounded-control border border-line-strong bg-surface-2 px-2.5 py-1.5 text-xs text-fg"
+          >
+            {availableMethods.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={!activePlatform || rerouteMut.isPending}
+            onClick={() => {
+              setShNotice(null)
+              const method = availableMethods.includes(selectedMethod) ? selectedMethod : availableMethods[0]
+              rerouteMut.mutate({ platform: activePlatform, method, duration_minutes: 60 })
+            }}
+          >
+            Chuyển hướng 60 phút
+          </Button>
+        </div>
+      )}
+
+      {/* Platform health table */}
+      {platformRows.length === 0 ? (
+        <div className="rounded-card border border-line bg-surface p-4 text-center text-xs text-fg-muted">
+          Chưa ghi nhận lưu lượng lỗi/thành công trên Self-Healing Monitor trong cửa sổ hiện tại.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-line bg-surface">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs text-fg-muted">
+                <th className="px-4 py-2 font-medium">Nền tảng</th>
+                <th className="px-4 py-2 font-medium">Tỷ lệ lỗi</th>
+                <th className="px-4 py-2 font-medium">Cửa sổ ({configData?.window_minutes ?? 60}p)</th>
+                <th className="px-4 py-2 font-medium">Trạng thái</th>
+                <th className="px-4 py-2 font-medium">Kênh chuyển hướng</th>
+                <th className="px-4 py-2 font-medium">Hành động</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {platformRows.map(([platform, info]) => (
+                <tr key={platform} className="align-top">
+                  <td className="px-4 py-2 font-medium capitalize text-fg">{platform}</td>
+                  <td className="px-4 py-2 font-mono text-xs text-fg-2">{info.error_rate_pct}%</td>
+                  <td className="px-4 py-2 text-xs text-fg-2">{info.window_errors} / {info.window_total}</td>
+                  <td className="px-4 py-2">
+                    <span className={cn(BADGE, SH_TONE[info.status] ?? SH_TONE.healthy)}>
+                      {SH_LABEL[info.status] ?? info.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-fg-2">
+                    {info.active_reroute ? (
+                      <div>
+                        <span className="font-mono font-semibold text-warning">{info.active_reroute}</span>
+                        {info.reroute_expires && (
+                          <div className="text-[11px] text-fg-muted">hết hạn: {new Date(info.reroute_expires).toLocaleTimeString('vi-VN')}</div>
+                        )}
+                      </div>
+                    ) : <span className="text-fg-muted">—</span>}
+                  </td>
+                  <td className="px-4 py-2">
+                    {info.active_reroute && (
+                      <Button
+                        size="sm"
+                        disabled={rerouteMut.isPending}
+                        onClick={() => {
+                          setShNotice(null)
+                          rerouteMut.mutate({ platform, method: null })
+                        }}
+                      >
+                        Gỡ chuyển hướng
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function PlatformHealthPage() {
   const qc = useQueryClient()
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<Health>({
@@ -378,6 +610,8 @@ export default function PlatformHealthPage() {
           </div>
         )}
       </section>
+
+      <SelfHealingSection />
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-fg">{/* wording: BA review */}Lịch sử yt-dlp</h2>
