@@ -11,6 +11,9 @@ use std::path::Path;
 pub struct Tools<'a> {
     pub ffmpeg: &'a Path,
     pub deno: &'a Path,
+    /// Optional aria2c path for IDM-level 16-connection downloads.
+    /// When Some, yt-dlp delegates HTTP downloads to aria2c.
+    pub aria2c: Option<&'a Path>,
 }
 
 /// Output name: title capped at 150 bytes + id. paths.rs relies on names
@@ -258,12 +261,36 @@ pub fn download_args(
         // Multi-segment HLS/DASH downloads run 8x faster without touching
         // cookie-authenticated runs (which pace requests sequentially via SLEEP).
         a.push("--concurrent-fragments".into());
-        a.push("8".into());
-        if is_direct_media_file_url(url) {
-            // Split large single-file downloads into 10 MiB HTTP Range chunks so
-            // cloud CDNs cannot cap/drop a single long-running HTTP socket.
-            a.push("--http-chunk-size".into());
-            a.push("10M".into());
+        // aria2c integration: when available AND the URL is a direct media file,
+        // delegate to aria2c with 16 connections for IDM-level speed.
+        // For HLS/DASH (non-direct), yt-dlp's native fragment downloader is
+        // already parallelized by --concurrent-fragments 8.
+        if let Some(aria2c_path) = tools.aria2c {
+            if is_direct_media_file_url(url) {
+                // 16 concurrent fragments × 16 aria2c connections = IDM-level
+                // throughput. aria2c handles HTTP Range splitting natively,
+                // so --http-chunk-size is not needed (-k controls piece size).
+                a.push("16".into());
+                a.push("--downloader".into());
+                a.push(aria2c_path.as_os_str().to_owned());
+                a.push("--downloader-args".into());
+                a.push(
+                    "aria2c:--auto-file-renaming=false -x16 -s16 -k1M \
+                     --file-allocation=none --console-log-level=warn \
+                     --summary-interval=0 --connect-timeout=10"
+                        .into(),
+                );
+            } else {
+                a.push("8".into());
+            }
+        } else {
+            a.push("8".into());
+            if is_direct_media_file_url(url) {
+                // Split large single-file downloads into 10 MiB HTTP Range chunks so
+                // cloud CDNs cannot cap/drop a single long-running HTTP socket.
+                a.push("--http-chunk-size".into());
+                a.push("10M".into());
+            }
         }
     }
     // Each header is its own argv item (`Name:Value`); validate::download_header
@@ -400,7 +427,7 @@ mod tests {
     #[test]
     fn url_is_last_after_double_dash_and_no_config() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         for args in [
             probe_args(&t, "https://x/--exec=calc", None),
             channel_fetch_args(&t, "https://x/--exec=calc", 200, None),
@@ -432,7 +459,7 @@ mod tests {
     #[test]
     fn channel_fetch_flags() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         let s = strs(&channel_fetch_args(&t, "u", 50, None));
         assert!(s.contains(&"--flat-playlist".into()));
         assert!(s.contains(&"-J".into()));
@@ -443,7 +470,7 @@ mod tests {
     #[test]
     fn download_progress_and_audio_flags() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], None, None));
         assert!(s.contains(&"download:VGDL %(progress)j".into()));
         assert!(s.contains(&"postprocess:VGPP %(progress)j".into()));
@@ -467,7 +494,7 @@ mod tests {
     #[test]
     fn headers_become_add_header_args_and_url_stays_last() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         let h = [
             ("Referer".to_string(), "https://www.douyin.com/".to_string()),
             ("Origin".to_string(), "https://www.douyin.com".to_string()),
@@ -496,7 +523,7 @@ mod tests {
     #[test]
     fn named_output_template() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         let n = OutName { title: "Clip: a/b %(x)s? \"q\"\n", id: "7311" };
         assert_eq!(named_template(&n).as_deref(), Some("Clip a b (x)s q [7311].%(ext)s"));
         let s = strs(&download_args(&t, "u", Path::new("/out"), None, false, &[], Some(&n), None));
@@ -520,7 +547,7 @@ mod tests {
     #[test]
     fn cookies_only_when_given_and_before_the_url() {
         let (f, d) = tools();
-        let t = Tools { ffmpeg: &f, deno: &d };
+        let t = Tools { ffmpeg: &f, deno: &d, aria2c: None };
         let ck = Path::new("/tmp/ck-job-1.txt");
         let with = [
             probe_args(&t, "https://www.douyin.com/video/1", Some(ck)),
@@ -561,7 +588,7 @@ mod tests {
         );
         assert!(output_template("../x", "title").is_none());
         assert!(output_template("none", "%(title)s").is_none());
-        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: None };
         let mut a = download_args(&t, "u", Path::new("/out"), None, false, &[], None, None);
         set_output_template(&mut a, "X/%(title)s.%(ext)s");
         let s = strs(&a);
@@ -587,7 +614,7 @@ mod tests {
 
     #[test]
     fn audio_bitrate_and_original() {
-        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: None };
         let run = |fmt: Option<&str>, k: &str| {
             let mut a = download_args(&t, "u", Path::new("/out"), fmt, true, &[], None, None);
             apply_extras(&mut a, &Extras::from_keys(Some(k), None).unwrap(), true);
@@ -612,7 +639,7 @@ mod tests {
 
     #[test]
     fn subtitles_go_before_the_url_and_only_on_video() {
-        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: None };
         let mut a = download_args(&t, "https://x/--exec=calc", Path::new("/out"), None, false, &[], None, None);
         apply_extras(&mut a, &Extras::from_keys(None, Some("embed")).unwrap(), false);
         let s = strs(&a);
@@ -639,7 +666,7 @@ mod tests {
 
     #[test]
     fn unpaced_cookies_keep_concurrent_fragments_and_no_sleep_interval() {
-        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: None };
         let h = [("Referer".to_string(), "https://cinema.example/watch/1".to_string())];
         let mut a = download_args(
             &t,
@@ -662,7 +689,7 @@ mod tests {
 
     #[test]
     fn direct_media_file_url_enables_http_chunk_size_without_affecting_manifests() {
-        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d") };
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: None };
         let mut direct_args = download_args(
             &t,
             "https://cdn.example/video.mp4?token=1",
@@ -686,5 +713,32 @@ mod tests {
             let s = strs(&download_args(&t, non_direct, Path::new("/out"), None, false, &[], None, None));
             assert!(!s.iter().any(|x| x == "--http-chunk-size"), "{non_direct}: {s:?}");
         }
+    }
+
+    #[test]
+    fn aria2c_used_for_direct_media_when_available() {
+        let aria2c_path = Path::new("/app/aria2c");
+        let t = Tools { ffmpeg: Path::new("/f"), deno: Path::new("/d"), aria2c: Some(aria2c_path) };
+
+        // Direct media file → aria2c with 16 connections
+        let s = strs(&download_args(&t, "https://cdn.example/video.mp4", Path::new("/out"), None, false, &[], None, None));
+        assert!(s.windows(2).any(|w| w[0] == "--downloader" && w[1] == "/app/aria2c"), "should use aria2c path: {s:?}");
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "16"), "should use 16 fragments: {s:?}");
+        assert!(s.iter().any(|x| x.contains("-x16")), "should pass -x16 to aria2c: {s:?}");
+        assert!(!s.iter().any(|x| x == "--http-chunk-size"), "should not use http-chunk-size with aria2c: {s:?}");
+
+        // HLS/DASH (non-direct) → 8 fragments, NO aria2c
+        let s = strs(&download_args(&t, "https://cdn.example/hls/master.m3u8", Path::new("/out"), None, false, &[], None, None));
+        assert!(!s.iter().any(|x| x == "--downloader"), "should not use aria2c for HLS: {s:?}");
+        assert!(s.windows(2).any(|w| w[0] == "--concurrent-fragments" && w[1] == "8"), "should use 8 fragments for HLS: {s:?}");
+
+        // Cookie-authenticated → no aria2c, no concurrent
+        let s = strs(&download_args(&t, "https://cdn.example/video.mp4", Path::new("/out"), None, false, &[], None, Some(Path::new("/tmp/ck.txt"))));
+        assert!(!s.iter().any(|x| x == "--downloader"), "should not use aria2c with cookies: {s:?}");
+        assert!(!s.contains(&"--concurrent-fragments".to_string()), "should not have concurrent with cookies: {s:?}");
+
+        // Audio-only → no aria2c
+        let s = strs(&download_args(&t, "https://cdn.example/audio.mp3", Path::new("/out"), None, true, &[], None, None));
+        assert!(!s.iter().any(|x| x == "--downloader"), "should not use aria2c for audio: {s:?}");
     }
 }

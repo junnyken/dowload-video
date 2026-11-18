@@ -208,6 +208,8 @@ struct ToolVersions {
     ytdlp_source: &'static str,
     ffmpeg: Option<String>,
     deno: Option<String>,
+    /// aria2c version when present (optional accelerator for single-file downloads).
+    aria2c: Option<String>,
 }
 
 // ---------------------------------------------------------------- helpers
@@ -226,6 +228,17 @@ async fn verified_sidecars() -> CmdResult<Vec<PathBuf>> {
     })
     .await
     .map_err(|e| CommandError::unknown(e.to_string()))?
+}
+
+/// Optional aria2c binary next to the app executable. Unlike the required
+/// sidecars, aria2c is a performance add-on: when present it accelerates
+/// single-file HTTP downloads (16 connections, IDM-level). When absent
+/// the existing yt-dlp engine is used unchanged.
+fn probe_aria2c() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidate = dir.join(format!("aria2c{}", std::env::consts::EXE_SUFFIX));
+    if candidate.is_file() { Some(candidate) } else { None }
 }
 
 /// The yt-dlp for one run (task #6333): the server-approved download when a
@@ -484,7 +497,7 @@ fn cancel_in(registry: &Registry, key: &str) {
 async fn probe(app: AppHandle, jobs: State<'_, Jobs>, url: String, use_cookies: Option<bool>) -> CmdResult<formats::ProbeResult> {
     let url = valid_url(&url)?;
     let paths = verified_sidecars().await?;
-    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3], aria2c: None };
     let ck = run_cookies(&app, &url, use_cookies).await?;
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
     let args = engine::probe_args(&tools, &url, ck.as_ref().map(RunCookies::path));
@@ -541,7 +554,7 @@ async fn channel_fetch(
         return page_list(&app, &jobs, &url, t, limit, show).await;
     }
     let paths = verified_sidecars().await?;
-    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3], aria2c: None };
     let ck = run_cookies(&app, &url, use_cookies).await?;
     let ytdlp = ytdlp_for(&app, &paths[0]).await;
     let args = engine::channel_fetch_args(&tools, &url, limit, ck.as_ref().map(RunCookies::path));
@@ -1153,7 +1166,8 @@ async fn start_download(
     }
 
     let paths = verified_sidecars().await?;
-    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let aria2c = probe_aria2c();
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3], aria2c: aria2c.as_deref() };
     // Random file name per run (not the job id): a second start of the same job
     // that is refused below must not delete the file the first run is using.
     let ck = run_cookies(&app, &url, use_cookies).await?;
@@ -1869,7 +1883,7 @@ async fn page_list(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, t: &page_
 /// yt-dlp listing of a TikTok channel by its secUid; the listing keeps the user's URL.
 async fn tiktok_by_id(app: &AppHandle, jobs: &State<'_, Jobs>, url: &str, sec_uid: &str, limit: u32) -> CmdResult<channels::ChannelListing> {
     let paths = verified_sidecars().await?;
-    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3] };
+    let tools = engine::Tools { ffmpeg: &paths[1], deno: &paths[3], aria2c: None };
     let ytdlp = ytdlp_for(app, &paths[0]).await;
     let by_id = format!("tiktokuser:{sec_uid}");
     let args = engine::channel_fetch_args(&tools, &by_id, limit, None);
@@ -1982,6 +1996,8 @@ async fn tool_versions(app: AppHandle, jobs: State<'_, Jobs>) -> CmdResult<ToolV
             }),
             deno: first_line(&paths[3], &["--version"])
                 .map(|l| l.strip_prefix("deno ").and_then(|r| r.split_whitespace().next()).unwrap_or(&l).to_string()),
+            aria2c: probe_aria2c().and_then(|p| first_line(&p, &["--version"]))
+                .and_then(|l| l.strip_prefix("aria2 version ").map(|r| r.to_string())),
         }
     })
     .await
