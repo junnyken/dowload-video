@@ -67,6 +67,9 @@ _DISABLED_PATTERNS = (
     "request access",
     "sign in to continue to google drive",
     "owner has disabled",
+    "owner hasn't given you permission to download",
+    "only the owner and editors can download",
+    "can't download file",
     "viewer cannot download",
     "viewers cannot download",
     '"candownload":false',
@@ -75,6 +78,8 @@ _DISABLED_PATTERNS = (
     "this file is private",
     "permission denied",
     "chủ sở hữu đã tắt",
+    "chủ sở hữu chưa cấp cho bạn quyền tải xuống",
+    "chỉ chủ sở hữu và người chỉnh sửa mới có thể tải xuống",
     "bạn cần quyền truy cập",
 )
 
@@ -152,7 +157,7 @@ def build_uc_download_url(
 
 
 def _check_html_errors(html_text: str, final_url: str = "", status_code: int = 200) -> None:
-    lower = (html_text or "").lower()
+    lower = _html.unescape(html_text or "").lower()
     url_lower = (final_url or "").lower()
 
     if any(p in lower for p in _QUOTA_PATTERNS):
