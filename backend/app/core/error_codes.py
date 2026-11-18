@@ -466,6 +466,40 @@ ERROR_META: dict[str, dict] = {
         "retryable": False,
         "suggested_action": "Thử URL trực tiếp của episode thay vì URL feed.",
     },
+
+    # ── Telegram (Phase B1) ───────────────────────────────────────────
+    "telegram_protected_content": {
+        "user_message": "Kênh hoặc bài đăng Telegram này đã bật chế độ bảo vệ nội dung (noforwards), không cho phép sao chép hoặc tải xuống.",
+        "retryable": False,
+        "suggested_action": "Tôn trọng thiết lập bảo vệ nội dung của chủ kênh.",
+    },
+    "telegram_login_required": {
+        "user_message": "Bài đăng thuộc kênh/nhóm Telegram riêng tư và yêu cầu đăng nhập tài khoản Telegram của bạn.",
+        "retryable": False,
+        "suggested_action": "Kết nối tài khoản Telegram của bạn trong mục Cài đặt Telegram rồi thử lại.",
+    },
+
+    # ── Cloud Drives (Phase A) ────────────────────────────────────────
+    "owner_disabled_download": {
+        "user_message": "Chủ sở hữu đã tắt quyền tải xuống hoặc tệp ở chế độ riêng tư.",
+        "retryable": False,
+        "suggested_action": "Yêu cầu chủ sở hữu cấp quyền tải xuống hoặc chia sẻ công khai.",
+    },
+    "share_quota_exceeded": {
+        "user_message": "File đã hết lượt tải trên Cloud. Mẹo xử lý ngay: Mở link khi đã đăng nhập Google → bấm ⋮ → 'Tạo bản sao' (Make a copy) vào Drive của bạn rồi tải bản sao đó, hoặc chờ 24h.",
+        "retryable": False,
+        "suggested_action": "Mở link khi đã đăng nhập Google → bấm ⋮ → 'Tạo bản sao' (Make a copy) vào Drive của bạn rồi tải bản sao đó, hoặc chờ 24h.",
+    },
+    "share_password_required": {
+        "user_message": "Liên kết chia sẻ này được bảo vệ bằng mật khẩu.",
+        "retryable": False,
+        "suggested_action": "Thêm mật khẩu vào cuối link (ví dụ: ?pwd=xxxx) rồi thử lại.",
+    },
+    "share_expired": {
+        "user_message": "Liên kết chia sẻ không tồn tại hoặc đã hết hạn.",
+        "retryable": False,
+        "suggested_action": "Kiểm tra lại liên kết hoặc xin link chia sẻ mới từ người gửi.",
+    },
 }
 
 

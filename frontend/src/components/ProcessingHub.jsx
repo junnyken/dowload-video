@@ -11,12 +11,12 @@
  *   userTier     — 'free'|'pro'|'team'|'enterprise'
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   X, Download, Scissors, Music, Film, FileText, Package,
   Loader2, AlertCircle, CheckCircle2, Lock, ShieldCheck, Crown,
-  Languages, Sparkles, Copy, Check,
+  Languages, Sparkles, Copy, Check, Radio, Send, Square, LogOut,
 } from 'lucide-react';
 import { useProcessing } from '../hooks/useProcessing';
 import ArtifactExpiry from './ArtifactExpiry';
@@ -34,6 +34,8 @@ const TABS = [
   { id: 'gif',        icon: Film        },
   { id: 'subtitle',   icon: FileText    },
   { id: 'package',    icon: Package     },
+  { id: 'live',       icon: Radio       },
+  { id: 'telegram',   icon: Send        },
 ];
 
 // Quick-trim presets in seconds
@@ -1102,6 +1104,318 @@ function PackageTab({ videoInfo, sourceUrl }) {
   );
 }
 
+// ── Tab: Live Stream Recorder (Phase B5) ───────────────────────────────────
+function LiveRecordTab({ sourceUrl, userTier }) {
+  const { i18n } = useTranslation('results');
+  const isEn = (i18n.language || 'vi').startsWith('en');
+  const maxMin = ['team', 'enterprise', 'api', 'admin'].includes(userTier)
+    ? 180
+    : userTier === 'pro'
+      ? 60
+      : 10;
+
+  const [liveUrl, setLiveUrl]           = useState(sourceUrl || '');
+  const [durationMin, setDurationMin]   = useState(Math.min(10, maxMin));
+  const [job, setJob]                   = useState(null);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
+
+  useEffect(() => {
+    if (!job?.job_id || job.status !== 'recording') return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/api/v1/live/${job.job_id}/status`);
+        if (r.ok) {
+          const d = await r.json();
+          setJob(d);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [job?.job_id, job?.status]);
+
+  const handleStart = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/v1/live/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: liveUrl,
+          duration_sec: durationMin * 60,
+          plan: userTier,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Failed to start live recording');
+      setJob(d);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStop = async () => {
+    if (!job?.job_id) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/v1/live/${job.job_id}/stop`, { method: 'POST' });
+      const d = await r.json();
+      if (r.ok) setJob(d);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-3 rounded-xl bg-surface-2 border border-line text-xs text-fg-2">
+        <p className="font-semibold text-fg">
+          {isEn ? 'Live Stream Recorder (TikTok / YouTube / Twitch / Kick / FB)' : 'Quay Livestream (TikTok / YouTube / Twitch / Kick / FB)'}
+        </p>
+        <p className="text-fg-muted mt-0.5">
+          {isEn
+            ? `Your plan (${userTier}) allows up to ${maxMin} min per session.`
+            : `Gói hiện tại (${userTier}) cho phép ghi tối đa ${maxMin} phút/lần.`}
+        </p>
+      </div>
+
+      <div>
+        <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">
+          {isEn ? 'Live Stream URL' : 'URL Livestream đang phát'}
+        </label>
+        <input
+          type="url"
+          value={liveUrl}
+          onChange={e => setLiveUrl(e.target.value)}
+          placeholder="https://www.tiktok.com/@user/live"
+          className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-xs text-fg outline-none focus:border-accent"
+        />
+      </div>
+
+      <div>
+        <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">
+          {isEn ? `Max Duration (min, cap ${maxMin}m)` : `Thời lượng ghi tối đa (phút, giới hạn ${maxMin}p)`}
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={maxMin}
+          value={durationMin}
+          onChange={e => setDurationMin(Math.min(maxMin, Math.max(1, Number(e.target.value) || 1)))}
+          className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-xs text-fg outline-none focus:border-accent"
+        />
+      </div>
+
+      {job?.status === 'recording' ? (
+        <button
+          onClick={handleStop}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-danger hover:opacity-90 text-white font-semibold text-sm transition-colors cursor-pointer"
+        >
+          <Square className="w-4 h-4" />
+          {isEn ? `Stop Recording (${job.elapsed_sec || 0}s)` : `Dừng ghi & Lưu MP4 (${job.elapsed_sec || 0}s)`}
+        </button>
+      ) : (
+        <button
+          onClick={handleStart}
+          disabled={loading || !liveUrl.trim()}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+          {isEn ? 'Start Live Recording' : 'Bắt đầu quay Livestream'}
+        </button>
+      )}
+
+      {job?.status === 'completed' && (
+        <ResultRow result={job} label={isEn ? `Recorded (${job.elapsed_sec}s)` : `Đã lưu Livestream (${job.elapsed_sec}s)`} />
+      )}
+      <ErrorRow error={error || job?.error} />
+    </div>
+  );
+}
+
+// ── Tab: Telegram User MTProto Connect (Phase B1) ──────────────────────────
+function TelegramAuthTab() {
+  const { i18n } = useTranslation('results');
+  const isEn = (i18n.language || 'vi').startsWith('en');
+
+  const [status, setStatus]       = useState(null);
+  const [phone, setPhone]         = useState('');
+  const [code, setCode]           = useState('');
+  const [password, setPassword]   = useState('');
+  const [step, setStep]           = useState('phone'); // 'phone' | 'code'
+  const [needs2FA, setNeeds2FA]   = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+
+  const loadStatus = async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/telegram/auth/status`);
+      if (r.ok) setStatus(await r.json());
+    } catch {}
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
+  const handleSendCode = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/v1/telegram/auth/send-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Could not send Telegram code');
+      setStep('code');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const r = await fetch(`${API}/api/v1/telegram/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code, password: password || undefined }),
+      });
+      const d = await r.json();
+      if (r.status === 422 && d.detail?.requires_2fa) {
+        setNeeds2FA(true);
+        throw new Error(d.detail.user_message || '2FA Password required');
+      }
+      if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : 'Verification failed');
+      await loadStatus();
+      setStep('phone');
+      setCode('');
+      setPassword('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${API}/api/v1/telegram/auth/logout`, { method: 'POST' });
+      await loadStatus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-3 rounded-xl bg-surface-2 border border-line text-xs text-fg-2">
+        <p className="font-semibold text-fg">
+          {isEn ? 'Telegram Account Connect (MTProto)' : 'Kết nối tài khoản Telegram (MTProto)'}
+        </p>
+        <p className="text-fg-muted mt-0.5">
+          {isEn
+            ? 'Download media from channels you joined. Channels with noforwards protection remain respected and blocked.'
+            : 'Tải video từ kênh/nhóm bạn tham gia. Phiên đăng nhập được mã hóa AES-GCM và bạn có thể thu hồi bất kỳ lúc nào. Tôn trọng cờ chống sao chép (noforwards).'}
+        </p>
+      </div>
+
+      {status?.connected ? (
+        <div className="p-3 rounded-xl bg-success-soft border border-success/40 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-success">
+              {isEn ? 'Connected' : 'Đã kết nối'}: {status.phone_masked} {status.username ? `(@${status.username})` : ''}
+            </p>
+            <p className="text-[10px] text-fg-muted">
+              {isEn ? 'Encrypted session active' : 'Phiên mã hóa đang hoạt động'}
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            disabled={loading}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-danger/15 text-danger text-xs font-semibold hover:bg-danger/25 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            {isEn ? 'Disconnect' : 'Ngắt kết nối'}
+          </button>
+        </div>
+      ) : step === 'phone' ? (
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">
+              {isEn ? 'Phone Number (+CountryCode)' : 'Số điện thoại Telegram (+84...)'}
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+84901234567"
+              className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-xs text-fg outline-none focus:border-accent"
+            />
+          </div>
+          <button
+            onClick={handleSendCode}
+            disabled={loading || !phone.trim()}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {isEn ? 'Send Login Code' : 'Gửi mã xác thực OTP'}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">
+              {isEn ? 'Telegram OTP Code' : 'Mã OTP từ ứng dụng Telegram'}
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="12345"
+              className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-xs text-fg outline-none focus:border-accent"
+            />
+          </div>
+          {needs2FA && (
+            <div>
+              <label className="text-[10px] text-fg-muted font-semibold uppercase tracking-wide">
+                {isEn ? '2FA Cloud Password' : 'Mật khẩu xác thực 2 bước (2FA)'}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full mt-1 px-3 py-2 bg-surface-2 border border-line rounded-lg text-xs text-fg outline-none focus:border-accent"
+              />
+            </div>
+          )}
+          <button
+            onClick={handleVerify}
+            disabled={loading || !code.trim()}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {isEn ? 'Verify & Encrypt Session' : 'Xác nhận & Lưu phiên mã hóa'}
+          </button>
+        </div>
+      )}
+
+      <ErrorRow error={error} />
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose, userTier = 'free', initialTab = 'trim', onOpenUpgrade }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -1182,6 +1496,12 @@ export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose
           )}
           {activeTab === 'package' && (
             <PackageTab videoInfo={videoInfo} sourceUrl={sourceUrl} />
+          )}
+          {activeTab === 'live' && (
+            <LiveRecordTab sourceUrl={sourceUrl} userTier={userTier} />
+          )}
+          {activeTab === 'telegram' && (
+            <TelegramAuthTab />
           )}
         </div>
 

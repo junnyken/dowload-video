@@ -318,18 +318,98 @@ def preflight(quality: str, confirmed: bool = False) -> dict:
     return {"effective_height": decision["effective_height"]}
 
 
-def record_result(success: bool, file_size_mb: float = 0.0) -> None:
+def record_result(success: bool, file_size_mb: float = 0.0, lane: str = "residential_proxy") -> None:
     """Call AFTER a YouTube proxy download attempt finishes. Updates the circuit,
     metrics, and (on success) the daily proxy-byte counter."""
+    lane_key = lane if lane in YOUTUBE_LANE_ORDER else "residential_proxy"
+    youtube_metric(f"lane_{lane_key}_{'success' if success else 'fail'}")
     if success:
-        record_proxy_success()
+        if lane_key == "residential_proxy":
+            record_proxy_success()
         youtube_metric("success")
-        if file_size_mb and file_size_mb > 0:
+        if lane_key == "residential_proxy" and file_size_mb and file_size_mb > 0:
             add_proxy_megabytes(file_size_mb)
             youtube_metric("bytes", int(file_size_mb * 1024 * 1024))
     else:
-        record_proxy_failure()
+        if lane_key == "residential_proxy":
+            record_proxy_failure()
         youtube_metric("fail")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 4b. Lane ordering & cost per successful download (Phase C1)
+# ═════════════════════════════════════════════════════════════════════
+
+YOUTUBE_LANE_ORDER: tuple[str, ...] = (
+    "user_device",        # 1. Desktop / Extension running on user's own IP (0 proxy cost)
+    "po_token_cookie",    # 2. Server PO-token + pooled cookie lane (0 proxy byte cost)
+    "residential_proxy",  # 3. Paid residential proxy pool (last resort, metered per-GB)
+)
+
+
+def get_youtube_lane_order(
+    *,
+    has_user_device_hint: bool = True,
+    has_po_token_or_cookie: bool = True,
+    allow_proxy_fallback: bool = True,
+) -> list[str]:
+    """Return ordered YouTube extraction lanes from cheapest/safest to last resort:
+      1. user_device       — Desktop / Chrome Extension on the user's IP
+      2. po_token_cookie   — bgutil PO-token + pooled cookie
+      3. residential_proxy — paid residential proxy pool (only when gate allows)
+    """
+    lanes: list[str] = []
+    if has_user_device_hint:
+        lanes.append("user_device")
+    if has_po_token_or_cookie:
+        lanes.append("po_token_cookie")
+    if allow_proxy_fallback and not over_daily_limit() and not circuit_open():
+        lanes.append("residential_proxy")
+    return lanes
+
+
+def get_youtube_lane_stats(date: Optional[str] = None) -> dict:
+    """Return YouTube lane distribution and proxy cost per successful download."""
+    stats = get_youtube_stats(date=date)
+    bytes_used = (
+        get_proxy_bytes_today()
+        if (date is None or date == _today())
+        else int(stats.get("bytes", 0))
+    )
+    cost_usd = round(bytes_used / _BYTES_PER_GB * PROXY_COST_PER_GB, 4)
+    total_ok = int(stats.get("success", 0))
+    total_fail = int(stats.get("fail", 0))
+
+    lanes_breakdown: dict[str, dict[str, int]] = {}
+    for lane in YOUTUBE_LANE_ORDER:
+        lanes_breakdown[lane] = {
+            "success": int(stats.get(f"lane_{lane}_success", 0)),
+            "fail": int(stats.get(f"lane_{lane}_fail", 0)),
+        }
+
+    proxy_ok = lanes_breakdown["residential_proxy"]["success"]
+    # Backward compatibility when legacy stats only recorded "success" without lane_*
+    if proxy_ok == 0 and total_ok > 0 and all(v["success"] == 0 for v in lanes_breakdown.values()):
+        proxy_ok = total_ok
+        lanes_breakdown["residential_proxy"]["success"] = total_ok
+
+    avg_cost_per_success = round(cost_usd / total_ok, 6) if total_ok > 0 else 0.0
+    avg_cost_per_proxy_ok = round(cost_usd / proxy_ok, 6) if proxy_ok > 0 else 0.0
+    proxy_share_pct = round(proxy_ok / total_ok * 100, 1) if total_ok > 0 else 0.0
+
+    return {
+        "lane_order": list(YOUTUBE_LANE_ORDER),
+        "lanes": lanes_breakdown,
+        "total_success": total_ok,
+        "total_fail": total_fail,
+        "proxy_bytes": bytes_used,
+        "proxy_gb": round(bytes_used / _BYTES_PER_GB, 4),
+        "proxy_cost_usd": cost_usd,
+        "cost_per_gb_usd": PROXY_COST_PER_GB,
+        "avg_proxy_cost_per_success_usd": avg_cost_per_success,
+        "avg_proxy_cost_per_proxy_download_usd": avg_cost_per_proxy_ok,
+        "proxy_share_pct": proxy_share_pct,
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════

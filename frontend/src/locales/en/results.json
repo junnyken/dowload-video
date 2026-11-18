@@ -8,7 +8,9 @@
     "audio": "Audio",
     "gif": "GIF / Loop",
     "subtitle": "Subtitles",
-    "package": "Package"
+    "package": "Package",
+    "live": "Live Record",
+    "telegram": "Telegram Auth"
   },
   "trimPreset": {
     "custom": "Custom"
@@ -93,7 +95,13 @@
       "schedule_failed": "Schedule error",
       "invalid_url": "Invalid URL",
       "concurrency_limit": "Server busy",
-      "server_error": "Server error"
+      "server_error": "Server error",
+      "telegram_protected_content": "Telegram content protection (noforwards) enabled",
+      "telegram_login_required": "Telegram login required",
+      "owner_disabled_download": "Owner disabled download",
+      "share_quota_exceeded": "Cloud download quota exceeded. Quick fix: Open the link signed in to Google → click ⋮ → 'Make a copy' to your Drive and download the copy, or wait 24h.",
+      "share_password_required": "Password required for shared link",
+      "share_expired": "Shared link has expired"
     }
   },
   "success": {

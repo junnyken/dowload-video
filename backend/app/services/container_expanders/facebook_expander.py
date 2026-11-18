@@ -28,6 +28,19 @@ from app.services.container_discovery import (
 from app.services.container_expanders import BaseExpander
 
 _MAX_FB_VIDEOS = 50
+_MAX_FB_TOTAL_VIDEOS = 200
+
+
+def _parse_fb_cursor(cursor: str = "", offset: int = 0) -> int:
+    """Parse cursor/offset string (e.g. '50', 'offset:50', 'cursor:100') into 0-based offset."""
+    if cursor:
+        raw = str(cursor).strip()
+        for prefix in ("offset:", "cursor:", "page_offset:"):
+            if raw.lower().startswith(prefix):
+                raw = raw[len(prefix):].strip()
+        if raw.isdigit():
+            return max(0, min(int(raw), _MAX_FB_TOTAL_VIDEOS))
+    return max(0, min(int(offset or 0), _MAX_FB_TOTAL_VIDEOS))
 
 
 def _entry_to_item(entry: dict) -> ContainerItem:
@@ -74,15 +87,22 @@ class FacebookExpander(BaseExpander):
         url: str,
         max_items: int = 50,
         include_sections: Optional[list[str]] = None,  # noqa: ARG002
+        cursor: str = "",
+        offset: int = 0,
     ) -> ContainerMeta:
         cid = make_container_id()
-        limit = min(max_items, _MAX_FB_VIDEOS)
+        start_offset = _parse_fb_cursor(cursor, offset)
+        page_cap = _MAX_FB_VIDEOS if max_items <= _MAX_FB_VIDEOS else min(max_items, _MAX_FB_TOTAL_VIDEOS)
+        limit = max(1, min(page_cap, _MAX_FB_TOTAL_VIDEOS - start_offset))
 
         # Normalize: ensure URL points to /videos/ tab
         video_url = self._ensure_videos_url(url)
 
         try:
-            entries, page_title = self._scrape_flat(video_url, limit)
+            if start_offset > 0:
+                entries, page_title = self._scrape_flat(video_url, limit, offset=start_offset)
+            else:
+                entries, page_title = self._scrape_flat(video_url, limit)
         except Exception as e:
             return ContainerMeta(
                 container_id=cid, platform="facebook",
@@ -102,13 +122,16 @@ class FacebookExpander(BaseExpander):
             )
 
         items = [_entry_to_item(e) for e in entries]
+        has_more = len(entries) >= limit and (start_offset + len(items)) < _MAX_FB_TOTAL_VIDEOS
+        next_cursor = str(start_offset + len(items)) if has_more else ""
         section = ContainerSection(
             key="videos",
             label=f"Video công khai ({len(items)})",
             item_count=len(items),
             items_loaded=True,
             items=items,
-            has_more=len(entries) >= limit,
+            has_more=has_more,
+            next_cursor=next_cursor,
         )
 
         return ContainerMeta(
@@ -125,29 +148,78 @@ class FacebookExpander(BaseExpander):
             warning="Chỉ hiển thị video công khai. Video riêng tư yêu cầu đăng nhập.",
         )
 
+    def expand_page(
+        self,
+        url: str,
+        cursor: str = "",
+        offset: int = 0,
+        limit: int = _MAX_FB_VIDEOS,
+    ) -> dict:
+        """Phase C5: Cursor/offset paginated expansion up to 200 videos across pages."""
+        start_offset = _parse_fb_cursor(cursor, offset)
+        if start_offset >= _MAX_FB_TOTAL_VIDEOS:
+            return {
+                "items": [],
+                "offset": start_offset,
+                "limit": 0,
+                "has_more": False,
+                "next_cursor": "",
+            }
+        effective_limit = max(1, min(int(limit or _MAX_FB_VIDEOS), _MAX_FB_TOTAL_VIDEOS - start_offset))
+        try:
+            if start_offset > 0:
+                entries, _ = self._scrape_flat(self._ensure_videos_url(url), effective_limit, offset=start_offset)
+            else:
+                entries, _ = self._scrape_flat(self._ensure_videos_url(url), effective_limit)
+        except Exception:
+            entries = []
+        items = [_entry_to_item(e) for e in entries]
+        next_off = start_offset + len(items)
+        has_more = len(items) >= effective_limit and next_off < _MAX_FB_TOTAL_VIDEOS
+        return {
+            "items": items,
+            "offset": start_offset,
+            "limit": effective_limit,
+            "has_more": has_more,
+            "next_cursor": str(next_off) if has_more else "",
+        }
+
     def expand_section(
         self,
         url: str,
         _section_key: str,
         _child_id: str = "",
+        cursor: str = "",
+        offset: int = 0,
+        limit: int = _MAX_FB_TOTAL_VIDEOS,
     ) -> list[ContainerItem]:
-        """Re-fetch videos tab with higher limit for full expansion."""
+        """Re-fetch videos tab with higher limit or cursor/offset pagination (up to 200)."""
+        start_offset = _parse_fb_cursor(cursor or _child_id, offset)
+        if start_offset >= _MAX_FB_TOTAL_VIDEOS:
+            return []
+        effective_limit = max(1, min(int(limit or _MAX_FB_TOTAL_VIDEOS), _MAX_FB_TOTAL_VIDEOS - start_offset))
         try:
-            entries, _ = self._scrape_flat(self._ensure_videos_url(url), 200)
+            if start_offset > 0:
+                entries, _ = self._scrape_flat(self._ensure_videos_url(url), effective_limit, offset=start_offset)
+            else:
+                entries, _ = self._scrape_flat(self._ensure_videos_url(url), effective_limit)
         except Exception:
             return []
         return [_entry_to_item(e) for e in entries]
 
-    def _scrape_flat(self, url: str, limit: int) -> tuple[list[dict], str]:
+    def _scrape_flat(self, url: str, limit: int, offset: int = 0) -> tuple[list[dict], str]:
         import yt_dlp
 
+        end_idx = min(max(0, int(offset)) + max(1, int(limit)), _MAX_FB_TOTAL_VIDEOS)
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": True,
             "ignoreerrors": True,
-            "playlistend": limit,
+            "playlistend": end_idx,
         }
+        if offset > 0:
+            ydl_opts["playliststart"] = int(offset) + 1
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -156,11 +228,17 @@ class FacebookExpander(BaseExpander):
             return [], ""
 
         page_title = info.get("title") or info.get("uploader") or ""
-        entries = [
+        raw_entries = [
             e for e in (info.get("entries") or [])
             if e and (e.get("url") or e.get("webpage_url"))
         ]
-        return entries, page_title
+        # When yt-dlp returns full slice from index 0 despite playliststart (e.g. in mocks),
+        # slice to [offset : offset + limit] if len(raw_entries) > limit and offset > 0.
+        if offset > 0 and len(raw_entries) > limit:
+            raw_entries = raw_entries[offset : offset + limit]
+        else:
+            raw_entries = raw_entries[:limit]
+        return raw_entries, page_title
 
     def _ensure_videos_url(self, url: str) -> str:
         """Append /videos/ if not already present."""

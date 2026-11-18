@@ -223,6 +223,16 @@ def _load_extractors():
         "app.services.kuaishou_extractor",
         # PikPak share link resolver (REST API, no yt-dlp).
         "app.services.pikpak_extractor",
+        # Phase B — Telegram, Weibo, Xigua / Toutiao extractors.
+        "app.services.telegram_extractor",
+        "app.services.weibo_extractor",
+        "app.services.xigua_extractor",
+        # Phase A — Cloud Drive extractors.
+        "app.services.gdrive_extractor",
+        "app.services.onedrive_extractor",
+        "app.services.mega_extractor",
+        "app.services.terabox_extractor",
+        "app.services.dropbox_extractor",
     ]
     for mod in modules:
         try:

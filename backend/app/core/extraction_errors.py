@@ -110,6 +110,14 @@ _EXTRACTOR_CODE_STATUS: dict[str, int] = {
     "kuaishou_redirect_rejected":     400,
     "kuaishou_not_found":             404,
     "kuaishou_unsupported_post_type": 422,
+    # Telegram (Phase B1)
+    "telegram_protected_content":     422,
+    "telegram_login_required":        422,
+    # Cloud Drives (Phase A)
+    "owner_disabled_download":        422,
+    "share_quota_exceeded":           422,
+    "share_password_required":        422,
+    "share_expired":                  404,
 }
 
 

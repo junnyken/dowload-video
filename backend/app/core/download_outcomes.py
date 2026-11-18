@@ -326,6 +326,9 @@ def _decode(v) -> str:
 
 def _parse_okerr(raw: dict) -> Dict[str, Dict[str, int]]:
     out: Dict[str, Dict[str, int]] = {}
+    if isinstance(raw, (list, tuple)):
+        it = iter(raw)
+        raw = dict(zip(it, it))
     for k, v in (raw or {}).items():
         key = _decode(k)
         if ":" not in key:
@@ -489,6 +492,9 @@ def _parse_hour(h: Optional[str]) -> Optional[datetime]:
 
 def _parse_codes(raw: dict) -> Dict[Tuple[str, str], int]:
     out: Dict[Tuple[str, str], int] = {}
+    if isinstance(raw, (list, tuple)):
+        it = iter(raw)
+        raw = dict(zip(it, it))
     for k, v in (raw or {}).items():
         key = _decode(k)
         if "|" not in key:

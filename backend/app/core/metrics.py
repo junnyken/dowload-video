@@ -348,3 +348,26 @@ def get_queue_depths() -> dict:
     except Exception:
         pass
     return result
+
+
+# ── YouTube lane & proxy cost metrics (Phase C1) ─────────────────────────────
+
+def get_youtube_lane_stats(date: Optional[str] = None) -> dict:
+    """Delegate to youtube_gate.get_youtube_lane_stats for unified lane + cost stats."""
+    try:
+        from app.core.youtube_gate import get_youtube_lane_stats as _yt_lane_stats
+        return _yt_lane_stats(date=date)
+    except Exception:
+        return {
+            "lane_order": ["user_device", "po_token_cookie", "residential_proxy"],
+            "lanes": {},
+            "total_success": 0,
+            "total_fail": 0,
+            "proxy_bytes": 0,
+            "proxy_gb": 0.0,
+            "proxy_cost_usd": 0.0,
+            "cost_per_gb_usd": 1.5,
+            "avg_proxy_cost_per_success_usd": 0.0,
+            "avg_proxy_cost_per_proxy_download_usd": 0.0,
+            "proxy_share_pct": 0.0,
+        }

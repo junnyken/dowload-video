@@ -409,6 +409,58 @@ _reg(_cap("podcast_rss", "podcast_feed", SupportLevel.full,
 ))
 
 
+# ── Telegram / Weibo / Xigua (Phase B) ────────────────────────────────────────
+
+_reg(_cap("telegram", "single_video", SupportLevel.full,
+    [ActionType.queue_video, ActionType.queue_audio, ActionType.open_single_download],
+    _PUB, [],
+    EntryFlow.single_download,
+))
+
+_reg(_cap("telegram", "channel", SupportLevel.full,
+    [ActionType.preview_items, ActionType.queue_video, ActionType.queue_zip],
+    _PUB, [],
+    EntryFlow.batch_queue, _BULK_ENDPOINT,
+))
+
+_reg(_cap("weibo", "single_video", SupportLevel.full,
+    [ActionType.queue_video, ActionType.open_single_download],
+    _PUB, [],
+    EntryFlow.single_download,
+))
+
+_reg(_cap("xigua", "single_video", SupportLevel.full,
+    [ActionType.queue_video, ActionType.open_single_download],
+    _PUB, [],
+    EntryFlow.single_download,
+))
+
+
+# ── Cloud Drives (Phase A) ────────────────────────────────────────────────────
+
+for _cloud_plat in ("gdrive", "onedrive", "mega", "terabox", "dropbox", "pikpak"):
+    _reg(_cap(_cloud_plat, "single_video", SupportLevel.full,
+        [ActionType.queue_video, ActionType.queue_audio, ActionType.open_single_download],
+        _PUB, [],
+        EntryFlow.single_download,
+    ))
+    _reg(_cap(_cloud_plat, "single_post", SupportLevel.full,
+        [ActionType.queue_video, ActionType.open_single_download],
+        _PUB, [],
+        EntryFlow.single_download,
+    ))
+    _reg(_cap(_cloud_plat, "playlist", SupportLevel.full,
+        [ActionType.preview_items, ActionType.queue_video, ActionType.queue_zip],
+        _PUB, [],
+        EntryFlow.batch_queue, _BULK_ENDPOINT,
+    ))
+    _reg(_cap(_cloud_plat, "channel", SupportLevel.full,
+        [ActionType.preview_items, ActionType.queue_video, ActionType.queue_zip],
+        _PUB, [],
+        EntryFlow.batch_queue, _BULK_ENDPOINT,
+    ))
+
+
 # ── Kuaishou (flag-gated, see _active()) ─────────────────────────────────────
 # Kept OUT of _REGISTRY: while KUAISHOU_ENABLED is off no capability endpoint
 # may list or describe it. Experimental + proxy_required: nothing is verified

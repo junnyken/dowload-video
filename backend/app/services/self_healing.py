@@ -188,6 +188,12 @@ class HealthMonitor:
                 "self_heal.reroute_activated",
                 extra={"platform": platform, "method": method, "duration_min": duration_minutes},
             )
+        if method == "cobalt":
+            try:
+                from app.core import platform_health as ph
+                ph.set_prefer_cobalt(platform, True, reason="self_healing")
+            except Exception:
+                pass
 
     def clear_reroute(self, platform: str) -> None:
         """Clear an active reroute."""
@@ -196,6 +202,11 @@ class HealthMonitor:
             if health:
                 health.active_reroute = None
                 health.reroute_until = 0
+        try:
+            from app.core import platform_health as ph
+            ph.set_prefer_cobalt(platform, False)
+        except Exception:
+            pass
 
     def get_status(self) -> dict:
         """Return health status for all platforms."""
@@ -245,6 +256,14 @@ class HealthMonitor:
         diagnosis = _diagnose_with_ai(platform, error_summary, error_rate)
         if not diagnosis:
             diagnosis = _diagnose_heuristic(platform, error_samples)
+
+        # Phase C2: Force cobalt fallback route for instagram & twitter when
+        # cookie_expired or rate_limited error rate exceeds threshold (30% in 1h).
+        if platform in ("instagram", "twitter") and any(
+            s.error_code in _COOKIE_OR_RATE_CODES for s in error_samples
+        ):
+            diagnosis["should_reroute"] = True
+            diagnosis["suggested_route"] = "cobalt"
 
         # Auto-reroute if diagnosis suggests it
         if diagnosis.get("should_reroute"):
@@ -313,6 +332,19 @@ Trả lời ngắn gọn theo JSON:
     return None
 
 
+_COOKIE_OR_RATE_CODES = (
+    "cookie_expired",
+    "session_expired",
+    "cookie_required",
+    "login_required",
+    "private_or_login_required",
+    "rate_limited",
+    "too_many_requests",
+    "rate_limited_429",
+    "soft_block",
+)
+
+
 def _diagnose_heuristic(platform: str, errors: list[ErrorSample]) -> dict:
     """Fallback heuristic diagnosis when AI is unavailable."""
     error_codes = [e.error_code for e in errors]
@@ -330,14 +362,27 @@ def _diagnose_heuristic(platform: str, errors: list[ErrorSample]) -> dict:
             "auto_recoverable": True,
         }
 
-    if any(c in error_codes for c in ("rate_limited", "too_many_requests")):
+    if any(c in error_codes for c in _COOKIE_OR_RATE_CODES):
+        has_cookie_err = any(
+            c in error_codes
+            for c in ("cookie_expired", "session_expired", "cookie_required", "login_required", "private_or_login_required")
+        )
+        preferred = (
+            "cobalt"
+            if (platform in ("instagram", "twitter") or "cobalt" in FALLBACK_ROUTES.get(platform, []))
+            else FALLBACK_ROUTES.get(platform, ["proxy_pool"])[0]
+        )
         return {
             "source": "heuristic",
-            "root_cause": f"{platform} đang rate-limit server",
-            "severity": "medium",
+            "root_cause": (
+                f"{platform} hết hạn cookie hoặc cần làm mới phiên đăng nhập"
+                if has_cookie_err
+                else f"{platform} đang rate-limit server"
+            ),
+            "severity": "high" if has_cookie_err else "medium",
             "should_reroute": True,
-            "suggested_route": "cobalt" if platform in FALLBACK_ROUTES else "proxy_pool",
-            "fix_suggestion": "Giảm tần suất request hoặc chuyển sang API phụ",
+            "suggested_route": preferred,
+            "fix_suggestion": "Làm mới cookie trong Cookie Pool hoặc chuyển sang Cobalt fallback",
             "auto_recoverable": True,
         }
 

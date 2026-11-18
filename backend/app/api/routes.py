@@ -998,11 +998,26 @@ async def fetch_link(
 
     _outcome_counted = False
     try:
-        # PikPak share links: resolve via PikPak REST API (yt-dlp has no
-        # PikPak extractor).  Videos in public shares are guest-accessible.
+        # Cloud Drive & PikPak share links: resolve via dedicated cloud extractors
+        from app.services.gdrive_extractor import is_gdrive_url, resolve_gdrive_share
+        from app.services.onedrive_extractor import is_onedrive_url, resolve_onedrive_share
+        from app.services.mega_extractor import is_mega_url, resolve_mega_share
+        from app.services.terabox_extractor import is_terabox_url, resolve_terabox_share
+        from app.services.dropbox_extractor import is_dropbox_url, resolve_dropbox_share
+
         if _get_platform_key(payload.url) == "pikpak":
             from app.services.pikpak_extractor import resolve_pikpak_share
             info = await resolve_pikpak_share(payload.url, _quality)
+        elif is_gdrive_url(payload.url):
+            info = await resolve_gdrive_share(payload.url, _quality)
+        elif is_onedrive_url(payload.url):
+            info = await resolve_onedrive_share(payload.url, _quality)
+        elif is_mega_url(payload.url):
+            info = await resolve_mega_share(payload.url, _quality)
+        elif is_terabox_url(payload.url):
+            info = await resolve_terabox_share(payload.url, _quality)
+        elif is_dropbox_url(payload.url):
+            info = await resolve_dropbox_share(payload.url, _quality)
         else:
             info = await extract_video_info(
                 payload.url,
@@ -1317,7 +1332,10 @@ async def fetch_link(
         # API's logs are not, and the message below is rewritten for users.
         _keep_recent_error(request, payload, user_id, x_vg_source, _status, _err_code,
                            f"{type(e).__name__}: {msg}", _quality)
-        if "video unavailable" in msg.lower() or "unavailable" in msg.lower():
+        if _err_code in ("owner_disabled_download", "share_quota_exceeded", "share_password_required", "share_expired") and msg == _err_code:
+            from app.core.error_codes import get_error_meta as _get_err_meta
+            msg = _get_err_meta(_err_code)["user_message"]
+        elif "video unavailable" in msg.lower() or "unavailable" in msg.lower():
             msg = "🚫 Video không khả dụng — có thể đã bị xóa, giới hạn vùng (geo-block), hoặc bị ẩn."
         elif "sign in" in msg.lower() or "bot" in msg.lower():
             msg = "🤖 YouTube yêu cầu xác thực. Đang thử kênh dự phòng... Vui lòng thử lại sau 30 giây."

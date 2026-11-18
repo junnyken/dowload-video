@@ -288,6 +288,47 @@ def is_kuaishou_url(url: Any) -> bool:
     return parse_kuaishou_url(url) is not None
 
 
+_SHARE_URL_EXTRACT_RE = re.compile(r"https?://[^\s\"'<>，。！？、；：（）【】]+")
+_RE_FW_NEXT_PHOTO = re.compile(rf"^/fw/next-photo/{_ID}/?$")
+
+
+def normalize_kuaishou_share_url(raw: Any) -> Optional[str]:
+    """Phase C4: Normalize mobile share text or mobile share URLs into a clean
+    canonical Kuaishou URL. Extracts embedded http(s) link from Kuaishou share
+    copy-text, normalises `/fw/next-photo/<id>` to `/fw/photo/<id>`, and
+    resolves `/fw/photo` with `?photoId=<id>` query parameter."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    candidates = [text]
+    if " " in text or not text.lower().startswith(("http://", "https://")):
+        candidates = [
+            m.group(0).rstrip(".,;!?)]}>")
+            for m in _SHARE_URL_EXTRACT_RE.finditer(text)
+        ]
+    for cand in candidates:
+        try:
+            p = urlparse(cand)
+        except ValueError:
+            continue
+        host = _clean_host(p.hostname)
+        if not host_allowed(host):
+            continue
+        path = p.path or "/"
+        m_next = _RE_FW_NEXT_PHOTO.match(path)
+        if m_next:
+            path = f"/fw/photo/{m_next.group(1)}"
+        elif path.rstrip("/") == "/fw/photo":
+            pid = parse_qs(p.query).get("photoId", [""])[0]
+            if re.fullmatch(_ID, pid or ""):
+                path = f"/fw/photo/{pid}"
+        rebuilt = urlunparse((p.scheme or "https", host, path, "", p.query, ""))
+        link = parse_kuaishou_url(rebuilt)
+        if link is not None:
+            return link.url
+    return None
+
+
 def should_handle(url: Any) -> bool:
     """The one gate every integration point uses: flag ON and a recognised URL."""
     return kuaishou_enabled() and is_kuaishou_url(url)
@@ -611,6 +652,26 @@ def _int(v: Any) -> int:
 _APOLLO_MARKER = re.compile(r"window\.__APOLLO_STATE__\s*=")
 
 
+def _apollo_fallback_video_url(node: dict) -> str:
+    """Phase C4: Extract fallback video URL from mainMvUrls or videoResource when photoUrl is absent."""
+    mv = _urls_from(node.get("mainMvUrls")) or _urls_from(node.get("h265Urls"))
+    if mv:
+        return mv[0]
+    vr = node.get("videoResource")
+    if isinstance(vr, dict):
+        for codec in ("h264", "hevc"):
+            cnode = vr.get(codec)
+            if isinstance(cnode, dict):
+                aset = cnode.get("adaptationSet")
+                if isinstance(aset, list) and aset and isinstance(aset[0], dict):
+                    reps = aset[0].get("representation")
+                    if isinstance(reps, list):
+                        for rep in reps:
+                            if isinstance(rep, dict) and _str(rep.get("url")):
+                                return _str(rep.get("url"))
+    return ""
+
+
 def strategy_apollo_state(html: str, photo_id: Optional[str]) -> StrategyOutcome:
     name = "apollo_state"
     state, why = _embedded_json(html, _APOLLO_MARKER)
@@ -624,6 +685,21 @@ def strategy_apollo_state(html: str, photo_id: Optional[str]) -> StrategyOutcome
     prefix = "VisionVideoDetailPhoto:"
     keys = [k for k in client if isinstance(k, str) and k.startswith(prefix)]
     if not keys:
+        # Phase C4: Check inline visionVideoDetail.photo object when normalized Apollo keys are absent
+        vvd = client.get("visionVideoDetail") or client.get("$ROOT_QUERY.visionVideoDetail")
+        inline_photo = vvd.get("photo") if isinstance(vvd, dict) else None
+        if isinstance(inline_photo, dict) and (_str(inline_photo.get("photoUrl")) or _apollo_fallback_video_url(inline_photo)):
+            purl = _str(inline_photo.get("photoUrl")) or _apollo_fallback_video_url(inline_photo)
+            inl_author = vvd.get("author") if isinstance(vvd.get("author"), dict) else {}
+            return StrategyOutcome(name=name, ok=True, post=KuaishouPost(
+                post_type="video", strategy=name,
+                photo_id=_str(inline_photo.get("id")) or (photo_id or ""),
+                title=_str(inline_photo.get("caption")),
+                author=_str(inl_author.get("name")),
+                thumbnail=_str(inline_photo.get("coverUrl")),
+                duration_ms=_int(inline_photo.get("duration")),
+                video_urls=[purl],
+            ))
         return _fail(name, "no VisionVideoDetailPhoto node")
     if photo_id:
         key = prefix + photo_id
@@ -637,7 +713,7 @@ def strategy_apollo_state(html: str, photo_id: Optional[str]) -> StrategyOutcome
     node = client.get(key)
     if not isinstance(node, dict):
         return _fail(name, "VisionVideoDetailPhoto node is not an object")
-    photo_url = _str(node.get("photoUrl"))
+    photo_url = _str(node.get("photoUrl")) or _apollo_fallback_video_url(node)
     if not photo_url:
         return _fail(name, "VisionVideoDetailPhoto.photoUrl missing or empty")
     authors = [v for k, v in client.items()
@@ -664,7 +740,7 @@ def strategy_apollo_state(html: str, photo_id: Optional[str]) -> StrategyOutcome
 #     is the video, coverUrls[0].url the cover, caption the title)
 _INIT_MARKER = re.compile(r"window\.INIT_STATE\s*=")
 _ATLAS_TYPES = ("VERTICAL_ATLAS", "HORIZONTAL_ATLAS")
-_PHOTO_HINT_KEYS = ("mainMvUrls", "photoType", "ext_params", "coverUrls")
+_PHOTO_HINT_KEYS = ("mainMvUrls", "photoType", "ext_params", "coverUrls", "h265Urls", "mp4Url")
 _CDN_HOST_RE = re.compile(r"^[A-Za-z0-9.-]{3,253}$")
 
 
@@ -701,7 +777,7 @@ def _urls_from(items: Any) -> list:
     out = []
     if isinstance(items, list):
         for it in items:
-            u = _str(it.get("url")) if isinstance(it, dict) else ""
+            u = (_str(it.get("url")) or _str(it.get("backupUrl"))) if isinstance(it, dict) else ""
             if u and u not in out:
                 out.append(u)
     return out
@@ -738,7 +814,11 @@ def strategy_init_state(html: str, photo_id: Optional[str]) -> StrategyOutcome:
     atlas = ext.get("atlas") if isinstance(ext.get("atlas"), dict) else None
     if atlas is None and isinstance(parent.get("atlas"), dict):
         atlas = parent.get("atlas")
-    videos = _urls_from(p.get("mainMvUrls"))
+    videos = (
+        _urls_from(p.get("mainMvUrls"))
+        or _urls_from(p.get("h265Urls"))
+        or ([_str(p.get("mp4Url"))] if _str(p.get("mp4Url")) else [])
+    )
 
     if ptype in _ATLAS_TYPES or (not ptype and atlas and not videos):
         if not atlas:

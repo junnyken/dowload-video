@@ -72,6 +72,15 @@ def _audit_events(limit: int = 10) -> list:
         return []
 
 
+def _js_runtimes_health() -> dict:
+    """Return Deno + PhantomJS status for ops health."""
+    try:
+        from app.core.js_runtimes import all_js_runtimes_status
+        return all_js_runtimes_status()
+    except Exception:
+        return {"deno": {"found": False}, "phantomjs": {"found": False}, "healthy": False, "warnings": []}
+
+
 @router.get("/ops-signals")
 async def get_ops_signals(_: Any = Depends(verify_admin)):
     """
@@ -139,6 +148,9 @@ async def get_ops_signals(_: Any = Depends(verify_admin)):
 
         # ── Workers ──────────────────────────────────────────────
         "worker_count": worker_count,
+
+        # ── JS Runtimes (Deno + PhantomJS / iQIYI) ───────────────
+        "js_runtimes": _js_runtimes_health(),
 
         # ── Quick summary ────────────────────────────────────────
         "alerts": _derive_alerts(

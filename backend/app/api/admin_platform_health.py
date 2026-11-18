@@ -59,15 +59,38 @@ async def platform_health_overview(_=Depends(verify_admin)):
         })
     # status() hits PyPI and spawns one subprocess: off the event loop.
     channel = await asyncio.to_thread(yc.status)
+    from app.core import js_runtimes
+    js_rt = await asyncio.to_thread(js_runtimes.all_js_runtimes_status)
     return {
         "platforms": rows,
         "ytdlp": channel,
+        "js_runtimes": js_rt,
+        "top_generic_domains": ph.get_top_generic_domains(limit=30),
+        "experimental_promotions": {
+            "kuaishou": ph.check_experimental_promotion("kuaishou"),
+        },
         "thresholds": {
             "min_attempts": ph.MIN_ATTEMPTS, "system_warn": ph.SYSTEM_WARN,
             "system_critical": ph.SYSTEM_CRITICAL, "broken_min": ph.BROKEN_MIN,
             "broken_rate": ph.BROKEN_RATE,
         },
     }
+
+
+@router.get("/platform-health/js-runtimes")
+async def platform_health_js_runtimes(refresh: bool = False, _=Depends(verify_admin)):
+    """Phase C7: Deno + PhantomJS runtime status for Admin Health."""
+    import asyncio
+    from app.core import js_runtimes
+    return await asyncio.to_thread(js_runtimes.all_js_runtimes_status, refresh)
+
+
+@router.get("/platform-health/generic-domains")
+async def platform_health_generic_domains(limit: int = 30, _=Depends(verify_admin)):
+    """Phase C8: Top generic yt-dlp domains by volume & success rate."""
+    from app.core import platform_health as ph
+    domains = ph.get_top_generic_domains(limit=limit)
+    return {"domains": domains, "count": len(domains), "limit": limit}
 
 
 @router.post("/ytdlp/remediate")

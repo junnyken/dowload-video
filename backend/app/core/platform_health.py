@@ -323,3 +323,120 @@ def check_platforms(counts: Optional[Dict[str, Dict[str, int]]] = None, *,
         if c and c["total"] >= MIN_ATTEMPTS and verdict(c) is None:
             mark_recovered(platform)
     return found
+
+
+# ── Phase C4: Experimental platform auto-promotion check ──────────────
+
+EXPERIMENTAL_PROMOTION_DAYS = 7
+EXPERIMENTAL_PROMOTION_MIN_SAMPLES = 20
+EXPERIMENTAL_PROMOTION_MIN_RATE = 0.90
+
+
+def check_experimental_promotion(
+    platform: str = "kuaishou",
+    *,
+    days: int = EXPERIMENTAL_PROMOTION_DAYS,
+    min_samples: int = EXPERIMENTAL_PROMOTION_MIN_SAMPLES,
+    min_success_rate: float = EXPERIMENTAL_PROMOTION_MIN_RATE,
+    now: Optional[datetime] = None,
+) -> dict:
+    """Check 7-day rolling success rate (>90% with min 20 samples) to report
+    whether an experimental platform (e.g. Kuaishou) is ready for `full` promotion."""
+    now = now or datetime.now(timezone.utc)
+    ok = 0
+    err = 0
+    try:
+        from app.core import download_outcomes as do  # noqa: PLC0415
+        dates = [do.day_str(now - timedelta(days=d)) for d in range(days)]
+        day_map = do.read_days(dates)
+        for d in dates:
+            per_plat = day_map.get(d) or {}
+            c = per_plat.get(platform) or {}
+            ok += int(c.get("ok", 0))
+            err += int(c.get("err", 0))
+    except Exception:
+        pass
+
+    total = ok + err
+    rate = round(ok / total, 4) if total > 0 else 0.0
+    rate_pct = round(ok / total * 100, 1) if total > 0 else 0.0
+    ready = (total >= min_samples) and ((ok / total) > min_success_rate) if total > 0 else False
+
+    return {
+        "platform": platform,
+        "window_days": days,
+        "ok": ok,
+        "err": err,
+        "total": total,
+        "min_samples": min_samples,
+        "min_success_rate": min_success_rate,
+        "success_rate": rate,
+        "success_rate_pct": rate_pct,
+        "ready_for_promotion": ready,
+        "recommended_level": "full" if ready else "experimental",
+        "reason": (
+            "ready" if ready
+            else "insufficient_samples" if total < min_samples
+            else "below_threshold"
+        ),
+    }
+
+
+# ── Phase C8: Top generic (yt-dlp fallback) domain tracking ───────────
+
+GENERIC_DOMAINS_KEY = "vidgrab:generic_domains:totals"
+GENERIC_DOMAINS_TTL = 35 * 86400
+
+
+def record_generic_domain(url: str, ok: bool) -> Optional[str]:
+    """Record a generic yt-dlp extraction outcome by registrable domain."""
+    try:
+        from app.core.download_outcomes import registrable_domain, OTHER_DOMAIN_UNKNOWN  # noqa: PLC0415
+        dom = registrable_domain(url)
+        if not dom or dom == OTHER_DOMAIN_UNKNOWN:
+            return None
+        kind = "ok" if ok else "err"
+        rc = _r()
+        rc.hincrby(GENERIC_DOMAINS_KEY, f"{dom}:{kind}", 1)
+        rc.expire(GENERIC_DOMAINS_KEY, GENERIC_DOMAINS_TTL)
+        return dom
+    except Exception:
+        return None
+
+
+def get_top_generic_domains(limit: int = 30) -> List[dict]:
+    """Return top generic yt-dlp domains ordered by total volume and success rate."""
+    limit = max(1, min(int(limit), 200))
+    agg: Dict[str, Dict[str, int]] = {}
+    try:
+        raw = _r().hgetall(GENERIC_DOMAINS_KEY) or {}
+        if isinstance(raw, list):
+            raw = dict(zip(raw[0::2], raw[1::2]))
+        for k, v in raw.items():
+            key = _d(k)
+            dom, _, kind = key.rpartition(":")
+            if not dom or kind not in ("ok", "err"):
+                continue
+            try:
+                agg.setdefault(dom, {"ok": 0, "err": 0})[kind] += int(_d(v))
+            except Exception:
+                continue
+    except Exception:
+        return []
+
+    rows = []
+    for dom, c in agg.items():
+        ok_n = c.get("ok", 0)
+        err_n = c.get("err", 0)
+        tot = ok_n + err_n
+        if tot <= 0:
+            continue
+        rows.append({
+            "domain": dom,
+            "ok": ok_n,
+            "err": err_n,
+            "total": tot,
+            "success_rate": round(ok_n / tot * 100, 1),
+        })
+    rows.sort(key=lambda r: (-r["total"], -r["ok"], r["domain"]))
+    return rows[:limit]

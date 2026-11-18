@@ -840,6 +840,52 @@ def get_expiry_report(platform: str) -> list[dict]:
     return result
 
 
+def get_expiring_soon_cookies(
+    within_hours: float = 48,
+    platform: Optional[str] = None,
+) -> list[dict]:
+    """Return cookies across pooled platforms (or a specific platform) that
+    will expire within `within_hours` (or are already expired), using
+    `get_expiry_report` so admins get proactive warnings before cookies die."""
+    now = int(time.time())
+    threshold_s = float(within_hours) * 3600.0
+    if platform:
+        platforms = [platform]
+    else:
+        platforms = sorted(
+            set(pooled_platforms()) | {"instagram", "twitter", "bilibili", "xiaohongshu"}
+        )
+
+    expiring: list[dict] = []
+    for plat in platforms:
+        try:
+            report = get_expiry_report(plat)
+        except Exception:
+            continue
+        for entry in report:
+            expires_at = int(entry.get("expires_at") or 0)
+            health_status = entry.get("health_status", "")
+            if expires_at > 0:
+                seconds_left = expires_at - now
+                if seconds_left <= threshold_s:
+                    hours_left = round(max(0.0, seconds_left / 3600.0), 2)
+                    expiring.append({
+                        **entry,
+                        "platform": plat,
+                        "hours_left": hours_left,
+                        "is_expired": seconds_left <= 0,
+                    })
+            elif health_status == "expired":
+                expiring.append({
+                    **entry,
+                    "platform": plat,
+                    "hours_left": 0.0,
+                    "is_expired": True,
+                })
+    expiring.sort(key=lambda x: (x.get("hours_left", 0.0), x.get("platform", "")))
+    return expiring
+
+
 def get_pool_status() -> dict:
     """Return health + expiry summary for all platforms."""
     rc = get_redis()

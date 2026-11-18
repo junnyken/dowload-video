@@ -171,6 +171,44 @@ _r("podcast",  r"feeds?\.[^/?#\s]+",                                            
 _r("podcast",  r"/(?:rss|feed)(?:/|\.xml|\?|$)",                                 "podcast_feed", None)
 _r("podcast",  r"\.xml(?:\?|$)",                                                  "podcast_feed", None)
 
+# ── Telegram (Phase B1) ──────────────────────────────────────────────────────
+_r("telegram", r"(?:t\.me|telegram\.me|telegram\.dog)/c/(\d+)/(?:\d+/)?(\d+)",   "single_video", 2)
+_r("telegram", r"(?:t\.me|telegram\.me|telegram\.dog)/(?:s/)?([A-Za-z0-9_]{4,64})/(\d+)", "single_video", 2)
+_r("telegram", r"(?:t\.me|telegram\.me|telegram\.dog)/s/([A-Za-z0-9_]{4,64})/?(?:\?|$)",  "channel",      1)
+
+# ── Weibo (Phase B2) ─────────────────────────────────────────────────────────
+_r("weibo",    r"weibo\.com/tv/show/(\d+:[A-Za-z0-9]+)",                         "single_video", 1)
+_r("weibo",    r"video\.weibo\.com/show\?.*fid=(\d+:[A-Za-z0-9]+)",              "single_video", 1)
+_r("weibo",    r"m\.weibo\.cn/(?:status|detail)/([A-Za-z0-9]+)",                 "single_video", 1)
+_r("weibo",    r"weibo\.(?:com|cn)/\d+/([A-Za-z0-9]+)",                          "single_video", 1)
+
+# ── Xigua / Toutiao (Phase B3) ───────────────────────────────────────────────
+_r("xigua",    r"(?:ixigua\.com|toutiao\.com)/(?:video/|i|a)?(\d{10,25})",       "single_video", 1)
+_r("xigua",    r"v\.ixigua\.com/([A-Za-z0-9_-]+)",                               "single_video", 1)
+
+# ── Cloud Drives (Phase A) ───────────────────────────────────────────────────
+_r("gdrive",   r"drive\.google\.com/drive/(?:u/\d+/)?folders/([A-Za-z0-9_-]+)",  "playlist",     1)
+_r("gdrive",   r"drive\.google\.com/embeddedfolderview\?.*id=([A-Za-z0-9_-]+)",  "playlist",     1)
+_r("gdrive",   r"drive\.google\.com/file/d/([A-Za-z0-9_-]+)",                    "single_video", 1)
+_r("gdrive",   r"drive\.(?:usercontent\.)?google\.com/(?:open|uc|download)\?.*id=([A-Za-z0-9_-]+)", "single_video", 1)
+
+_r("onedrive", r"1drv\.ms/[a-z]/(?:s!|c/)?([A-Za-z0-9_!-]+)",                    "single_video", 1)
+_r("onedrive", r"onedrive\.live\.com/",                                           "single_video", None)
+_r("onedrive", r"[A-Za-z0-9-]+\.sharepoint\.com/",                                "single_video", None)
+
+_r("mega",     r"mega\.(?:co\.)?nz/folder/([A-Za-z0-9_-]+)",                     "playlist",     1)
+_r("mega",     r"mega\.(?:co\.)?nz/#F!([A-Za-z0-9_-]+)",                         "playlist",     1)
+_r("mega",     r"mega\.(?:co\.)?nz/file/([A-Za-z0-9_-]+)",                       "single_video", 1)
+_r("mega",     r"mega\.(?:co\.)?nz/#!([A-Za-z0-9_-]+)",                          "single_video", 1)
+
+_r("terabox",  r"(?:terabox|1024tera|1024terabox|teraboxapp|freeterabox|mirrobox|nephobox|4funbox|momerybox|tibibox)\.com/s/([A-Za-z0-9_-]+)", "single_video", 1)
+_r("terabox",  r"(?:terabox|1024tera|1024terabox|teraboxapp|freeterabox|mirrobox|nephobox|4funbox|momerybox|tibibox)\.com/sharing/link\?.*surl=([A-Za-z0-9_-]+)", "single_video", 1)
+
+_r("dropbox",  r"dropbox\.com/(?:scl/fo|sh)/([A-Za-z0-9_-]+)",                   "playlist",     1)
+_r("dropbox",  r"(?:www\.|dl\.)?dropbox(?:usercontent)?\.com/(?:s|scl/fi)/([A-Za-z0-9_-]+)", "single_video", 1)
+
+_r("pikpak",   r"mypikpak\.(?:com|net)/s/([A-Za-z0-9_-]+)",                      "single_video", 1)
+
 
 def classify(url: str) -> ClassifyResult:
     """

@@ -800,6 +800,13 @@ app.include_router(vietnamize_api.router, prefix="/api/v1", tags=["AI Vietnamize
 from app.api import viral_clips as viral_clips_api
 app.include_router(viral_clips_api.router, prefix="/api/v1", tags=["AI Viral Clipper"])
 
+# Phase B1 & B5 — Telegram User MTProto Auth & Live Stream Recorder
+from app.api.telegram_auth import router as telegram_auth_router
+app.include_router(telegram_auth_router, prefix="/api/v1/telegram/auth", tags=["Telegram Auth"])
+
+from app.api.live_record import router as live_record_router
+app.include_router(live_record_router, prefix="/api/v1/live", tags=["Live Recorder"])
+
 
 # ── Health Check ─────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])

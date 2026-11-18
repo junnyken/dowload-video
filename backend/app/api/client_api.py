@@ -336,3 +336,46 @@ def cookie_platforms() -> List[str]:
     raw = os.environ.get("CLIENT_COOKIES_PLATFORMS") or ""
     want = [p.strip().lower() for p in raw.split(",") if p.strip()]
     return [p for p in COOKIE_PLATFORM_SLUGS if p in want]
+
+
+# Phase C3: Platforms that prefer the user's own session / IP lane via Desktop or Extension
+PREFER_USER_LANE_SLUGS = (
+    "youtube", "instagram", "twitter", "facebook",
+    "tiktok", "douyin", "bilibili", "xiaohongshu",
+)
+
+
+def prefer_user_lane_platforms() -> List[str]:
+    raw = os.environ.get("CLIENT_PREFER_USER_LANE_PLATFORMS")
+    if raw is None or not raw.strip():
+        return list(PREFER_USER_LANE_SLUGS)
+    want = {p.strip().lower() for p in raw.split(",") if p.strip()}
+    if "none" in want:
+        return []
+    if "all" in want:
+        return list(PREFER_USER_LANE_SLUGS)
+    return [p for p in PREFER_USER_LANE_SLUGS if p in want]
+
+
+def _lane_policy_payload() -> Dict[str, Any]:
+    from app.core.youtube_gate import get_youtube_lane_order  # noqa: PLC0415
+    return {
+        "preferUserLanePlatforms": prefer_user_lane_platforms(),
+        "cookiePlatforms": cookie_platforms(),
+        "serverFallbackPlatforms": server_fallback_platforms(),
+        "youtubeLaneOrder": get_youtube_lane_order(),
+    }
+
+
+@router.get("/client/config")
+@limiter.limit("60/minute")
+async def get_client_config(request: Request):
+    """Phase C3: Client lane & capability configuration for Desktop and Extension."""
+    return _lane_policy_payload()
+
+
+@router.get("/client/lane-policy")
+@limiter.limit("60/minute")
+async def get_client_lane_policy(request: Request):
+    """Phase C3: Dedicated lane-policy endpoint for user-session preference."""
+    return _lane_policy_payload()

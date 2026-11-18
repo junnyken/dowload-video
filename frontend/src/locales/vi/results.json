@@ -7,7 +7,9 @@
     "audio": "Âm thanh",
     "gif": "GIF / Loop",
     "subtitle": "Phụ đề",
-    "package": "Đóng gói"
+    "package": "Đóng gói",
+    "live": "Ghi Livestream",
+    "telegram": "Kết nối Telegram"
   },
   "trimPreset": {
     "custom": "Tùy"
@@ -92,7 +94,13 @@
       "schedule_failed": "Lỗi lịch tải",
       "invalid_url": "URL không hợp lệ",
       "concurrency_limit": "Server bận",
-      "server_error": "Lỗi server"
+      "server_error": "Lỗi server",
+      "telegram_protected_content": "Nội dung Telegram bật chống sao chép (noforwards)",
+      "telegram_login_required": "Yêu cầu kết nối tài khoản Telegram",
+      "owner_disabled_download": "Chủ sở hữu đã tắt quyền tải xuống",
+      "share_quota_exceeded": "File đã hết lượt tải trên Cloud. Mẹo xử lý ngay: Mở link khi đã đăng nhập Google → bấm ⋮ → 'Tạo bản sao' (Make a copy) vào Drive của bạn rồi tải bản sao đó, hoặc chờ 24h.",
+      "share_password_required": "Liên kết chia sẻ cần mật khẩu",
+      "share_expired": "Liên kết chia sẻ đã hết hạn"
     }
   },
   "success": {

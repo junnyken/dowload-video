@@ -17,6 +17,7 @@ import subprocess
 from typing import Optional
 
 _cache: Optional[dict] = None
+_deno_cache: Optional[dict] = None
 
 
 def phantomjs_status(refresh: bool = False) -> dict:
@@ -34,6 +35,45 @@ def phantomjs_status(refresh: bool = False) -> dict:
             version = None
     _cache = {"found": bool(path and version), "path": path, "version": version}
     return _cache
+
+
+def deno_status(refresh: bool = False) -> dict:
+    """Phase C7: Check Deno JS runtime availability for yt-dlp EJS / PO-token solver."""
+    global _deno_cache
+    if _deno_cache is not None and not refresh:
+        return _deno_cache
+    path = shutil.which("deno")
+    version = None
+    if path:
+        try:
+            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=15)
+            if out.returncode == 0 and (out.stdout or "").strip():
+                first = (out.stdout or "").strip().splitlines()[0].strip()
+                parts = first.split()
+                version = parts[1] if len(parts) >= 2 and parts[0].lower() == "deno" else first
+        except Exception:  # noqa: BLE001
+            version = None
+    _deno_cache = {"found": bool(path and version), "path": path, "version": version}
+    return _deno_cache
+
+
+def all_js_runtimes_status(refresh: bool = False) -> dict:
+    """Phase C7: Aggregated JS runtime health (Deno + PhantomJS) for Admin Health / Ops."""
+    deno = deno_status(refresh=refresh)
+    pjs = phantomjs_status(refresh=refresh)
+    warnings: list[str] = []
+    if not deno["found"]:
+        warnings.append("Deno NOT found — YouTube EJS challenge / PO-token solver unavailable")
+    if not pjs["found"]:
+        warnings.append("PhantomJS NOT found — iq.com (iQIYI) downloads will fail")
+    return {
+        "deno": deno,
+        "phantomjs": pjs,
+        "healthy": bool(deno["found"] and pjs["found"]),
+        "iqiyi_ready": bool(pjs["found"]),
+        "youtube_ejs_ready": bool(deno["found"]),
+        "warnings": warnings,
+    }
 
 
 def startup_line() -> str:

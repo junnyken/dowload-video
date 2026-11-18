@@ -82,3 +82,15 @@ async def self_healing_config(admin=Depends(verify_admin)):
         "telegram_enabled": TELEGRAM_ENABLED,
         "fallback_routes": FALLBACK_ROUTES,
     }
+
+
+@router.get("/self-healing/generic-domains")
+async def self_healing_generic_domains(limit: int = 30, admin=Depends(verify_admin)):
+    """Phase C8: Return top generic (yt-dlp fallback) domains by volume & success rate."""
+    from app.core import platform_health as ph
+    domains = ph.get_top_generic_domains(limit=limit)
+    return {
+        "domains": domains,
+        "count": len(domains),
+        "limit": limit,
+    }

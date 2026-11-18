@@ -69,29 +69,128 @@ _XHS_WEB_UA = (
 )
 
 
-# ── Cookie helpers ─────────────────────────────────────────────────────────
+# ── Proxy & Cookie helpers (Phase C6) ──────────────────────────────────────
 
-def _get_xhs_cookies() -> dict:
-    """Get XHS cookies from pool, return as dict for httpx."""
+_VISITOR_CACHE_KEY = "vidgrab:xhs:visitor_cookies"
+_VISITOR_CACHE_TTL = 3600
+
+
+def _get_xhs_cn_proxy() -> str:
+    """Resolve CN proxy for Xiaohongshu:
+    1. XHS_CN_PROXY_URL env
+    2. XIAOHONGSHU_PROXY_CN env
+    3. Redis/env proxy_pool for 'xiaohongshu' or 'douyin' (CN pool)
+    """
+    for env_key in ("XHS_CN_PROXY_URL", "XIAOHONGSHU_PROXY_CN"):
+        val = (os.getenv(env_key, "") or "").strip()
+        if val:
+            return val
+    try:
+        from app.core.proxy_pool import get_proxy_from_pool
+        for pool_name in ("xiaohongshu", "douyin"):
+            p = get_proxy_from_pool(pool_name)
+            if p:
+                return p
+    except Exception:
+        pass
+    return ""
+
+
+def _make_httpx_client(headers: dict, cn_proxy: str = "", timeout: float = 15.0) -> httpx.Client:
+    """Create httpx.Client supporting both modern `proxy=` and legacy `proxies=`."""
+    base_kwargs: dict[str, Any] = {
+        "headers": headers,
+        "follow_redirects": True,
+        "timeout": timeout,
+    }
+    if not cn_proxy:
+        return httpx.Client(**base_kwargs)
+    try:
+        return httpx.Client(**base_kwargs, proxy=cn_proxy)
+    except TypeError:
+        return httpx.Client(**base_kwargs, proxies={"all://": cn_proxy})
+
+
+def _generate_visitor_cookies() -> dict:
+    """Generate deterministic-format XHS visitor cookie tokens (a1, webId, web_session)."""
+    seed = f"{time.time_ns()}-{os.getpid()}".encode("utf-8")
+    h1 = hashlib.sha256(seed).hexdigest()
+    h2 = hashlib.md5(seed).hexdigest()
+    ts_hex = f"{int(time.time() * 1000):013x}"
+    a1 = (ts_hex + h1)[:52]
+    web_id = h2[:32]
+    web_session = f"030037a{h1[:27]}"
+    return {
+        "a1": a1,
+        "webId": web_id,
+        "web_session": web_session,
+    }
+
+
+def _init_xhs_visitor_cookies(cn_proxy: str = "") -> dict:
+    """Initialize a guest/visitor web_session cookie when the admin cookie pool is empty."""
+    flag = (os.getenv("XHS_VISITOR_COOKIE_FALLBACK", "true") or "").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return {}
+
+    # 1. Check Redis cache
+    try:
+        from app.core.redis_client import get_redis
+        raw = get_redis().get(_VISITOR_CACHE_KEY)
+        if raw:
+            cached = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+            if isinstance(cached, dict) and cached.get("web_session"):
+                return cached
+    except Exception:
+        pass
+
+    cookies = _generate_visitor_cookies()
+    proxy = cn_proxy or _get_xhs_cn_proxy()
+
+    # 2. Best-effort live activation to pick up server-issued web_session / gid cookies
+    try:
+        headers = _build_xhs_headers({"a1": cookies["a1"], "webId": cookies["webId"]})
+        with _make_httpx_client(headers, cn_proxy=proxy, timeout=5.0) as client:
+            resp = client.get("https://www.xiaohongshu.com/explore")
+            for k, v in resp.cookies.items():
+                if k and v:
+                    cookies[k] = v
+    except Exception:
+        pass
+
+    try:
+        from app.core.redis_client import get_redis
+        get_redis().setex(_VISITOR_CACHE_KEY, _VISITOR_CACHE_TTL, json.dumps(cookies))
+    except Exception:
+        pass
+    return cookies
+
+
+def _get_xhs_cookies(allow_visitor_fallback: bool = False) -> dict:
+    """Get XHS cookies from pool, return as dict for httpx.
+    When `allow_visitor_fallback=True` and pool is empty, falls back to visitor cookies."""
     try:
         from app.core.cookie_pool import get_cookie_from_pool
         import base64
         b64 = get_cookie_from_pool("xiaohongshu")
-        if not b64:
-            return {}
-        decoded = base64.b64decode(b64).decode("utf-8", errors="ignore")
-        # Parse Netscape format → dict
-        cookies = {}
-        for line in decoded.splitlines():
-            line = line.strip()
-            if line.startswith("#") or not line:
-                continue
-            parts = line.split("\t")
-            if len(parts) >= 7:
-                cookies[parts[5]] = parts[6]
-        return cookies
+        if b64:
+            decoded = base64.b64decode(b64).decode("utf-8", errors="ignore")
+            # Parse Netscape format → dict
+            cookies = {}
+            for line in decoded.splitlines():
+                line = line.strip()
+                if line.startswith("#") or not line:
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 7:
+                    cookies[parts[5]] = parts[6]
+            if cookies:
+                return cookies
     except Exception:
-        return {}
+        pass
+    if allow_visitor_fallback:
+        return _init_xhs_visitor_cookies()
+    return {}
 
 
 # ── yt-dlp attempt ────────────────────────────────────────────────────────
@@ -156,18 +255,10 @@ def _fetch_note_api(note_id: str, cookies: dict) -> Optional[dict]:
         "extra": {"need_body_topic": "1"},
     }
     headers = _build_xhs_headers(cookies)
-    cn_proxy = os.getenv("XIAOHONGSHU_PROXY_CN", "")
+    cn_proxy = _get_xhs_cn_proxy()
 
     try:
-        client_kwargs: dict[str, Any] = {
-            "headers": headers,
-            "follow_redirects": True,
-            "timeout": 15.0,
-        }
-        if cn_proxy:
-            client_kwargs["proxies"] = {"all://": cn_proxy}
-
-        with httpx.Client(**client_kwargs) as client:
+        with _make_httpx_client(headers, cn_proxy=cn_proxy, timeout=15.0) as client:
             resp = client.post(endpoint, json=payload)
 
         if resp.status_code == 461:
@@ -336,6 +427,8 @@ def extract_xiaohongshu(url: str, quality: str = "video") -> dict:
 
     cookies = _get_xhs_cookies()
     if not cookies:
+        cookies = _init_xhs_visitor_cookies()
+    if not cookies:
         return {
             "error_code": "xhs_login_required",
             "error_message": "Xiaohongshu yêu cầu cookie. Thêm cookie XHS vào Admin → Cookie Pool (platform: xiaohongshu).",
@@ -383,21 +476,13 @@ def scrape_xiaohongshu_profile(user_url: str, max_posts: int = 30) -> dict:
 
     headers = _build_xhs_headers(cookies)
     endpoint = "https://www.xiaohongshu.com/api/sns/web/v1/user_posted"
-    cn_proxy = os.getenv("XIAOHONGSHU_PROXY_CN", "")
+    cn_proxy = _get_xhs_cn_proxy()
 
     entries = []
     cursor = ""
 
     try:
-        client_kwargs: dict[str, Any] = {
-            "headers": headers,
-            "follow_redirects": True,
-            "timeout": 15.0,
-        }
-        if cn_proxy:
-            client_kwargs["proxies"] = {"all://": cn_proxy}
-
-        with httpx.Client(**client_kwargs) as client:
+        with _make_httpx_client(headers, cn_proxy=cn_proxy, timeout=15.0) as client:
             for _ in range(3):  # max 3 pages
                 params: dict[str, Any] = {"user_id": user_id, "cursor": cursor, "num": 30, "image_formats": "jpg,webp"}
                 resp = client.get(endpoint, params=params)
