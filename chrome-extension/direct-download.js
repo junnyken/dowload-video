@@ -96,7 +96,19 @@
     }
     const og = meta('og:video:secure_url') || meta('og:video:url') || meta('og:video');
     if (ok(og)) return { url: og, title, via: 'og:video' };
-    for (const v of document.querySelectorAll('video')) {
+    const vids = Array.from(document.querySelectorAll('video'));
+    vids.sort((a, b) => {
+      const pa = !a.paused && !a.ended ? 1 : 0;
+      const pb = !b.paused && !b.ended ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      const ra = a.getBoundingClientRect ? a.getBoundingClientRect() : { top: 0, bottom: 500 };
+      const rb = b.getBoundingClientRect ? b.getBoundingClientRect() : { top: 0, bottom: 500 };
+      const winH = (typeof window !== 'undefined' && window.innerHeight) || 800;
+      const va = ra.bottom > 50 && ra.top < winH - 50 ? 1 : 0;
+      const vb = rb.bottom > 50 && rb.top < winH - 50 ? 1 : 0;
+      return vb - va;
+    });
+    for (const v of vids) {
       const s = v.currentSrc || v.src || '';
       if (ok(s)) return { url: s, title, via: 'video' };
     }
@@ -120,9 +132,14 @@
   function pickSniffed(items) {
     const files = (items || []).filter((x) => x && x.kind === 'file' && x.encryption === 'none' && !STREAM.test(x.url));
     const audioHosts = new Set(files.filter((x) => /^audio\//.test(x.mime || '')).map((x) => hostOf(x.url)));
-    const videos = files.filter((x) => (/^video\//.test(x.mime || '') || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(x.url))
+    let videos = files.filter((x) => (/^video\//.test(x.mime || '') || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(x.url))
       && !audioHosts.has(hostOf(x.url)) && !/(^|\.)fbcdn\.net$/.test(hostOf(x.url)));
     if (!videos.length) return null;
+    const maxAt = Math.max(0, ...videos.map((x) => Number(x.at) || 0));
+    if (maxAt > 0) {
+      const recent = videos.filter((x) => maxAt - (Number(x.at) || 0) <= 6000);
+      if (recent.length) videos = recent;
+    }
     return videos.sort((a, b) => (b.size || 0) - (a.size || 0))[0];
   }
 

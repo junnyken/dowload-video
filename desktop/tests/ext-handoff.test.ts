@@ -63,11 +63,22 @@ test('planExtJob: regular platform page link uses normal probe flow', () => {
     {
       url: 'https://www.tiktok.com/@creator/video/7400000000000000001',
       title: 'TikTok clip',
-      referer: 'https://www.tiktok.com/@creator/video/7400000000000000001',
+      referer: 'https://www.tiktok.com/foryou',
     },
     { defaultQuality: 'best', guest: false },
   );
   assert.equal(plan.mode, 'probe');
+
+  const dyFeedPlan = planExtJob(
+    {
+      url: 'https://www.douyin.com/jingxuan?modal_id=7707972191091413731',
+      title: '抖音精选电脑版',
+      referer: 'https://www.douyin.com/jingxuan?modal_id=7707972191091413731',
+    },
+    { defaultQuality: 'best', guest: false },
+  );
+  assert.equal(dyFeedPlan.mode, 'probe');
+  assert.equal(dyFeedPlan.url, 'https://www.douyin.com/video/7707972191091413731');
 });
 
 test('cleanMediaTitle & planExtJob: strips SEO spam/domain noise while keeping movie title, episode & catalog code', () => {

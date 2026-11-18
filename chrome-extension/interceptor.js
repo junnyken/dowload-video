@@ -24,6 +24,12 @@
     '/aweme/v1/web/aweme/favorite/',   // video đã thích
     '/aweme/v1/web/search/item/',      // kết quả tìm kiếm
     '/aweme/v1/web/aweme/listv2/',     // danh sách tổng hợp
+    '/aweme/v1/web/tab/feed/',         // trang chủ / đề xuất
+    '/aweme/v1/web/channel/feed/',     // trang jingxuan / kênh chuyên mục
+    '/aweme/v1/web/module/feed/',      // module feed trên jingxuan
+    '/aweme/v2/web/feed/',             // feed v2
+    '/aweme/v1/web/familiar/feed/',    // bạn bè
+    '/aweme/v1/web/aweme/related/',    // video liên quan
   ];
 
   function isDouyinAPI(url) {
@@ -35,8 +41,32 @@
     }
   }
 
+  function extractAwemeList(json) {
+    if (!json || typeof json !== 'object') return [];
+    if (Array.isArray(json.aweme_list) && json.aweme_list.length) return json.aweme_list;
+    if (json.aweme_detail && typeof json.aweme_detail === 'object') return [json.aweme_detail];
+    const out = [];
+    if (Array.isArray(json.cards)) {
+      for (const c of json.cards) {
+        if (!c) continue;
+        if (typeof c.aweme === 'string') {
+          try { out.push(JSON.parse(c.aweme)); } catch {}
+        } else if (c.aweme && typeof c.aweme === 'object') {
+          out.push(c.aweme);
+        }
+      }
+    }
+    if (Array.isArray(json.data)) {
+      for (const d of json.data) {
+        const aw = d && (d.aweme || d.aweme_info);
+        if (aw && typeof aw === 'object') out.push(aw);
+      }
+    }
+    return out;
+  }
+
   function extractAndBroadcast(url, json) {
-    const list = json?.aweme_list || (json?.aweme_detail ? [json.aweme_detail] : null);
+    const list = extractAwemeList(json);
     if (!Array.isArray(list) || list.length === 0) return;
 
     const videos = list.map((aweme) => {

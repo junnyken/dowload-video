@@ -1,3 +1,7 @@
+## 0.23.2
+- Khắc phục lỗi khi bấm nút tải nổi kiểu IDM trên Douyin (`douyin.com/jingxuan?modal_id=...`) hoặc TikTok feed chuyển sang App Windows bị nhận nhầm là luồng `Other · Tải trên máy này`: tự động chuẩn hóa URL sang `douyin.com/video/<id>` và gửi thẳng luồng MP4 gốc không logo kèm Referer sang App Windows.
+- Khắc phục triệt để lỗi Tiện ích Chrome (`v5.30.3`) tải lặp lại video đầu tiên khi lướt sang các video tiếp theo trên Douyin/Reels: bắt đầy đủ các API feed (`/tab/feed/`, `/channel/feed/`, `/module/feed/`, `cards`) và ưu tiên đúng thẻ `<video>` đang phát trên màn hình.
+
 ## 0.23.1
 - Đồng bộ phiên đăng nhập Cloud Drive (Google Drive, OneDrive, Terabox) trực tiếp trong Desktop App (Cài đặt -> Tài khoản nền tảng, mã hóa DPAPI) và tự động nhận cookie phiên trình duyệt từ Tiện ích Chrome `v5.30.1` giúp tải tệp chia sẻ riêng tư hoặc vượt hạn mức tải công khai.
 - Mở khóa hoàn toàn luồng nhận video & stream từ Tiện ích Chrome sang Desktop App cho mọi tài khoản đã đăng nhập (kể cả gói Free/Starter/Pro) và tự động bắt liên kết Cloud Drive từ Clipboard để tải siêu tốc 16 kênh `aria2c`.

@@ -1467,15 +1467,40 @@ async function vgHelperTab(url) {
   return { tabId: w.tabs[0].id, windowId: w.id };
 }
 
+function vgNormalizeSocialUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+  try {
+    const u = new URL(rawUrl.trim());
+    if (/(^|\.)douyin\.com$/i.test(u.hostname)) {
+      const modalId = u.searchParams.get('modal_id');
+      if (modalId && /^\d{15,25}$/.test(modalId) && !/^\/(?:video|note)\/\d+/.test(u.pathname)) {
+        return `https://www.douyin.com/video/${modalId}`;
+      }
+    }
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 /** The file of the video page in `tabId`: the page's own data first, then the sniffer. */
-async function vgFindMedia(tabId) {
+async function vgFindMedia(tabId, targetUrl = '') {
+  const isDouyinTarget = /(^|\.)douyin\.com$/i.test((() => { try { return new URL(targetUrl).hostname; } catch { return ''; } })());
   const until = Date.now() + self.vgDirect.FIND_TIMEOUT_MS;
+  let attempts = 0;
   while (Date.now() < until) {
+    attempts++;
     await new Promise((r) => setTimeout(r, 1200));
     // Douyin: the media link the page itself received (content.js, 14/10) — the
     // VidGrab server's IP is blocked by Douyin, so this is the way that works
     const dy = await chrome.tabs.sendMessage(tabId, { type: 'VG_DOUYIN_DIRECT' }).catch(() => null);
     if (dy && dy.media && dy.media.url) return { url: dy.media.url, title: dy.media.title, via: 'douyin' };
+    if (isDouyinTarget) {
+      // Never fall through to generic <video> or pickSniffed on Douyin SPA feeds,
+      // because the tab holds preloaded/previous videos and would re-download the first video watched.
+      if (attempts >= 2) return null;
+      continue;
+    }
     try {
       const [res] = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: self.vgDirect.vgPageMedia });
       if (res && res.result && res.result.url) return res.result;
@@ -1577,6 +1602,9 @@ async function vgHandToApp(payload) {
 }
 
 async function vgSaveVideo(payload, signal, pageTabId) {
+  if (payload && payload.url) {
+    payload = { ...payload, url: vgNormalizeSocialUrl(payload.url) };
+  }
   const toApp = await vgHandToApp(payload);
   if (toApp) return toApp;
   // storage.local vg_direct === false: everything through the server (kill switch, tests)
@@ -1592,10 +1620,10 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   try {
     if (pageTabId != null) {
       const pageTab = await chrome.tabs.get(pageTabId).catch(() => null);
-      if (pageTab && vgSamePage(pageTab.url || '', payload.url)) tabId = pageTabId;
+      if (pageTab && (vgSamePage(pageTab.url || '', payload.url) || vgSamePage(vgNormalizeSocialUrl(pageTab.url || ''), payload.url))) tabId = pageTabId;
     }
     if (tabId == null) { helper = await vgHelperTab(payload.url); tabId = helper.tabId; ownTab = true; }
-    media = await vgFindMedia(tabId);
+    media = await vgFindMedia(tabId, payload.url);
   } catch { media = null; }
   if (ownTab && helper) chrome.windows.remove(helper.windowId).catch(() => {});
 
@@ -2633,19 +2661,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'VG_SOCIAL_PILL_CLICK') {
     (async () => {
       const tabId = sender && sender.tab ? sender.tab.id : null;
-      const url = typeof msg.url === 'string' && /^https?:\/\//i.test(msg.url)
+      const rawUrl = typeof msg.url === 'string' && /^https?:\/\//i.test(msg.url)
         ? msg.url
         : (sender && sender.tab && sender.tab.url) || '';
+      const url = vgNormalizeSocialUrl(rawUrl);
       if (!url) { sendResponse({ ok: false, error: 'invalid_url' }); return; }
       const title = typeof msg.title === 'string' ? msg.title.slice(0, 200) : '';
-      const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? msg.pageUrl : url;
+      const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? vgNormalizeSocialUrl(msg.pageUrl) : url;
+      const dy = msg.douyinDirect;
 
       // 1. Hand directly to running VidGrab Desktop App if available & enabled
       const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
       if (!handoffOff) {
         const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
         if (appConnected) {
-          const r = await vgSendToApp({ url, title, pageUrl }).catch(() => ({ ok: false }));
+          // If Douyin direct CDN URL is already captured in the browser, send that direct MP4 stream with Douyin Referer to Desktop App!
+          const appPayload = (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url))
+            ? { url: dy.url, title: dy.title || title || 'Douyin Video', pageUrl: 'https://www.douyin.com/', refererUrl: 'https://www.douyin.com/', kind: 'file' }
+            : { url, title, pageUrl: url };
+          const r = await vgSendToApp(appPayload).catch(() => ({ ok: false }));
           if (r && r.ok) {
             sendResponse({ ok: true, via: 'app', statusText: t('pill_sent_app') });
             return;
@@ -2654,7 +2688,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       // 2. Douyin direct stream from the user's browser session if provided
-      const dy = msg.douyinDirect;
       if (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url)) {
         const safeName = await vgFileName(dy.title || title || 'douyin', url);
         sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });

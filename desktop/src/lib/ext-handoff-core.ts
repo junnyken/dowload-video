@@ -261,12 +261,29 @@ function samePageKey(u: URL): string {
   return c.toString().replace(/\/$/, '');
 }
 
+function sameSiteHost(a: URL, b: URL): boolean {
+  const ha = a.hostname.toLowerCase().replace(/^(?:www\d*|m|v)\./, '');
+  const hb = b.hostname.toLowerCase().replace(/^(?:www\d*|m|v)\./, '');
+  return ha === hb;
+}
+
+function normalizeDouyinModalUrl(u: URL): URL {
+  if (/(^|\.)douyin\.com$/i.test(u.hostname)) {
+    const modalId = u.searchParams.get('modal_id');
+    if (modalId && /^\d{15,25}$/.test(modalId) && !/^\/(?:video|note)\/\d+/.test(u.pathname)) {
+      return new URL(`https://www.douyin.com/video/${modalId}`);
+    }
+  }
+  return u;
+}
+
 function isSniffedStream(job: ExtHandoffInput, target: URL, ref: URL | null): boolean {
   if (job.stream === true) return true;
   if (STREAM_EXT_RE.test(target.pathname) || STREAM_HINT_RE.test(target.pathname) || STREAM_HINT_RE.test(target.search)) {
     return true;
   }
-  if (ref && samePageKey(ref) !== samePageKey(target)) return true;
+  // Same-site feed -> post URL (e.g. douyin.com/jingxuan?modal_id=... -> douyin.com/video/..., or tiktok.com/foryou -> tiktok.com/@u/video/...) is a page link, NOT a raw stream.
+  if (ref && samePageKey(ref) !== samePageKey(target) && !sameSiteHost(ref, target)) return true;
   return false;
 }
 
@@ -331,8 +348,9 @@ export function planExtJob(
   opts: { defaultQuality: string; guest: boolean },
 ): ExtHandoffPlan {
   const url = String(job.url || '').trim();
-  const target = parseHttpUrl(url);
-  if (!target) return { mode: 'probe', url, platform: 'từ trình duyệt' };
+  const rawTarget = parseHttpUrl(url);
+  if (!rawTarget) return { mode: 'probe', url, platform: 'từ trình duyệt' };
+  const target = normalizeDouyinModalUrl(rawTarget);
 
   const ref = parseHttpUrl(job.referer);
   if (!isSniffedStream(job, target, ref)) {
