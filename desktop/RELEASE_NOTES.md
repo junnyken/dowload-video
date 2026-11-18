@@ -1,3 +1,8 @@
+## 0.22.11
+- Tích hợp sẵn bộ tăng tốc đa luồng `aria2c` (`1.37.0`, kiểm chứng toàn vẹn SHA-256) đẩy tốc độ tải file lẻ lớn (`.mp4`, `.mkv` từ PikPak / Cloud) lên 16 kết nối song song chuẩn IDM.
+- Hiển thị trạng thái sẵn sàng của bộ tăng tốc đa luồng 16 kênh và phiên bản `aria2c` ngay trong màn hình Cài đặt.
+- Đồng bộ kiểm soát chế độ Tải siêu tốc (IDM Turbo) cho tài khoản đăng nhập, tự động hạ về luồng tiêu chuẩn cho Khách chưa đăng nhập.
+
 ## 0.22.10
 - Hỗ trợ tải trực tiếp video từ liên kết chia sẻ PikPak Cloud (`mypikpak.com/s/...`) qua máy chủ VidGrab kết hợp chia khối 10MB.
 - Mở khóa chế độ Tải siêu tốc kiểu IDM (chia khối 10MB, tự nối `.part` khi đứt mạng 90–99%, tự làm mới link 403) cho toàn bộ tài khoản đã đăng ký (từ gói Free trở lên).

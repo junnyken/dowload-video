@@ -188,6 +188,9 @@ jobs:
           RAW_NOTES: ${{ inputs.release_notes }}
           TARGET_REPO: "junnyken/vidgrab-releases"
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $env:GH_TOKEN = $env:GH_TOKEN.Trim()
+
           $ver = "${{ steps.meta.outputs.version }}"
           $tag = "v$ver"
           $sha = "${{ steps.verify.outputs.sha256 }}"
@@ -213,23 +216,28 @@ jobs:
           Set-Content -Path $bodyFile -Value $body -Encoding utf8
 
           # Upload as draft first so both .exe and .sig exist before marking latest (see desktop_release.py)
-          $prevEap = $ErrorActionPreference
-          $ErrorActionPreference = "Continue"
-          gh release view $tag --repo $env:TARGET_REPO *> $null
-          $exists = ($LASTEXITCODE -eq 0)
-          $ErrorActionPreference = $prevEap
+          $apiHeaders = @{
+            Authorization = "Bearer $($env:GH_TOKEN)"
+            Accept = "application/vnd.github+json"
+            "User-Agent" = "vidgrab-release-publisher"
+          }
+          $allRels = Invoke-RestMethod -Headers $apiHeaders -Uri "https://api.github.com/repos/$($env:TARGET_REPO)/releases?per_page=30"
+          $existingRel = $allRels | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
 
-          if ($exists) {
-            Write-Host "Release $tag đã tồn tại trên $env:TARGET_REPO — cập nhật assets và nội dung..."
+          if ($existingRel) {
+            Write-Host "Release $tag đã tồn tại trên $env:TARGET_REPO (id=$($existingRel.id)) — cập nhật assets và nội dung..."
             gh release upload $tag $exe $sig --repo $env:TARGET_REPO --clobber
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh release edit $tag --repo $env:TARGET_REPO --title "VidGrab $ver" --notes-file $bodyFile --draft=false --latest
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $patchBody = @{ tag_name = $tag; name = "VidGrab $ver"; body = $body; draft = $false; make_latest = "true" } | ConvertTo-Json -Depth 5
+            Invoke-RestMethod -Method Patch -Headers $apiHeaders -ContentType "application/json; charset=utf-8" -Uri "https://api.github.com/repos/$($env:TARGET_REPO)/releases/$($existingRel.id)" -Body ([System.Text.Encoding]::UTF8.GetBytes($patchBody)) | Out-Null
           } else {
             Write-Host "Tạo draft release $tag kèm .exe + .sig rồi mở công khai..."
             gh release create $tag $exe $sig --repo $env:TARGET_REPO --title "VidGrab $ver" --notes-file $bodyFile --draft
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh release edit $tag --repo $env:TARGET_REPO --draft=false --latest
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $allRelsAfter = Invoke-RestMethod -Headers $apiHeaders -Uri "https://api.github.com/repos/$($env:TARGET_REPO)/releases?per_page=15"
+            $draftRel = $allRelsAfter | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
+            if (-not $draftRel) { Write-Error "Không tìm thấy draft release vừa tạo cho $tag"; exit 1 }
+            $patchBody = @{ draft = $false; make_latest = "true" } | ConvertTo-Json
+            Invoke-RestMethod -Method Patch -Headers $apiHeaders -ContentType "application/json; charset=utf-8" -Uri "https://api.github.com/repos/$($env:TARGET_REPO)/releases/$($draftRel.id)" -Body ([System.Text.Encoding]::UTF8.GetBytes($patchBody)) | Out-Null
           }
           Write-Host "Đã phát hành thành công https://github.com/$env:TARGET_REPO/releases/tag/$tag"
