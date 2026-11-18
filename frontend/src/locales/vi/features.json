@@ -1,7 +1,7 @@
 {
-  "badge": "RA MẮT HỆ SINH THÁI VIDGRAB MỚI · WEB + EXTENSION + WINDOWS APP",
-  "heroTitle": "Không chỉ dán link trên web — Trọn bộ Hệ sinh thái Tải Phim, Anime & Studio AI",
-  "heroSub": "Khám phá loạt vũ khí độc quyền giúp VidGrab vượt xa công cụ tải thông thường: công nghệ tải siêu tốc kiểu IDM (chia khối 10MB + tự nối .part 90–99%), tải thẳng video chia sẻ PikPak Cloud, nút tải nổi ngay trên khung video, giải mã luồng HLS/DASH 4K, ghép phụ đề chìm vào MP4 không giảm nét và xử lý AI tự động.",
+  "badge": "RA MẮT VIDGRAB AI STUDIO v2 · WINDOWS · MACOS · MOBILE PWA · EXTENSION",
+  "heroTitle": "Không chỉ dán link trên web — Trọn bộ Hệ sinh thái Tải Siêu Tốc & AI Creator Studio",
+  "heroSub": "Vượt xa công cụ tải thông thường: động cơ aria2c 16 kênh kiểu IDM trên Windows & macOS v0.22.11, chia sẻ link 1 chạm từ TikTok/YouTube trên Mobile PWA, AI Tải & Việt hóa 1 chạm, AI Cắt Clip Viral 9:16 và Chống trùng lặp Reup 3 mức độ.",
   "ctaPricing": "Xem Bảng giá & Mở khóa ngay",
   "ctaWindows": "Tải App Windows miễn phí",
   "ctaExtension": "Cài Tiện ích Chrome / Edge",
@@ -10,18 +10,18 @@
   "pillars": [
     {
       "tag": "Mảnh ghép 01",
-      "title": "Web Studio & AI Cloud",
-      "desc": "Tải hàng loạt 100 link nén .ZIP, Phiên âm giọng nói AI (Whisper ASR), Dịch phụ đề song ngữ, Xóa thông tin gốc Reup & Nung cứng Hardsub MP4 ngay trên mây."
+      "title": "Web Studio, AI Cloud & Mobile PWA",
+      "desc": "Mobile PWA chia sẻ 1 chạm từ TikTok/YouTube, AI Tải & Việt hóa 1 chạm, AI Viral Clipper 9:16, Chống trùng lặp Reup v2 3 mức + Smart Metadata và Batch 100 link .ZIP."
     },
     {
       "tag": "Mảnh ghép 02",
       "title": "Tiện ích Trình duyệt v5.29",
-      "desc": "Tự động bắt luồng video đang phát, hiện nút tải nổi góc phải khung hình, giải mã HLS AES-128/SAMPLE-AES thẳng xuống ổ cứng OPFS không tốn RAM và tự nối tải khi đứt mạng."
+      "desc": "Tự động bắt luồng video đang phát, hiện nút tải nổi góc phải khung hình, giải mã HLS AES-128 & tải song song đa Range thẳng xuống ổ cứng OPFS không tốn RAM."
     },
     {
       "tag": "Mảnh ghép 03",
-      "title": "Ứng dụng Windows v0.22.9",
-      "desc": "Sức mạnh IDM kết hợp yt-dlp + ffmpeg ngay trên máy: chia khối 10MB cho file Cloud/PikPak, tự nối lại tệp .part khi rớt mạng ở 90–99%, nhận Cookie phiên đăng nhập an toàn và nhúng thẳng phụ đề mềm vào MP4."
+      "title": "App Windows & macOS v0.22.11",
+      "desc": "Sức mạnh aria2c 16 kênh + chia khối 10MB kết hợp yt-dlp & ffmpeg ngay trên máy Windows & Apple Silicon: tự nối .part khi rớt mạng 90–99%, handoff Cookie VIP và ghép phụ đề chìm MP4."
     }
   ],
   "flagshipTitle": "8 Tính năng Đột phá Mới nhất trên Hệ sinh thái VidGrab",
@@ -30,12 +30,12 @@
     {
       "tier": "Miễn phí khi Đăng ký (Free+)",
       "tierTone": "pro",
-      "title": "Tải Siêu Tốc Kiểu IDM — Chia khối 10MB, Tự nối .part & Làm mới Link 403",
-      "desc": "Công nghệ tăng tốc độc quyền trên App Windows v0.22.9: tự động chia file tải trực tiếp (.mp4/.mkv) thành từng khối 10MB chống bóp băng thông CDN, tự nối tiếp tệp .part tối đa 3 lần khi rớt mạng/SSL/EOF ở 90–99% và làm mới link hết hạn 403 từ tab Chrome đang mở.",
+      "title": "Tải Siêu Tốc 16 Kênh aria2c (Windows & macOS v0.22.11) + Multi-Range OPFS",
+      "desc": "Động cơ tăng tốc thế hệ mới trên App Windows & macOS v0.22.11: tích hợp aria2c 16 kết nối song song + chia khối 10MB chống bóp băng thông CDN, tự nối tiếp tệp .part khi rớt mạng 90–99% và làm mới link hết hạn 403.",
       "highlights": [
-        "Chia khối HTTP Range 10MB chuẩn IDM: tối đa băng thông đường truyền",
+        "aria2c 16 luồng song song: kéo tối đa băng thông đường truyền cáp quang",
         "Auto-Resume thông minh: rớt mạng lúc 95% vẫn nối tiếp, không mất dữ liệu",
-        "Mở rộng cho toàn bộ tài khoản đã đăng ký (từ gói Free trở lên)"
+        "Hỗ trợ cả Windows 64-bit (.exe) và macOS Apple Silicon (.dmg)"
       ]
     },
     {
@@ -105,14 +105,14 @@
       ]
     },
     {
-      "tier": "Starter · Pro · Team",
-      "tierTone": "starter",
-      "title": "Studio Phụ đề AI, Xóa dấu vết Reup & Kho Batch .ZIP",
-      "desc": "Bộ công cụ hậu kỳ ngay trên trình duyệt cho Creator: tạo phụ đề từ giọng nói bằng AI, dịch hàng loạt sang song ngữ, làm sạch Metadata/MD5/Lật khung hình và tải trọn kênh nén .ZIP.",
+      "tier": "Pro · Team",
+      "tierTone": "pro",
+      "title": "AI Studio v2: Việt hóa 1 chạm, Viral Clipper 9:16 & Chống trùng Reup 3 mức",
+      "desc": "Bộ 3 vũ khí AI cho Creator trên Web & Mobile PWA: AI nghe & dịch nung phụ đề tiếng Việt 1 chạm, AI tự cắt 3–5 clip dọc 9:16 bắt Hook và Chống trùng lặp Reup v2 phá pHash/Audio/MD5 + gợi ý Hashtag.",
       "highlights": [
-        "Starter: Mở khóa 4K MXH, Batch 20 link (.ZIP), ASR 30 phút/ngày",
-        "Pro: Làm sạch Reup chuyên sâu, Nung cứng Hardsub MP4 + 3.000 API",
-        "Team: 1.000 lượt/ngày, 15.000 API/tháng + 5 ghế làm việc nhóm"
+        "AI Việt hóa 1 chạm: dán link video nước ngoài -> ra MP4 có sẵn phụ đề Việt",
+        "AI Viral Clipper 9:16: tự chọn điểm cao trào, crop dọc + sub cho TikTok/Reels",
+        "Chống trùng Reup v2 (3 mức) + Smart Clean Filename & Tự động gợi ý Hashtag"
       ]
     }
   ],
@@ -144,10 +144,10 @@
       "who": "Dành cho người xem phim web Full HD, nhà sáng tạo Reup chuyên nghiệp và lập trình viên cá nhân.",
       "perks": [
         "Mở khóa Bắt luồng video mọi trang web trên Trình duyệt (tới 1080p)",
-        "Mở khóa Nút tải nổi thông minh trên khung <video> + Phụ đề .SRT",
-        "Tải siêu tốc kiểu IDM (chia khối 10MB, tự nối .part) + PikPak Cloud",
-        "Làm sạch Reup (Xóa Metadata, Đổi MD5, Lật gương) + Nung Hardsub MP4",
-        "300 lượt tải/ngày · Batch 100 link (.ZIP) · ASR 120 phút/ngày",
+        "Mở khóa AI Tải & Việt hóa 1 chạm + AI Viral Clipper 9:16",
+        "Chống trùng lặp Reup v2 (3 mức phá pHash/Audio/MD5) + Smart Metadata",
+        "Tải siêu tốc 16 kênh aria2c (App Windows & macOS v0.22.11) + PikPak Cloud",
+        "300 lượt tải/ngày · Batch 100 link (.ZIP) · ASR 120 phút/ngày · Nút tải nổi",
         "Tặng 3.000 lượt gọi REST API/tháng (+500 lượt thưởng lần đầu)"
       ],
       "cta": "Nâng cấp Gói Pro →",

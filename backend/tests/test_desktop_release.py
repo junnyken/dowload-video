@@ -133,3 +133,22 @@ def test_a_newer_release_replaces_the_last_good(gh):
     gh.delete(dr.CACHE_KEY)
     dr._mem.update(at=0.0, ttl=0, val=None)
     assert dr.current(lambda repo: None)["latest"] == "0.11.0"
+
+
+def test_macos_dmg_and_sha256_parsed_when_present(app, gh, monkeypatch):
+    sha_win = "a" * 64
+    sha_mac = "b" * 64
+    dmg_url = f"https://github.com/{REPO}/releases/download/v0.10.0/VidGrab_0.10.0_aarch64.dmg"
+    rel = release(
+        body=f"VidGrab 0.10.0\n\n- aria2c & macOS\n\nSHA-256: {sha_win}\nSHA-256-MACOS: {sha_mac.upper()}\n",
+    )
+    rel["assets"].append({"browser_download_url": dmg_url})
+
+    out = dr.current(lambda repo: rel)
+    assert out["macosDownloadUrl"] == dmg_url
+    assert out["macosSha256"] == sha_mac
+
+    monkeypatch.setattr(dr, "github_latest", lambda fetch=None: dr.parse_release(rel, REPO))
+    v = app.get("/api/v1/client/version").json()
+    assert v["macosDownloadUrl"] == dmg_url
+    assert v["macosSha256"] == sha_mac

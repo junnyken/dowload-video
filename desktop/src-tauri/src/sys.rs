@@ -33,7 +33,7 @@ pub fn disk_free(path: &Path) -> io::Result<u64> {
     }
 }
 
-/// Opens Explorer with the file selected.
+/// Opens Explorer / Finder with the file selected.
 pub fn reveal(path: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
@@ -51,7 +51,12 @@ pub fn reveal(path: &Path) -> io::Result<()> {
         std::process::Command::new(explorer).raw_arg(format!("/select,\"{s}\"")).spawn()?;
         Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("/usr/bin/open").arg("-R").arg(path).spawn()?;
+        Ok(())
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     {
         // Dev only: open the containing folder.
         let dir = path.parent().ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
@@ -96,7 +101,19 @@ pub fn open_in_chrome(url: &str, linked: Option<&std::path::Path>) -> io::Result
             return Ok(true);
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let mac_chrome = Path::new("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+        let chosen = linked
+            .filter(|p| p.is_file())
+            .or_else(|| mac_chrome.is_file().then_some(mac_chrome));
+        if let Some(exe) = chosen {
+            if std::process::Command::new(exe).arg(url).spawn().is_ok() {
+                return Ok(true);
+            }
+        }
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let _ = linked;
     open_url(url).map(|_| false)
 }
@@ -139,7 +156,12 @@ fn shell_open(target: &std::ffi::OsStr) -> io::Result<()> {
             Err(io::Error::other(format!("ShellExecuteW failed ({r})")))
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("/usr/bin/open").arg(target).spawn()?;
+        Ok(())
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     {
         std::process::Command::new("xdg-open").arg(target).spawn()?;
         Ok(())

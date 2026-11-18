@@ -18,6 +18,20 @@
           "checksumSource": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS",
           "archive": null,
           "extractedSha256": "767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795"
+        },
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+          "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa",
+          "checksumSource": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS",
+          "archive": null,
+          "extractedSha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+          "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa",
+          "checksumSource": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS",
+          "archive": null,
+          "extractedSha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"
         }
       }
     },
@@ -40,6 +54,20 @@
           "checksumSource": "not chosen yet (Linux is dev-only; e.g. a dated BtbN/FFmpeg-Builds release + its checksums.sha256)",
           "archive": null,
           "extractedSha256": "REPLACE_ME"
+        },
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64",
+          "sha256": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+          "checksumSource": "https://api.github.com/repos/eugeneware/ffmpeg-static/releases/tags/b6.1.1 (GitHub asset sha256 digest)",
+          "archive": null,
+          "extractedSha256": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64",
+          "sha256": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894",
+          "checksumSource": "https://api.github.com/repos/eugeneware/ffmpeg-static/releases/tags/b6.1.1 (GitHub asset sha256 digest)",
+          "archive": null,
+          "extractedSha256": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
         }
       }
     },
@@ -62,6 +90,20 @@
           "checksumSource": "not chosen yet (Linux is dev-only)",
           "archive": null,
           "extractedSha256": "REPLACE_ME"
+        },
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64",
+          "sha256": "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64",
+          "checksumSource": "https://api.github.com/repos/eugeneware/ffmpeg-static/releases/tags/b6.1.1 (GitHub asset sha256 digest)",
+          "archive": null,
+          "extractedSha256": "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64",
+          "sha256": "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0",
+          "checksumSource": "https://api.github.com/repos/eugeneware/ffmpeg-static/releases/tags/b6.1.1 (GitHub asset sha256 digest)",
+          "archive": null,
+          "extractedSha256": "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0"
         }
       }
     },
@@ -89,6 +131,28 @@
           },
           "extractedSha256": "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a116a3c841f21",
           "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.sha256sum"
+        },
+        "aarch64-apple-darwin": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-aarch64-apple-darwin.zip",
+          "sha256": "5cd46d6268f6f78f5d88bdc7159d20bd44cdaa4b3303474839f87ec6fe7ae25c",
+          "checksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-aarch64-apple-darwin.zip.sha256sum",
+          "archive": {
+            "type": "zip",
+            "member": "deno"
+          },
+          "extractedSha256": "b73737579d5a84c160e3316487594783fa5c15f4e13252a6a07050b755317f1a",
+          "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-aarch64-apple-darwin.sha256sum"
+        },
+        "x86_64-apple-darwin": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-apple-darwin.zip",
+          "sha256": "95daaff11c116a52ad54785e7914c8e9c9cdcaba793c5ed929c74ca2d8e6259a",
+          "checksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-apple-darwin.zip.sha256sum",
+          "archive": {
+            "type": "zip",
+            "member": "deno"
+          },
+          "extractedSha256": "325cf9c4b7156f4efd96ad22177a276a4bf4384147d4c9d9f40f9caee28e5719",
+          "extractedChecksumSource": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-apple-darwin.sha256sum"
         }
       }
     },
@@ -109,6 +173,20 @@
           "url": "REPLACE_ME",
           "sha256": "REPLACE_ME",
           "checksumSource": "not chosen yet (Linux is dev-only)",
+          "archive": null,
+          "extractedSha256": "REPLACE_ME"
+        },
+        "aarch64-apple-darwin": {
+          "url": "REPLACE_ME",
+          "sha256": "REPLACE_ME",
+          "checksumSource": "not bundled on macOS (official aria2 does not ship static macOS binary; yt-dlp uses -N 16 native turbo)",
+          "archive": null,
+          "extractedSha256": "REPLACE_ME"
+        },
+        "x86_64-apple-darwin": {
+          "url": "REPLACE_ME",
+          "sha256": "REPLACE_ME",
+          "checksumSource": "not bundled on macOS (official aria2 does not ship static macOS binary; yt-dlp uses -N 16 native turbo)",
           "archive": null,
           "extractedSha256": "REPLACE_ME"
         }

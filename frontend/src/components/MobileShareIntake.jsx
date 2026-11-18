@@ -116,6 +116,13 @@ export default function MobileShareIntake({ onNavigate }) {
     close();
   };
 
+  const handleOpenAiTool = (tab) => {
+    if (url) {
+      window.dispatchEvent(new CustomEvent('vidgrab:share-open-tool', { detail: { url, tab } }));
+    }
+    goHome();
+  };
+
   if (!show) return null;
 
   const plat = platform || { name: 'Video', emoji: '🌐', color: 'var(--vg-fg-muted)' };
@@ -232,6 +239,37 @@ export default function MobileShareIntake({ onNavigate }) {
             <span className="text-xl">✨</span>
             <span className="text-[11px] font-semibold leading-tight text-center">{t('share.noWatermark')}</span>
           </button>
+        </div>
+
+        {/* AI Studio 1-Tap shortcuts */}
+        <div className="px-5 pb-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-fg-muted mb-2">{t('share.aiQuickTitle')}</p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleOpenAiTool('vietnamize')}
+              className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl bg-accent-soft border border-accent/30 text-accent-text hover:opacity-90 transition-all active:scale-95"
+            >
+              <span className="text-base">🇻🇳</span>
+              <span className="text-[10px] font-bold leading-tight text-center">{t('share.aiVietnamize')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAiTool('viral')}
+              className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl bg-surface-2 border border-line text-fg-2 hover:border-accent/30 transition-all active:scale-95"
+            >
+              <span className="text-base">🔥</span>
+              <span className="text-[10px] font-bold leading-tight text-center">{t('share.aiViral')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAiTool('reup')}
+              className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl bg-surface-2 border border-line text-fg-2 hover:border-accent/30 transition-all active:scale-95"
+            >
+              <span className="text-base">🛡️</span>
+              <span className="text-[10px] font-bold leading-tight text-center">{t('share.aiReup')}</span>
+            </button>
+          </div>
         </div>
 
         {/* Secondary actions (expandable) */}

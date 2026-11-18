@@ -15,7 +15,19 @@
     "install": "Install now — free"
   },
   "quickTools": {
-    "title": "Quick tools",
+    "title": "Quick Tools & AI Studio",
+    "vietnamize": {
+      "label": "AI Translate",
+      "desc": "ASR + burn sub"
+    },
+    "viral": {
+      "label": "Viral 9:16",
+      "desc": "AI hook clipper"
+    },
+    "reup": {
+      "label": "Anti-Detect",
+      "desc": "MD5 & pHash clean"
+    },
     "subtitle": {
       "label": "Subtitles",
       "desc": "Download or burn in subtitles"
@@ -83,6 +95,10 @@
     "untitled": "Untitled",
     "hd": "Download HD",
     "noWatermark": "No watermark",
+    "aiQuickTitle": "1-Tap AI Studio",
+    "aiVietnamize": "AI Vietnamize",
+    "aiViral": "9:16 Viral Clip",
+    "aiReup": "Reup Clean",
     "moreOptions": "More options",
     "addToBatch": "Add to bulk download",
     "cancel": "Cancel"

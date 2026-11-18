@@ -68,6 +68,14 @@ export function buildPlanRows(tiers) {
       get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('reupPro') : false),
     },
     {
+      key: 'aiVietnamize', label: tp('rows.aiVietnamize'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('vietnamizePro') : false),
+    },
+    {
+      key: 'aiViralClips', label: tp('rows.aiViralClips'),
+      get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('viralClipsPro') : false),
+    },
+    {
       key: 'burnSub', label: tp('rows.burnSub'),
       get: (t) => (t.id === 'pro' || t.id === 'team' ? tp('burnSubPro') : tp('burnSubFree')),
     },

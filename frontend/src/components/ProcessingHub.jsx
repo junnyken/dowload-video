@@ -542,6 +542,7 @@ function CopyInline({ text, label }) {
 }
 
 function ReupCleanTab({ localPath, sourceUrl, title, platform, processing, userTier, onOpenUpgrade }) {
+  const [urlInput, setUrlInput]     = useState(sourceUrl || '');
   const [level, setLevel]           = useState('medium');
   const [mirrorFlip, setMirrorFlip] = useState(false);
   const [cleanName, setCleanName]   = useState(true);
@@ -550,11 +551,14 @@ function ReupCleanTab({ localPath, sourceUrl, title, platform, processing, userT
   const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
   const st = processing.getState('reup');
 
+  const effectiveUrl = (sourceUrl || urlInput).trim();
+
   const handleSubmit = async () => {
     if (!isPro) {
       onOpenUpgrade?.('tier_required_feature');
       return;
     }
+    if (!localPath && !effectiveUrl) return;
     const body = {
       level,
       mirror_flip: mirrorFlip,
@@ -563,7 +567,7 @@ function ReupCleanTab({ localPath, sourceUrl, title, platform, processing, userT
       filename:    title || 'video',
     };
     if (localPath) body.local_path = localPath;
-    else           body.url        = sourceUrl;
+    else           body.url        = effectiveUrl;
     try { await processing.runReupClean(body); } catch { /* error captured in hook state */ }
   };
 
@@ -588,6 +592,21 @@ function ReupCleanTab({ localPath, sourceUrl, title, platform, processing, userT
           <Crown className="w-3 h-3" /> PRO
         </span>
       </div>
+
+      {!sourceUrl && !localPath && (
+        <div>
+          <label className="text-[10px] text-fg-muted uppercase tracking-wide">
+            {isEn ? 'Video URL' : 'Link video nguồn'}
+          </label>
+          <input
+            type="url"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://www.tiktok.com/..."
+            className="mt-1 w-full bg-surface-2 border border-line rounded-lg px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+          />
+        </div>
+      )}
 
       {/* 3 intensity levels */}
       <div className="space-y-2">
@@ -711,6 +730,7 @@ const TARGET_LANGS = [
 ];
 
 function VietnamizeTab({ sourceUrl, title, processing, userTier, onOpenUpgrade }) {
+  const [urlInput, setUrlInput]     = useState(sourceUrl || '');
   const [targetLang, setTargetLang] = useState('vi');
   const [burnSubs, setBurnSubs]     = useState(true);
   const [fontSize, setFontSize]     = useState(22);
@@ -719,15 +739,17 @@ function VietnamizeTab({ sourceUrl, title, processing, userTier, onOpenUpgrade }
   const isPro = ['pro', 'team', 'enterprise', 'api'].includes(userTier);
   const st = processing.getState('vietnamize');
 
+  const effectiveUrl = (sourceUrl || urlInput).trim();
+
   const handleSubmit = async () => {
     if (!isPro) {
       onOpenUpgrade?.('tier_required_feature');
       return;
     }
-    if (!sourceUrl) return;
+    if (!effectiveUrl) return;
     try {
       await processing.runVietnamize({
-        url: sourceUrl,
+        url: effectiveUrl,
         target_lang: targetLang,
         source_lang: 'auto',
         burn_subtitles: burnSubs,
@@ -755,6 +777,21 @@ function VietnamizeTab({ sourceUrl, title, processing, userTier, onOpenUpgrade }
           <Crown className="w-3 h-3" /> PRO
         </span>
       </div>
+
+      {!sourceUrl && (
+        <div>
+          <label className="text-[10px] text-fg-muted uppercase tracking-wide">
+            {isEn ? 'Video URL' : 'Dán link video cần Việt hóa'}
+          </label>
+          <input
+            type="url"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=... hoặc TikTok / Douyin"
+            className="mt-1 w-full bg-surface-2 border border-line rounded-lg px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -812,7 +849,7 @@ function VietnamizeTab({ sourceUrl, title, processing, userTier, onOpenUpgrade }
 
       <button
         onClick={handleSubmit}
-        disabled={st.loading || !sourceUrl}
+        disabled={st.loading || !effectiveUrl}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
       >
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
@@ -841,6 +878,7 @@ function VietnamizeTab({ sourceUrl, title, processing, userTier, onOpenUpgrade }
 
 // ── Tab: AI Viral Clipper (9:16 Highlights) ─────────────────────────────────
 function ViralClipsTab({ sourceUrl, title, duration, processing, userTier, onOpenUpgrade }) {
+  const [urlInput, setUrlInput]         = useState(sourceUrl || '');
   const [aspectRatio, setAspectRatio]   = useState('9:16');
   const [maxClips, setMaxClips]         = useState(3);
   const [clipDuration, setClipDuration] = useState(45);
@@ -851,15 +889,17 @@ function ViralClipsTab({ sourceUrl, title, duration, processing, userTier, onOpe
   const tooShort = duration > 0 && duration < 30;
   const st = processing.getState('viral');
 
+  const effectiveUrl = (sourceUrl || urlInput).trim();
+
   const handleSubmit = async () => {
     if (!isPro) {
       onOpenUpgrade?.('tier_required_feature');
       return;
     }
-    if (!sourceUrl || tooShort) return;
+    if (!effectiveUrl || tooShort) return;
     try {
       await processing.runViralClips({
-        url: sourceUrl,
+        url: effectiveUrl,
         max_clips: maxClips,
         clip_duration: clipDuration,
         aspect_ratio: aspectRatio,
@@ -888,6 +928,21 @@ function ViralClipsTab({ sourceUrl, title, duration, processing, userTier, onOpe
           <Crown className="w-3 h-3" /> PRO
         </span>
       </div>
+
+      {!sourceUrl && (
+        <div>
+          <label className="text-[10px] text-fg-muted uppercase tracking-wide">
+            {isEn ? 'Long video URL' : 'Dán link video dài cần tách Clip Viral'}
+          </label>
+          <input
+            type="url"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=... (tối thiểu 30s)"
+            className="mt-1 w-full bg-surface-2 border border-line rounded-lg px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+          />
+        </div>
+      )}
 
       {tooShort && (
         <div className="p-2.5 rounded-xl bg-warning-soft border border-warning/30 text-xs text-warning">
@@ -958,7 +1013,7 @@ function ViralClipsTab({ sourceUrl, title, duration, processing, userTier, onOpe
 
       <button
         onClick={handleSubmit}
-        disabled={st.loading || !sourceUrl || tooShort}
+        disabled={st.loading || !effectiveUrl || tooShort}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg font-semibold text-sm transition-colors cursor-pointer"
       >
         {st.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -1050,6 +1105,11 @@ function PackageTab({ videoInfo, sourceUrl }) {
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ProcessingHub({ videoInfo, localPath, sourceUrl, onClose, userTier = 'free', initialTab = 'trim', onOpenUpgrade }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
+  if (initialTab !== prevInitialTab) {
+    setPrevInitialTab(initialTab);
+    setActiveTab(initialTab);
+  }
   const { t } = useTranslation('results');
   const processing = useProcessing();
 

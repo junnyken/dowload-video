@@ -1,17 +1,46 @@
 {
-  "title": "Tải VidGrab cho Windows",
-  "intro": "Ứng dụng VidGrab cho máy tính: tải video từ TikTok, YouTube, Facebook, Instagram ngay trên Windows.",
+  "title": "Tải VidGrab cho Máy tính & Điện thoại",
+  "intro": "Bộ ứng dụng VidGrab đa nền tảng: App Windows/macOS tải siêu tốc kiểu IDM + 16 luồng aria2c, và ứng dụng web PWA cho Android/iOS chia sẻ link 1 chạm.",
+  "tabs": {
+    "windows": "Windows (64-bit)",
+    "macos": "macOS (Apple Silicon)",
+    "mobile": "Điện thoại (Android / iOS)"
+  },
   "checking": "Đang kiểm tra phiên bản mới nhất...",
   "versionError": "Không lấy được thông tin phiên bản. Vui lòng thử lại.",
   "retry": "Thử lại",
   "latest": "Phiên bản mới nhất: {{version}}",
-  "downloadExe": "Tải bộ cài (.exe)",
+  "downloadExe": "Tải bộ cài Windows (.exe)",
+  "downloadDmg": "Tải bộ cài macOS Apple Silicon (.dmg)",
+  "macosPending": "Bản .dmg mới đang được đồng bộ lên trang phát hành — tải trực tiếp tại GitHub Releases:",
+  "macosReleasesLink": "Mở trang phát hành macOS (.dmg) trên GitHub",
   "updating": "Bộ cài đang được cập nhật, vui lòng quay lại sau.",
-  "shaNote": "Mã kiểm tra SHA-256 của bộ cài (so với kết quả lệnh <code>Get-FileHash</code>, xem Câu hỏi thường gặp):",
+  "shaNote": "Mã kiểm tra SHA-256 của bộ cài Windows (so với kết quả lệnh <code>Get-FileHash</code>):",
+  "shaNoteMacos": "Mã kiểm tra SHA-256 của bộ cài macOS (chạy <code>shasum -a 256</code> trong Terminal):",
   "reqTitle": "Yêu cầu hệ thống",
   "reqBody": "Windows 10/11 64-bit.",
+  "macosReqBody": "macOS 11 Big Sur trở lên · chip Apple Silicon (M1 / M2 / M3 / M4).",
   "installTitle": "Lưu ý khi cài đặt",
-  "installSmartScreen": "Windows SmartScreen có thể hiện cảnh báo “Windows protected your PC” vì ứng dụng chưa được ký số. Hãy bấm “More info” → “Run anyway” để tiếp tục cài đặt.",
+  "installSmartScreen": "Windows SmartScreen có thể hiện cảnh báo “Windows protected your PC” vì ứng dụng chưa được ký số thương mại. Hãy bấm “More info” → “Run anyway” để tiếp tục cài đặt.",
   "installKeepData": "Cài bản mới đè lên bản cũ vẫn giữ nguyên video đã tải và các kênh đã lưu.",
-  "sharedAccount": "Đăng nhập trong ứng dụng dùng chung tài khoản và hạn mức hằng ngày với website."
+  "macosGatekeeper": "Lần đầu mở app trên macOS: bấm Chuột phải (hoặc giữ Control + click) vào VidGrab.app → chọn Mở (Open). Nếu macOS vẫn chặn, mở Terminal và chạy: xattr -cr /Applications/VidGrab.app",
+  "macosEngineNote": "Tích hợp sẵn yt-dlp + FFmpeg + Deno được kiểm chứng SHA-256 và động cơ chia khối 16 luồng đa kênh.",
+  "windowsTurboNote": "Đã tích hợp sẵn động cơ tải đa luồng aria2c (16 kết nối song song) + chia khối 10MB + tự nối tệp .part.",
+  "mobileTitle": "Cài VidGrab lên Điện thoại (PWA + Chia sẻ 1 chạm)",
+  "mobileIntro": "Không cần qua App Store hay file APK rủi ro — cài trực tiếp VidGrab như ứng dụng gốc ngay từ trình duyệt.",
+  "mobileInstallBtn": "Cài đặt ứng dụng VidGrab ngay (1 chạm)",
+  "mobileAndroidTitle": "Android (Chrome / Edge / Samsung Internet)",
+  "mobileAndroidSteps": [
+    "Mở VidGrab bằng Chrome trên Android và nhấn nút “Cài đặt ứng dụng” (hoặc menu ⋮ → Thêm vào Màn hình chính).",
+    "Mở TikTok, YouTube, Facebook hoặc Instagram → bấm Chia sẻ (Share) → chọn biểu tượng VidGrab.",
+    "VidGrab tự bắt link, hiển thị chất lượng tải nhanh và mở ngay AI Việt hóa 1 chạm / Cắt Clip Viral 9:16."
+  ],
+  "mobileIosTitle": "iPhone / iPad (Safari)",
+  "mobileIosSteps": [
+    "Mở trang VidGrab bằng trình duyệt Safari.",
+    "Chạm nút Chia sẻ (biểu tượng mũi tên lên ở thanh dưới cùng).",
+    "Chọn “Thêm vào MH chính” (Add to Home Screen) → bấm “Thêm” để mở toàn màn hình như App."
+  ],
+  "openWebApp": "Mở Web Studio ngay",
+  "sharedAccount": "Đăng nhập trong ứng dụng Windows, macOS, Mobile PWA và Web dùng chung 1 tài khoản và hạn mức hằng ngày."
 }

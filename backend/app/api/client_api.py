@@ -245,6 +245,10 @@ async def get_client_version(request: Request):
     }
     if rel.get("sha256"):   # installer checksum from the release text (download page / FAQ)
         out["sha256"] = rel["sha256"]
+    if rel.get("macosDownloadUrl"):
+        out["macosDownloadUrl"] = rel["macosDownloadUrl"]
+    if rel.get("macosSha256"):
+        out["macosSha256"] = rel["macosSha256"]
     signed = _signed_policy(min_supported)
     if signed:
         out["policy"] = signed

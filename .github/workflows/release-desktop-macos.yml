@@ -1,0 +1,185 @@
+name: Release Desktop (macOS Apple Silicon)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Ghi chú phát hành tùy chỉnh (ngăn cách nhiều ý bằng ' | '; để trống sẽ lấy từ desktop/RELEASE_NOTES.md)"
+        required: false
+        type: string
+        default: ""
+      publish_to_releases:
+        description: "Đăng file .dmg/.app.tar.gz lên release v<version> trên junnyken/vidgrab-releases"
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build, Sign & Package macOS Apple Silicon (.dmg)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Rust stable (Apple Silicon aarch64-apple-darwin)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/src-tauri -> target"
+          cache-on-failure: "true"
+
+      - name: Cache pinned sidecar binaries (yt-dlp, ffmpeg, ffprobe, deno)
+        uses: actions/cache@v4
+        with:
+          path: desktop/.cache/binaries
+          key: desktop-macos-sidecars-${{ hashFiles('desktop/binaries.lock.json') }}
+
+      - name: Check version sync across package.json, tauri.conf.json & Cargo.toml
+        id: meta
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          PKG_VER=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)")
+          TAURI_VER=$(node -e "console.log(JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json','utf8')).version)")
+          CARGO_VER=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$PKG_VER" != "$TAURI_VER" ] || [ "$TAURI_VER" != "$CARGO_VER" ]; then
+            echo "::error::Version mismatch: package.json=$PKG_VER tauri.conf.json=$TAURI_VER Cargo.toml=$CARGO_VER"
+            exit 1
+          fi
+          echo "Building VidGrab macOS v$TAURI_VER"
+          echo "version=$TAURI_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Install JS dependencies & run unit tests
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          npm ci
+          npm test
+
+      - name: Fetch & SHA-256 verify macOS sidecar binaries
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          node scripts/fetch-binaries.mjs --target aarch64-apple-darwin --only yt-dlp,ffmpeg,ffprobe,deno
+
+      - name: Build frontend & run Rust unit tests
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          npm run build
+          cargo test --manifest-path src-tauri/Cargo.toml --lib --target aarch64-apple-darwin
+
+      - name: Build macOS .app & .dmg bundle
+        working-directory: desktop
+        env:
+          VIDGRAB_CLAIM_PUBKEYS: ${{ secrets.VIDGRAB_CLAIM_PUBKEYS || 'k1:KBVXxhv2+H1IJmAtXW68LS96ayzVBJ5o06e2EeP89gc=' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json
+
+      - name: Verify bundled sidecars, updater signature (.sig) & compute DMG SHA-256
+        id: verify
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          VER="${{ steps.meta.outputs.version }}"
+          MACOS_BIN_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/VidGrab.app/Contents/MacOS"
+          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/VidGrab_${VER}_aarch64.dmg"
+          TAR="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/VidGrab.app.tar.gz"
+          SIG="${TAR}.sig"
+
+          if [ ! -f "$DMG" ]; then
+            echo "::error::Missing DMG bundle at $DMG"
+            exit 1
+          fi
+
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const lock = JSON.parse(fs.readFileSync("binaries.lock.json", "utf8"));
+            const target = "aarch64-apple-darwin";
+            for (const name of ["yt-dlp", "ffmpeg", "ffprobe", "deno"]) {
+              const p = `${process.argv[1]}/${name}`;
+              if (!fs.existsSync(p)) throw new Error(`Missing bundled sidecar: ${p}`);
+              const actual = crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+              const expected = lock.binaries[name].targets[target].extractedSha256;
+              if (actual !== expected) throw new Error(`${name} SHA mismatch: expected ${expected}, got ${actual}`);
+              console.log(`Bundled ${name} SHA-256 OK: ${actual}`);
+            }
+          ' "$MACOS_BIN_DIR"
+
+          TAR_OUT=""
+          SIG_OUT=""
+          if [ -f "$TAR" ] && [ -f "$SIG" ]; then
+            node scripts/verify-update-sig.mjs "$TAR" "$SIG"
+            TAR_OUT="desktop/$TAR"
+            SIG_OUT="desktop/$SIG"
+          fi
+
+          SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          SUM_FILE="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/SHA256SUMS-macos.txt"
+          echo "$SHA  VidGrab_${VER}_aarch64.dmg" > "$SUM_FILE"
+          echo "DMG SHA-256: $SHA"
+
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "dmg_path=desktop/$DMG" >> "$GITHUB_OUTPUT"
+          echo "tar_path=$TAR_OUT" >> "$GITHUB_OUTPUT"
+          echo "sig_path=$SIG_OUT" >> "$GITHUB_OUTPUT"
+          echo "sum_path=desktop/$SUM_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS DMG & checksums to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VidGrab-${{ steps.meta.outputs.version }}-macos-arm64
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+          path: |
+            ${{ steps.verify.outputs.dmg_path }}
+            ${{ steps.verify.outputs.tar_path }}
+            ${{ steps.verify.outputs.sig_path }}
+            ${{ steps.verify.outputs.sum_path }}
+
+      - name: Upload macOS DMG asset to junnyken/vidgrab-releases
+        if: ${{ inputs.publish_to_releases == true }}
+        env:
+          GH_TOKEN: ${{ secrets.VIDGRAB_RELEASES_PAT }}
+          TARGET_REPO: "junnyken/vidgrab-releases"
+        run: |
+          set -euo pipefail
+          VER="${{ steps.meta.outputs.version }}"
+          TAG="v$VER"
+          ASSETS=("${{ steps.verify.outputs.dmg_path }}")
+          if [ -n "${{ steps.verify.outputs.tar_path }}" ]; then
+            ASSETS+=("${{ steps.verify.outputs.tar_path }}")
+          fi
+          if [ -n "${{ steps.verify.outputs.sig_path }}" ]; then
+            ASSETS+=("${{ steps.verify.outputs.sig_path }}")
+          fi
+          gh release upload "$TAG" "${ASSETS[@]}" --repo "$TARGET_REPO" --clobber
+          echo "Uploaded macOS assets to https://github.com/$TARGET_REPO/releases/tag/$TAG"

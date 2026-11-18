@@ -339,7 +339,16 @@ export default function DashboardContent() {
     window.addEventListener('vidgrab:share-url', onShareURL);
 
     // Mobile quick-tools deep-open: vidgrab:open-tool:{tabId}
-    const TOOL_TAB_MAP = { trim: 'trim', audio: 'audio', gif: 'gif', subtitle: 'subtitle', cloud: 'package' };
+    const TOOL_TAB_MAP = {
+      trim: 'trim',
+      audio: 'audio',
+      gif: 'gif',
+      subtitle: 'subtitle',
+      cloud: 'package',
+      vietnamize: 'vietnamize',
+      viral: 'viral',
+      reup: 'reup',
+    };
     const onOpenTool = (e) => {
       const tabId = TOOL_TAB_MAP[e.type.split(':')[2]] || 'trim';
       setProcessingHubTab(tabId);
@@ -347,8 +356,18 @@ export default function DashboardContent() {
     };
     Object.keys(TOOL_TAB_MAP).forEach((t) => window.addEventListener(`vidgrab:open-tool:${t}`, onOpenTool));
 
+    const onShareOpenTool = (e) => {
+      const sharedUrl = (e.detail?.url || '').trim();
+      const tabId = e.detail?.tab || 'vietnamize';
+      if (sharedUrl) setUrl(sharedUrl);
+      setProcessingHubTab(tabId);
+      setShowProcessingHub(true);
+    };
+    window.addEventListener('vidgrab:share-open-tool', onShareOpenTool);
+
     return () => {
       window.removeEventListener('vidgrab:share-url', onShareURL);
+      window.removeEventListener('vidgrab:share-open-tool', onShareOpenTool);
       Object.keys(TOOL_TAB_MAP).forEach((t) => window.removeEventListener(`vidgrab:open-tool:${t}`, onOpenTool));
     };
   }, []);
@@ -3891,6 +3910,23 @@ export default function DashboardContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Standalone AI Studio / Quick Tools Hub when opened without an active fetch */}
+      {showProcessingHub && !videoInfo && (
+        <ProcessingHub
+          videoInfo={null}
+          localPath={null}
+          sourceUrl={url}
+          onClose={() => setShowProcessingHub(false)}
+          userTier={userTier}
+          initialTab={processingHubTab}
+          onOpenUpgrade={(code) => {
+            setShowProcessingHub(false);
+            setUpgradeErrorCode(code || 'tier_required_feature');
+            setShowUpgradeModal(true);
+          }}
+        />
       )}
 
       {/* ── Spotify Playlist / Album Track List ─────────── */}

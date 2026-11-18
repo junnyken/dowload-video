@@ -6,6 +6,30 @@ const TWO_HOURS = 2 * 60 * 60 * 1000;
 
 const tools = [
   {
+    id: 'vietnamize',
+    emoji: '🇻🇳',
+    labelKey: 'quickTools.vietnamize.label',
+    descKey: 'quickTools.vietnamize.desc',
+    event: 'vidgrab:open-tool:vietnamize',
+    allowWithoutDownload: true,
+  },
+  {
+    id: 'viral',
+    emoji: '🔥',
+    labelKey: 'quickTools.viral.label',
+    descKey: 'quickTools.viral.desc',
+    event: 'vidgrab:open-tool:viral',
+    allowWithoutDownload: true,
+  },
+  {
+    id: 'reup',
+    emoji: '🛡️',
+    labelKey: 'quickTools.reup.label',
+    descKey: 'quickTools.reup.desc',
+    event: 'vidgrab:open-tool:reup',
+    allowWithoutDownload: true,
+  },
+  {
     id: 'trim',
     emoji: '✂️',
     labelKey: 'quickTools.trim.label',
@@ -102,7 +126,7 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
   };
 
   const handleTool = (tool) => {
-    if (!recentDownload && tool.id !== 'full') {
+    if (!recentDownload && tool.id !== 'full' && !tool.allowWithoutDownload) {
       setToast(t('quickTools.needDownload'));
       return;
     }
@@ -114,6 +138,9 @@ export default function MobileQuickTools({ show, onClose, onNavigate }) {
       return;
     }
 
+    if (recentDownload?.url) {
+      window.dispatchEvent(new CustomEvent('vidgrab:share-url', { detail: { url: recentDownload.url } }));
+    }
     window.dispatchEvent(new CustomEvent(tool.event));
     if (onNavigate) onNavigate('landing', '/');
   };

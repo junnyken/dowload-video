@@ -126,17 +126,102 @@ mod store {
 
 #[cfg(not(windows))]
 mod store {
-    //! Dev builds on other OSes have no credential store wired up; signing in
-    //! simply does not persist.
+    //! File-backed 0600 SecretStore for macOS and Linux desktop builds.
+    use super::*;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+    use std::path::PathBuf;
+
+    const IDENTIFIER: &str = "xyz.tinhgon.vidgrab";
+
+    fn auth_dir() -> Result<PathBuf, String> {
+        #[cfg(target_os = "macos")]
+        let base = std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join("Library").join("Application Support"))
+            .ok_or_else(|| "HOME is not set".to_string())?;
+        #[cfg(not(target_os = "macos"))]
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share")))
+            .ok_or_else(|| "cannot locate user data directory".to_string())?;
+        Ok(base.join(IDENTIFIER).join("auth"))
+    }
+
+    pub struct FileSecretStore {
+        dir: PathBuf,
+    }
+
+    impl FileSecretStore {
+        pub fn new(dir: PathBuf) -> Self {
+            Self { dir }
+        }
+
+        fn key_path(&self, user: &str) -> Result<PathBuf, String> {
+            if user.is_empty()
+                || user == "."
+                || user == ".."
+                || !user.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+            {
+                return Err("invalid session key".into());
+            }
+            Ok(self.dir.join(user))
+        }
+    }
+
+    impl SecretStore for FileSecretStore {
+        fn get(&self, user: &str) -> Result<Option<Vec<u8>>, String> {
+            let p = self.key_path(user)?;
+            match std::fs::read(&p) {
+                Ok(b) => Ok(Some(b)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(format!("cannot read session: {e}")),
+            }
+        }
+
+        fn set(&self, user: &str, secret: &[u8]) -> Result<(), String> {
+            let p = self.key_path(user)?;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&self.dir)
+                .map_err(|e| format!("cannot create auth folder: {e}"))?;
+            let tmp = self.dir.join(format!("{user}.tmp-{}", std::process::id()));
+            {
+                use std::io::Write;
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .mode(0o600)
+                    .open(&tmp)
+                    .map_err(|e| format!("cannot save session: {e}"))?;
+                f.write_all(secret).map_err(|e| format!("cannot save session: {e}"))?;
+            }
+            std::fs::rename(&tmp, &p).map_err(|e| format!("cannot save session: {e}"))
+        }
+
+        fn delete(&self, user: &str) -> Result<bool, String> {
+            let p = self.key_path(user)?;
+            match std::fs::remove_file(&p) {
+                Ok(()) => Ok(true),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+                Err(e) => Err(format!("cannot delete session part: {e}")),
+            }
+        }
+    }
+
     pub fn save(session: &str) -> Result<(), String> {
-        super::split(session).map(|_| ())?;
-        Err("credential storage is only implemented on Windows".into())
+        let store = FileSecretStore::new(auth_dir()?);
+        save_with(&store, session)
     }
+
     pub fn load() -> Result<Option<String>, String> {
-        Ok(None)
+        let store = FileSecretStore::new(auth_dir()?);
+        load_with(&store)
     }
+
     pub fn clear() -> Result<(), String> {
-        Ok(())
+        let store = FileSecretStore::new(auth_dir()?);
+        clear_with(&store)
     }
 }
 
@@ -211,5 +296,20 @@ mod tests {
         assert_eq!(parse_meta(b"v1:999"), None);
         assert_eq!(parse_meta(b"v2:3"), None);
         assert_eq!(parse_meta(&[0xff, 0xfe]), None);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn file_store_round_trip() {
+        let dir = std::env::temp_dir().join(format!("vg-auth-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let s = store::FileSecretStore::new(dir.clone());
+        assert_eq!(load_with(&s).unwrap(), None);
+        let payload = format!("{{\"access_token\":\"{}\"}}", "a".repeat(3000));
+        save_with(&s, &payload).unwrap();
+        assert_eq!(load_with(&s).unwrap().as_deref(), Some(payload.as_str()));
+        clear_with(&s).unwrap();
+        assert_eq!(load_with(&s).unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

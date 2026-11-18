@@ -135,7 +135,21 @@ fn os_label() -> Option<String> {
         None => format!("{family}, build {build}"),
     })
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn os_label() -> Option<String> {
+    if let Ok(plist) = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist") {
+        if let Some(after) = plist.split("<key>ProductVersion</key>").nth(1) {
+            if let Some(s) = after.split("<string>").nth(1).and_then(|x| x.split("</string>").next()) {
+                let ver = s.trim();
+                if !ver.is_empty() {
+                    return Some(format!("macOS {ver}"));
+                }
+            }
+        }
+    }
+    Some("macOS".to_string())
+}
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn os_label() -> Option<String> {
     Some(std::env::consts::OS.to_string())
 }
@@ -148,7 +162,10 @@ pub fn device_info(app_data: Option<&Path>) -> DeviceInfo {
 }
 
 fn build(guid: Option<String>, app_data: Option<&Path>) -> DeviceInfo {
-    let computer = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).ok();
+    let computer = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .ok()
+        .or_else(|| if cfg!(target_os = "macos") { Some("Mac".to_string()) } else { None });
     let name = display_name(computer.as_deref(), os_label().as_deref());
     if let Some(g) = guid {
         let hash = hash_guid(&g);

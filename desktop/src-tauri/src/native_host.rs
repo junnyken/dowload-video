@@ -268,7 +268,20 @@ pub fn read_line_capped(r: &mut impl BufRead, buf: &mut Vec<u8>, max: usize) -> 
 }
 
 /// Browsers that may start us, by file name (the app opens links with it).
-pub const BROWSERS: [&str; 6] = ["chrome.exe", "msedge.exe", "brave.exe", "chromium.exe", "vivaldi.exe", "opera.exe"];
+pub const BROWSERS: [&str; 12] = [
+    "chrome.exe",
+    "msedge.exe",
+    "brave.exe",
+    "chromium.exe",
+    "vivaldi.exe",
+    "opera.exe",
+    "Google Chrome",
+    "Microsoft Edge",
+    "Brave Browser",
+    "Chromium",
+    "Vivaldi",
+    "Opera",
+];
 
 pub fn is_browser_exe(p: &Path) -> bool {
     p.is_absolute()

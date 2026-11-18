@@ -44,6 +44,8 @@ function parseArgs(argv) {
 function hostTriple() {
   if (process.platform === 'win32' && process.arch === 'x64') return 'x86_64-pc-windows-msvc';
   if (process.platform === 'linux' && process.arch === 'x64') return 'x86_64-unknown-linux-gnu';
+  if (process.platform === 'darwin' && process.arch === 'arm64') return 'aarch64-apple-darwin';
+  if (process.platform === 'darwin' && process.arch === 'x64') return 'x86_64-apple-darwin';
   throw new Error(`no default target for ${process.platform}/${process.arch}; pass --target`);
 }
 
@@ -118,7 +120,10 @@ async function main() {
   const target = args.target ?? hostTriple();
   const exe = target.includes('windows') ? '.exe' : '';
   const lock = JSON.parse(readFileSync(LOCK_PATH, 'utf8'));
-  const names = Object.keys(lock.binaries).filter((n) => !args.only || n === args.only);
+  const onlySet = args.only
+    ? new Set(args.only.split(',').map((s) => s.trim()).filter(Boolean))
+    : null;
+  const names = Object.keys(lock.binaries).filter((n) => !onlySet || onlySet.has(n));
   if (names.length === 0) throw new Error(`nothing to do (--only ${args.only} not in lock file)`);
 
   // Refuse up front, before downloading anything, if any pin is a placeholder.

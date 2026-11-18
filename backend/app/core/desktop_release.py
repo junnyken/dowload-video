@@ -52,6 +52,7 @@ SIG_MAX = 4096           # a Tauri .sig is ~ 400 bytes
 _VERSION = re.compile(r"^v?(\d{1,4})\.(\d{1,4})\.(\d{1,4})$")
 _RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 _SHA_RE = re.compile(r"SHA-?256:\s*([0-9a-fA-F]{64})\b")
+_SHA_MACOS_RE = re.compile(r"SHA-?256-MACOS:\s*([0-9a-fA-F]{64})\b")
 _mem: Dict[str, Any] = {"at": 0.0, "ttl": 0, "val": None}
 _last_good_mem: Dict[str, Dict[str, str]] = {}
 
@@ -86,19 +87,31 @@ def parse_release(data: Any, repo: str) -> Optional[Dict[str, str]]:
     version = ".".join(map(str, ver))
     prefix = f"https://github.com/{repo}/releases/download/"
     url = ""
+    macos_url = ""
     for a in data.get("assets") or []:
         u = (a or {}).get("browser_download_url") or ""
-        if isinstance(u, str) and u.startswith(prefix) and u.endswith(f"_{version}_x64-setup.exe"):
+        if not isinstance(u, str) or not u.startswith(prefix):
+            continue
+        if not url and u.endswith(f"_{version}_x64-setup.exe"):
             url = u
-            break
+        elif u.endswith(f"_{version}_universal.dmg"):
+            macos_url = u
+        elif not macos_url and u.endswith(f"_{version}_aarch64.dmg"):
+            macos_url = u
     if not url:
         return None          # a release without the installer is not a release yet
-    out = {"version": version, "downloadUrl": url, "notes": _notes_from_body(str(data.get("body") or ""))}
+    body = str(data.get("body") or "")
+    out = {"version": version, "downloadUrl": url, "notes": _notes_from_body(body)}
+    if macos_url:
+        out["macosDownloadUrl"] = macos_url
     # Installer checksum published in the release text ("SHA-256: <64 hex>"),
     # shown on the download page so users can verify (FAQ, task #6335).
-    m = _SHA_RE.search(str(data.get("body") or ""))
+    m = _SHA_RE.search(body)
     if m:
         out["sha256"] = m.group(1).lower()
+    m_mac = _SHA_MACOS_RE.search(body)
+    if m_mac:
+        out["macosSha256"] = m_mac.group(1).lower()
     # Task #6205: the updater signature is the asset "<installer>.sig" of THIS
     # release (same download folder, exact name); fetched in github_latest.
     urls = {(a or {}).get("browser_download_url") for a in data.get("assets") or []}
@@ -283,6 +296,9 @@ def current(fetch=None) -> Dict[str, str]:
         "notes": env("DESKTOP_RELEASE_NOTES") or "",
         "source": "env",
     }
+    mac_env = (env("DESKTOP_MACOS_DOWNLOAD_URL") or "").strip()
+    if mac_env:
+        out["macosDownloadUrl"] = mac_env
     if (env("DESKTOP_RELEASE_SOURCE") or "github").strip().lower() == "env":
         return out
     gh = github_latest(fetch)
@@ -291,4 +307,8 @@ def current(fetch=None) -> Dict[str, str]:
                    notes=gh["notes"] or out["notes"], source="github")
         if gh.get("sha256"):
             out["sha256"] = gh["sha256"]
+        if gh.get("macosDownloadUrl"):
+            out["macosDownloadUrl"] = gh["macosDownloadUrl"]
+        if gh.get("macosSha256"):
+            out["macosSha256"] = gh["macosSha256"]
     return out

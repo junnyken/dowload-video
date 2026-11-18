@@ -32,7 +32,9 @@ pub const ALLOWED_IDS: [&str; 2] = [
 pub fn native_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let base = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"));
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
@@ -57,9 +59,9 @@ pub fn new_token() -> std::io::Result<String> {
     Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
 
-fn host_exe_name(version: &str) -> String {
+pub fn host_exe_name(version: &str) -> String {
     let v: String = version.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-').collect();
-    format!("vidgrab-host-{v}.exe")
+    format!("vidgrab-host-{v}{}", std::env::consts::EXE_SUFFIX)
 }
 
 /// Copies `exe` into `dir` as this version's host (once), removes copies of
@@ -71,6 +73,11 @@ pub fn install_host_exe(dir: &Path, exe: &Path, version: &str) -> std::io::Resul
     if !same {
         let tmp = dir.join(format!("{name}.part"));
         std::fs::copy(exe, &tmp)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755));
+        }
         std::fs::rename(&tmp, &target)?;
     }
     if let Ok(rd) = std::fs::read_dir(dir) {
@@ -112,7 +119,20 @@ pub fn register(version: &str) -> std::io::Result<String> {
             eprintln!("native host not registered for {root}: {e}");
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        let app_support = home.join("Library").join("Application Support");
+        for browser_rel in ["Google/Chrome", "Chromium", "Microsoft Edge", "BraveSoftware/Brave-Browser"] {
+            let browser_dir = app_support.join(browser_rel);
+            if browser_dir.is_dir() {
+                let nm_dir = browser_dir.join("NativeMessagingHosts");
+                if std::fs::create_dir_all(&nm_dir).is_ok() {
+                    let _ = std::fs::copy(&manifest, nm_dir.join(format!("{HOST_NAME}.json")));
+                }
+            }
+        }
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let _ = manifest;
     Ok(token)
 }
@@ -195,13 +215,15 @@ mod tests {
         let d = tmp("prep");
         let exe = d.join("VidGrab.exe");
         std::fs::write(&exe, b"exe v1").unwrap();
-        std::fs::write(d.join("vidgrab-host-0.19.9.exe"), b"old").unwrap();
+        let old_name = host_exe_name("0.19.9");
+        let cur_name = host_exe_name("0.20.0");
+        std::fs::write(d.join(&old_name), b"old").unwrap();
         let (t1, manifest) = prepare(&d, &exe, "0.20.0").unwrap();
         assert_eq!(crate::native_host::read_token(&d).as_deref(), Some(t1.as_str()));
-        assert_eq!(std::fs::read(d.join("vidgrab-host-0.20.0.exe")).unwrap(), b"exe v1");
-        assert!(!d.join("vidgrab-host-0.19.9.exe").exists(), "old copy removed");
+        assert_eq!(std::fs::read(d.join(&cur_name)).unwrap(), b"exe v1");
+        assert!(!d.join(&old_name).exists(), "old copy removed");
         let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(manifest).unwrap()).unwrap();
-        assert!(m["path"].as_str().unwrap().ends_with("vidgrab-host-0.20.0.exe"));
+        assert!(m["path"].as_str().unwrap().ends_with(&cur_name));
         let (t2, _) = prepare(&d, &exe, "0.20.0").unwrap();
         assert_ne!(t1, t2, "new token each start");
     }

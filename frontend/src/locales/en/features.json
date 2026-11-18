@@ -1,8 +1,8 @@
 {
   "_note": "wording: BA review — English drafted with AI",
-  "badge": "NEW VIDGRAB ECOSYSTEM · WEB STUDIO + EXTENSION + WINDOWS APP",
-  "heroTitle": "Beyond Pasting Links — The Complete Cinema, Anime & AI Video Ecosystem",
-  "heroSub": "Discover the pro-grade capabilities that put VidGrab ahead of ordinary downloaders: an IDM-style turbo engine (10MB range chunks + automatic .part resume), direct PikPak Cloud video extraction, a floating video hover button, 4K HLS/DASH stream capture, zero-reencode soft-subtitle MP4 muxing, and AI post-processing.",
+  "badge": "VIDGRAB AI STUDIO v2 · WINDOWS · MACOS · MOBILE PWA · EXTENSION",
+  "heroTitle": "Beyond Pasting Links — Full High-Speed Downloader & AI Creator Ecosystem",
+  "heroSub": "Engineered to outperform ordinary downloaders: 16-connection aria2c IDM turbo speed on Windows & macOS v0.22.11, 1-tap Mobile PWA Share from TikTok/YouTube, AI 1-Click Vietnamize, AI 9:16 Viral Clipper, and 3-level Anti-Detect Reup Cleaner.",
   "ctaPricing": "View Plans & Unlock Now",
   "ctaWindows": "Download Windows App",
   "ctaExtension": "Install Chrome / Edge Extension",
@@ -11,18 +11,18 @@
   "pillars": [
     {
       "tag": "Pillar 01",
-      "title": "Web Studio & AI Cloud",
-      "desc": "100-link Batch .ZIP downloads, AI Whisper Speech-to-Subtitle (ASR), Batch Bilingual Subtitle Translation, Anti-Detect Reup Cleaner, and Burn-in Hardsub MP4."
+      "title": "Web Studio, AI Cloud & Mobile PWA",
+      "desc": "Android/iOS PWA 1-tap Share from TikTok/YouTube, AI 1-Click Sub & Translate, AI 9:16 Viral Clipper, 3-level Anti-Detect Reup + Smart Metadata, and 100-link Batch .ZIP."
     },
     {
       "tag": "Pillar 02",
       "title": "Browser Extension v5.29",
-      "desc": "Detects active streams in real time, renders a floating download pill on web players, remuxes HLS AES-128/SAMPLE-AES directly to OPFS disk with zero RAM bloat, and resumes interrupted movies."
+      "desc": "Detects active streams in real time, renders a floating download pill on players, decrypts HLS AES-128 & runs parallel multi-range transfers directly to OPFS disk with zero RAM bloat."
     },
     {
       "tag": "Pillar 03",
-      "title": "Windows Desktop App v0.22.9",
-      "desc": "IDM-style turbo speed + native yt-dlp & ffmpeg on your PC: 10MB HTTP chunking for Cloud/PikPak files, automatic .part resume on 90–99% drops, VIP session cookie handoff, and instant mov_text soft-subtitle MP4 muxing."
+      "title": "Windows & macOS Desktop App v0.22.11",
+      "desc": "16-connection aria2c + 10MB chunking with native yt-dlp & ffmpeg on Windows & Apple Silicon Macs: automatic .part resume on 90–99% drops, VIP cookie handoff, and soft-subtitle MP4 muxing."
     }
   ],
   "flagshipTitle": "8 Breakthrough Capabilities Across the VidGrab Ecosystem",
@@ -31,12 +31,12 @@
     {
       "tier": "Free on Sign-In (Free+)",
       "tierTone": "pro",
-      "title": "IDM-Grade Turbo Engine — 10MB Chunks, Auto-Resume .part & 403 Refresh",
-      "desc": "Exclusive acceleration engine in Windows App v0.22.9: splits direct cloud downloads (.mp4/.mkv) into 10MB HTTP Range chunks to defeat CDN throttling, automatically resumes partial .part files up to 3 times on 90–99% SSL/EOF drops, and refreshes expired 403 URLs from your open Chrome tab.",
+      "title": "16-Channel aria2c Turbo Engine (Windows & macOS v0.22.11) + Multi-Range OPFS",
+      "desc": "Next-gen acceleration in Desktop v0.22.11: bundled 16-connection aria2c + 10MB HTTP Range chunking defeats CDN single-socket caps, automatically resumes partial .part files on 90–99% drops, and refreshes expired 403 URLs.",
       "highlights": [
-        "10MB HTTP Range chunking prevents single-socket CDN speed caps",
+        "16-connection aria2c saturates full fiber bandwidth on large cloud files",
         "Smart Auto-Resume picks up 95% partial transfers cleanly without restarting",
-        "Unlocked for all signed-in accounts (Free tier and above)"
+        "Native builds for Windows 64-bit (.exe) and macOS Apple Silicon (.dmg)"
       ]
     },
     {
@@ -106,14 +106,14 @@
       ]
     },
     {
-      "tier": "Starter · Pro · Team",
-      "tierTone": "starter",
-      "title": "AI Subtitle Studio, Anti-Detect Reup & Bulk .ZIP",
-      "desc": "Cloud post-production suite: generate subtitles from speech with AI ASR, batch-translate bilingual .SRT/.VTT files, clean video metadata/MD5/mirror frames, and grab entire channels as .ZIP.",
+      "tier": "Pro · Team",
+      "tierTone": "pro",
+      "title": "AI Studio v2: 1-Click Sub & Translate, 9:16 Viral Clipper & 3-Level Reup Cleaner",
+      "desc": "3 AI creator weapons on Web & Mobile PWA: 1-click Whisper + Gemini subtitle burn-in, AI hook detection cutting 3–5 vertical 9:16 shorts, and 3-level pHash/Audio/MD5 fingerprint breaking with Smart Hashtags.",
       "highlights": [
-        "Starter: 4K social downloads, 20-link Batch (.ZIP), 30m/day AI ASR",
-        "Pro: Anti-Detect Reup Cleaner, Hardsub Burn-in MP4 + 3,000 API calls",
-        "Team: 1,000/day, 15,000 API calls/mo + 5 shared Workspace seats"
+        "AI 1-Click Translate & Hardsub: foreign URL in -> localized MP4 out",
+        "AI 9:16 Viral Clipper: extracts hooks & peak scenes ready for TikTok/Reels",
+        "Reup Cleaner v2 (3 levels) + Smart clean filenames & hashtag suggestions"
       ]
     }
   ],
@@ -145,10 +145,10 @@
       "who": "Built for Full HD web movie viewers, professional Reup creators, and solo developers.",
       "perks": [
         "Unlocks Browser Universal Stream Capture on any site (up to 1080p)",
-        "Unlocks Floating <video> Hover Pill + Clean Titles + .SRT Subtitles",
-        "IDM-style turbo engine (10MB chunks + auto-resume .part) + PikPak Cloud",
-        "Anti-Detect Reup Cleaner (Metadata, MD5, Mirror) + Hardsub MP4 Burn-in",
-        "300 downloads/day · 100-link Batch (.ZIP) · 120 min/day AI ASR",
+        "Unlocks AI 1-Click Sub & Translate + AI 9:16 Viral Clipper",
+        "Anti-Detect Reup Cleaner v2 (3-level pHash/Audio/MD5) + Smart Metadata",
+        "16-Channel aria2c Turbo Engine (Windows & macOS v0.22.11) + PikPak Cloud",
+        "300 downloads/day · 100-link Batch (.ZIP) · 120m/day AI ASR · Hover Pill",
         "Includes 3,000 REST API calls/mo (+500 1st-purchase bonus)"
       ],
       "cta": "Upgrade to Pro →",

@@ -14,7 +14,19 @@
     "install": "Cài đặt ngay — miễn phí"
   },
   "quickTools": {
-    "title": "Công cụ nhanh",
+    "title": "Công cụ nhanh & AI Studio",
+    "vietnamize": {
+      "label": "AI Việt hóa",
+      "desc": "Nghe & dịch sub"
+    },
+    "viral": {
+      "label": "Viral 9:16",
+      "desc": "Cắt hook AI"
+    },
+    "reup": {
+      "label": "Chống trùng",
+      "desc": "Phá MD5 & pHash"
+    },
     "subtitle": {
       "label": "Phụ đề",
       "desc": "Tải hoặc đốt phụ đề"
@@ -79,6 +91,10 @@
     "untitled": "Không có tiêu đề",
     "hd": "Tải HD",
     "noWatermark": "Không watermark",
+    "aiQuickTitle": "AI Studio 1 chạm",
+    "aiVietnamize": "Việt hóa AI",
+    "aiViral": "Clip Viral 9:16",
+    "aiReup": "Chống trùng Reup",
     "moreOptions": "Thêm lựa chọn",
     "addToBatch": "Thêm vào batch",
     "cancel": "Huỷ"
