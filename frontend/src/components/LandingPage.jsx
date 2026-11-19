@@ -294,33 +294,6 @@ export default function LandingPage() {
             <span className="text-accent-text">{t('heroTitle2')}</span>
           </h1>
 
-          {/* Product depth cues — kept in both. Two of these are navigation
-              (Bulk, History), not decoration, and they are the only pointer
-              to those tabs from a compact hero. */}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 mt-5 text-xs text-fg-muted">
-            <button
-              onClick={() => setActiveTab('bulk')}
-              className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
-            >
-              <Layers className="w-3 h-3" />
-              {t('cueBulk')}
-            </button>
-            <span aria-hidden="true" className="hidden sm:inline">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <Download className="w-3 h-3" />
-              {/* wording: BA review */}
-              {isAuthenticated ? t('qualityAuth') : t('qualityGuest')}
-            </span>
-            <span aria-hidden="true" className="hidden sm:inline">·</span>
-            <button
-              onClick={() => setActiveTab('history')}
-              className="inline-flex items-center gap-1.5 hover:text-fg transition-colors cursor-pointer"
-            >
-              <History className="w-3 h-3" />
-              {t('cueHistory')}
-            </button>
-          </div>
-
           {/* Everything below is the introduction. A returning visitor has
               read it; the platform list lives on /platforms and the extension
               stays in the nav. */}

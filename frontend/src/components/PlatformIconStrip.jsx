@@ -6,10 +6,6 @@ const PLATFORM_ITEMS = [
     id: 'gdrive',
     name: 'Google Drive',
     href: '/tai-video-google-drive',
-    featured: true,
-    badgeVi: 'Chỉ xem · Cả thư mục',
-    badgeEn: 'View-Only · Full Folder',
-    bg: 'bg-emerald-500/12 border-emerald-500/40 text-fg hover:border-emerald-500/70',
     svg: (
       <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
         <path fill="#0066DA" d="M4.2 15.5L8.4 8.2l3.8 6.5L8 21H4.2z" />
@@ -149,17 +145,6 @@ const PLATFORM_ITEMS = [
       <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
         <rect x="2" y="2" width="20" height="20" rx="5" fill="#FF2442" />
         <text x="12" y="15.5" textAnchor="middle" fill="#FFF" fontSize="9.5" fontWeight="800" fontFamily="system-ui">小红</text>
-      </svg>
-    ),
-  },
-  {
-    id: 'telegram',
-    name: 'Telegram',
-    href: '/tai-video-telegram',
-    svg: (
-      <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" fill="#229ED9" />
-        <path fill="#FFF" d="M16.9 7.6l-1.9 9c-.1.6-.5.8-1 .5l-2.9-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-3 5.4-4.9c.2-.2 0-.3-.4-.1L7.6 12.8 4.7 11.9c-.6-.2-.6-.6.1-.9l11.2-4.3c.5-.2 1 .1.9.9z" />
       </svg>
     ),
   },
