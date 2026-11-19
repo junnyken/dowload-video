@@ -351,6 +351,17 @@ function vgIsGDriveStreamUrl(u) {
   return typeof u === 'string' && /(?:^|[./])(drive|docs)\.google\.com\/videoplayback\b/i.test(u);
 }
 
+function vgAppSupportsFastGDrive(ver) {
+  if (!ver || typeof ver !== 'string') return false;
+  const p = ver.replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+  // Desktop App >= 0.23.3 has aria2c -x16 -s16 enabled for Drive /videoplayback;
+  // older builds (e.g. 0.22.11) fall back to 1-conn yt-dlp (~150 KB/s), so use Extension 8-conn OPFS instead.
+  if (p[0] > 0) return true;
+  if (p[1] > 23) return true;
+  if (p[1] === 23 && (p[2] || 0) >= 3) return true;
+  return false;
+}
+
 // The file fetched in the offscreen page (which gets the Referer and 8-conn parallel HTTP Range OPFS), then saved from a blob: URL.
 let vgBlobSaves = 0;
 async function vgSaveViaPage(url, name, opts = {}) {
@@ -1668,8 +1679,11 @@ async function vgHandToApp(payload) {
   const isGDrive = Boolean(vgGDriveFileId(payload.url));
   if (!isGDrive && !/(^|\.)tiktok\.com$/i.test(host) && self.vgDirect.directEligible({ url: payload.url, quality: 'video' })) return null;
   if ((await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false) return null;
-  const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
-  if (!appConnected) return null;
+  const appInfo = (vgNativePort && vgNativeApp.up) ? { port: 1, version: vgNativeApp.version } : (await vgFindApp().catch(() => ({ port: null, version: null })));
+  if (!appInfo.port) return null;
+  // Don't hand Google Drive to older Desktop Apps (< 0.23.3) that lack aria2c -x16 for /videoplayback;
+  // let the extension download at ~11 MB/s with 8-conn parallel OPFS instead.
+  if (isGDrive && !vgAppSupportsFastGDrive(appInfo.version)) return null;
   let sendItem = { url: payload.url, title: payload.title || '', pageUrl: payload.url };
   if (isGDrive) {
     const gd = await vgGDriveResolveStream(payload.url).catch(() => null);
@@ -2765,8 +2779,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // 1. Hand directly to running VidGrab Desktop App if available & enabled
       const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
       if (!handoffOff) {
-        const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
-        if (appConnected) {
+        const appInfo = (vgNativePort && vgNativeApp.up) ? { port: 1, version: vgNativeApp.version } : (await vgFindApp().catch(() => ({ port: null, version: null })));
+        const appConnected = Boolean(appInfo.port);
+        // For Google Drive, only hand off to Desktop App >= 0.23.3 (which has aria2c -x16 for /videoplayback).
+        // Older App builds (e.g. 0.22.11) throttle to ~150 KB/s, whereas Extension 8-conn OPFS hits ~11 MB/s.
+        const useAppForThis = appConnected && (!isGDrive || vgAppSupportsFastGDrive(appInfo.version));
+        if (useAppForThis) {
           let appPayload = null;
           if (dy && typeof dy.url === 'string' && /^https:\/\//i.test(dy.url)) {
             appPayload = { url: dy.url, title: dy.title || title || 'Douyin Video', pageUrl: 'https://www.douyin.com/', refererUrl: 'https://www.douyin.com/', kind: 'file' };
@@ -2862,7 +2880,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const safeFolder = self.vgDirect.safeName(rawFolder).slice(0, 60) || 'Google Drive';
 
       const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
-      const appConnected = !handoffOff && Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+      const appInfo = !handoffOff
+        ? ((vgNativePort && vgNativeApp.up) ? { port: 1, version: vgNativeApp.version } : (await vgFindApp().catch(() => ({ port: null, version: null }))))
+        : { port: null, version: null };
+      const appConnected = Boolean(appInfo.port) && vgAppSupportsFastGDrive(appInfo.version);
       const via = appConnected ? 'app' : 'browser';
       sendResponse({ ok: true, via, total: items.length });
 
