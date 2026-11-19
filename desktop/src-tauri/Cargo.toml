@@ -1,6 +1,6 @@
 [package]
 name = "vidgrab-desktop"
-version = "0.23.4"
+version = "0.24.0"
 description = "VidGrab desktop client (Phase 32C, stage C1)"
 edition = "2021"
 rust-version = "1.88"
@@ -43,6 +43,8 @@ base64 = "0.22"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 # Channel relay rules ported from channel_relay.py (ext_link.rs); already in the tree.
 regex = "1"
+# Native AES-128-CTR + CBC-MAC for Mega.nz 1–10+ GB downloads (chunked.rs).
+aes = "0.8"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 # In-app update (task #6205, docs/desktop/UPDATER.md). On by default since

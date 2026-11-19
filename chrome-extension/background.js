@@ -419,19 +419,33 @@ function vgBytesToHex(bytes) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function vgAppSupportsMega(ver) {
+  // Desktop App >= 0.24.0 has native Rust chunked AES-128-CTR + CBC-MAC for Mega.nz (no 4GB OPFS cap).
+  const p = String(ver || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+  if (p[0] > 0) return true;
+  if (p[1] > 24) return true;
+  return p[1] === 24 && (p[2] || 0) >= 0;
+}
+
 async function vgMegaDecryptAttr(atB64, aesKeyBytes) {
   try {
     const ct = vgMegaB64ToBytes(atB64);
-    const key = await crypto.subtle.importKey('raw', aesKeyBytes, { name: 'AES-CBC' }, false, ['decrypt']);
-    // Mega pads attributes with zero bytes rather than PKCS#7, so append 1 encrypted padding block or slice if decrypt succeeds
-    const zeroIv = new Uint8Array(16);
-    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv: zeroIv }, key, ct));
+    if (!ct.byteLength || ct.byteLength % 16 !== 0) return '';
+    const key = await crypto.subtle.importKey('raw', aesKeyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+    // Mega zero-pads 'at' rather than PKCS#7. Append 1 encrypted PKCS#7 padding block (16x 0x10)
+    // using the last ciphertext block as IV so WebCrypto AES-CBC decrypt succeeds cleanly.
+    const lastBlock = ct.slice(ct.byteLength - 16);
+    const padEnc = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: lastBlock }, key, new Uint8Array(16).fill(16)));
+    const ctWithPad = new Uint8Array(ct.byteLength + 16);
+    ctWithPad.set(ct, 0);
+    ctWithPad.set(padEnc.subarray(0, 16), ct.byteLength);
+    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv: new Uint8Array(16) }, key, ctWithPad));
     const txt = new TextDecoder().decode(plain).replace(/\0+$/, '');
     if (txt.startsWith('MEGA')) {
       const obj = JSON.parse(txt.slice(4));
       return (obj && obj.n) || '';
     }
-  } catch { /* fallback title */ }
+  } catch { /* invalid key or attr */ }
   return '';
 }
 
@@ -439,17 +453,33 @@ async function vgMegaResolveAndSave(rawUrl, fallbackTitle = '') {
   const parsed = vgMegaParseUrl(rawUrl);
   if (!parsed) return null;
   const rawKey = vgMegaB64ToBytes(parsed.key);
-  if (rawKey.length < 32) return null;
+  if (rawKey.length < 32) throw new Error('Khóa giải mã Mega.nz không hợp lệ (thiếu phần sau dấu #).');
   const aesKey = new Uint8Array(16);
   for (let i = 0; i < 16; i++) aesKey[i] = rawKey[i] ^ rawKey[i + 16];
   const iv8 = rawKey.slice(16, 24);
+  const metaMac8 = rawKey.slice(24, 32);
+
+  // If Desktop App >= 0.24.0 is running & handoff is enabled, delegate Mega directly
+  // so 1–10+ GB files stream to disk natively without the 4 GB browser OPFS limit.
+  const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
+  if (!handoffOff) {
+    const appInfo = (vgNativePort && vgNativeApp.up) ? { port: 1, version: vgNativeApp.version } : (await vgFindApp().catch(() => ({ port: null, version: null })));
+    if (appInfo.port && vgAppSupportsMega(appInfo.version)) {
+      const r = await vgSendToApp({ url: rawUrl, title: fallbackTitle || `Mega_${parsed.id}`, pageUrl: rawUrl, kind: 'file' }).catch(() => ({ ok: false }));
+      if (r && r.ok) return { title: fallbackTitle || `Mega_${parsed.id}`, url: rawUrl, via: 'app' };
+    }
+  }
 
   const apiResp = await fetch('https://g.api.mega.co.nz/cs?id=1', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify([{ a: 'g', g: 1, p: parsed.id }]),
   });
-  if (apiResp.status === 509) throw new Error('Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.');
+  if (apiResp.status === 509) {
+    const tl = parseInt(apiResp.headers.get('X-MEGA-Time-Left') || '0', 10);
+    const waitHint = tl > 0 ? ` Thử lại sau ~${Math.max(1, Math.ceil(tl / 60))} phút.` : '';
+    throw new Error(`Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.${waitHint}`);
+  }
   if (!apiResp.ok) return null;
   const payload = await apiResp.json().catch(() => null);
   const item = Array.isArray(payload) ? payload[0] : payload;
@@ -461,6 +491,9 @@ async function vgMegaResolveAndSave(rawUrl, fallbackTitle = '') {
   if (!dlUrl) return null;
 
   const attrName = item.at ? await vgMegaDecryptAttr(item.at, aesKey) : '';
+  if (item.at && !attrName) {
+    throw new Error('Khóa giải mã Mega.nz không hợp lệ — không thể giải mã tên tệp.');
+  }
   const cleanTitle = (attrName || fallbackTitle || `Mega_${parsed.id}`)
     .replace(/\.(?:mp4|m4v|mkv|webm|mov|avi)$/i, '')
     .trim();
@@ -476,12 +509,16 @@ async function vgMegaResolveAndSave(rawUrl, fallbackTitle = '') {
       url: dlUrl,
       aesKeyHex: vgBytesToHex(aesKey),
       ivHex: vgBytesToHex(iv8),
+      metaMacHex: vgBytesToHex(metaMac8),
       totalBytes: Number(item.s || 0),
       pool: 6,
     });
     if (!r || !r.ok) {
       if (r && (r.status === 509 || r.error === 'share_quota_exceeded')) {
         throw new Error('Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.');
+      }
+      if (r && r.error === 'mega_integrity_failed') {
+        throw new Error('Kiểm tra toàn vẹn dữ liệu (MAC) của tệp Mega.nz không khớp — vui lòng thử tải lại.');
       }
       return null;
     }

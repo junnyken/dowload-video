@@ -17,13 +17,14 @@ const sandbox = {
   Uint8Array,
   DataView,
   BigInt,
+  TextDecoder,
   crypto: crypto.webcrypto,
 };
 sandbox.globalThis = sandbox;
 sandbox.self = sandbox;
 vm.runInNewContext(code, sandbox);
 
-const { decryptMegaAesCtr, counterAtOffset } = sandbox.vgBlobFetch;
+const { decryptMegaAesCtr, counterAtOffset, computeMegaMetaMacFromBlob, decryptMegaAttrZeroPadded } = sandbox.vgBlobFetch;
 
 async function main() {
   // 1. Create a 96 KiB synthetic MP4 payload (valid ftyp header + random bytes)
@@ -95,7 +96,44 @@ async function main() {
   assert.strictEqual(actualSha, expectedSha, 'Decrypted SHA-256 must match original MP4 plaintext 100%');
   assert.strictEqual(actualBuf.subarray(4, 12).toString('ascii'), 'ftypmp42', 'MP4 ftyp header preserved');
 
-  console.log('  ✓ Mega AES-128-CTR WebCrypto multi-chunk decryption verified (SHA-256 100% match, ftypmp42 intact)');
+  // 4. Verify Mega CBC-MAC computation & rejection on mismatch
+  const expectedMacHex = await computeMegaMetaMacFromBlob(new Blob([plaintext]), new Uint8Array(aesKey), new Uint8Array(iv8), crypto.webcrypto.subtle);
+  assert.strictEqual(expectedMacHex.length, 16, 'meta_mac must be 8 bytes (16 hex chars)');
+  const resWithValidMac = await decryptMegaAesCtr('https://gfs.mega.example/dl/test', {
+    aesKeyHex: aesKey.toString('hex'),
+    ivHex: iv8.toString('hex'),
+    metaMacHex: expectedMacHex,
+    chunkSize: 32 * 1024,
+    pool: 3,
+    fetchImpl: mockFetch,
+    subtle: crypto.webcrypto.subtle,
+    createSink,
+  });
+  assert.strictEqual(resWithValidMac.ok, true, 'Valid meta_mac must pass');
+  const resWithBadMac = await decryptMegaAesCtr('https://gfs.mega.example/dl/test', {
+    aesKeyHex: aesKey.toString('hex'),
+    ivHex: iv8.toString('hex'),
+    metaMacHex: '0000000000000000',
+    chunkSize: 32 * 1024,
+    pool: 3,
+    fetchImpl: mockFetch,
+    subtle: crypto.webcrypto.subtle,
+    createSink,
+  });
+  assert.strictEqual(resWithBadMac.ok, false, 'Mismatched meta_mac must fail');
+  assert.strictEqual(resWithBadMac.error, 'mega_integrity_failed');
+
+  // 5. Verify zero-padded AES-128-CBC attribute decryption (real filename recovery!)
+  const rawAttr = Buffer.from('MEGA' + JSON.stringify({ n: 'KhoaHoc_Buoi17.mp4' }), 'utf8');
+  const padLen = (16 - (rawAttr.length % 16)) % 16;
+  const paddedAttr = Buffer.concat([rawAttr, Buffer.alloc(padLen)]);
+  const cbcEnc = crypto.createCipheriv('aes-128-cbc', aesKey, Buffer.alloc(16));
+  cbcEnc.setAutoPadding(false);
+  const attrCt = Buffer.concat([cbcEnc.update(paddedAttr), cbcEnc.final()]);
+  const decAttr = await decryptMegaAttrZeroPadded(new Uint8Array(attrCt), new Uint8Array(aesKey), crypto.webcrypto.subtle);
+  assert.strictEqual(decAttr && decAttr.n, 'KhoaHoc_Buoi17.mp4', 'Zero-padded Mega attr must recover real filename');
+
+  console.log('  ✓ Mega AES-128-CTR + CBC-MAC + zero-padded attr filename decryption verified');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

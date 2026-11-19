@@ -400,6 +400,18 @@ def _parse_fmt_stream_map(raw: str) -> dict[int, str]:
     return out
 
 
+def _parse_fmt_list(raw: str) -> dict[int, tuple[int, int]]:
+    """Parse Drive get_video_info `fmt_list` (e.g. '37/1920x1080/9/0/115,22/1280x720/...') -> {itag: (w, h)}."""
+    out: dict[int, tuple[int, int]] = {}
+    for part in (raw or "").split(","):
+        tokens = part.strip().split("/")
+        if len(tokens) >= 2 and tokens[0].isdigit():
+            m = re.match(r"^(\d+)x(\d+)$", tokens[1].strip())
+            if m:
+                out[int(tokens[0])] = (int(m.group(1)), int(m.group(2)))
+    return out
+
+
 async def _drive_get_video_info(item_id: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """Drive player's own stream map (also sets DRIVE_STREAM on `client`). None when unavailable."""
     try:
@@ -421,16 +433,17 @@ async def _drive_get_video_info(item_id: str, client: httpx.AsyncClient) -> Opti
     streams = _parse_fmt_stream_map((qs.get("fmt_stream_map") or [""])[0])
     if not streams:
         return None
+    dims = _parse_fmt_list((qs.get("fmt_list") or [""])[0])
     title = (qs.get("title") or [""])[0].strip() or f"gdrive_{item_id}"
     try:
         duration = int(float((qs.get("length_seconds") or ["0"])[0]))
     except ValueError:
         duration = 0
     formats = []
-    for it in sorted(streams, key=lambda i: _ITAG_MAP.get(i, (0,))[0], reverse=True):
-        h = _ITAG_MAP.get(it, (0, "", "mp4", True))[0]
+    for it in sorted(streams, key=lambda i: dims.get(i, (0, _ITAG_MAP.get(i, (0,))[0]))[1], reverse=True):
+        w, h = dims.get(it, (0, _ITAG_MAP.get(it, (0, "", "mp4", True))[0]))
         formats.append({"quality": f"{h}p" if h else str(it), "height": h,
-                        "width": round(h * 16 / 9) if h else 0, "url": "", "ext": "mp4", "itag": it})
+                        "width": w, "url": "", "ext": "mp4", "itag": it})
     return {"title": title, "streams": streams, "formats": formats, "duration": duration}
 
 
@@ -541,20 +554,29 @@ async def _copy_drive_stream(
                             if _t.monotonic() > deadline:
                                 raise TimeoutError("gdrive server copy budget exceeded")
                             try:
-                                r = await client.get(
+                                expected = end - start + 1
+                                written = 0
+                                async with client.stream(
+                                    "GET",
                                     url,
                                     headers={**base_headers, "Range": f"bytes={start}-{end}"},
                                     timeout=httpx.Timeout(60.0),
-                                )
-                                if r.status_code not in (200, 206):
-                                    raise RuntimeError(f"HTTP {r.status_code}")
-                                data = r.content
-                                expected = end - start + 1
-                                if len(data) != expected and r.status_code == 206:
-                                    raise RuntimeError(f"short read {len(data)} != {expected}")
-                                fh.seek(start)
-                                fh.write(data[:expected])
-                                downloaded += expected
+                                ) as r:
+                                    if r.status_code not in (200, 206):
+                                        raise RuntimeError(f"HTTP {r.status_code}")
+                                    async for piece in r.aiter_bytes(256 * 1024):
+                                        if _t.monotonic() > deadline:
+                                            raise TimeoutError("gdrive server copy budget exceeded")
+                                        rem = expected - written
+                                        if rem <= 0:
+                                            break
+                                        chunk_slice = piece[:rem]
+                                        fh.seek(start + written)
+                                        fh.write(chunk_slice)
+                                        written += len(chunk_slice)
+                                    if written != expected and r.status_code == 206:
+                                        raise RuntimeError(f"short read {written} != {expected}")
+                                downloaded += written
                                 now = _t.monotonic()
                                 if progress_token and (now - last_report >= 0.4 or downloaded >= total_size):
                                     last_report = now
@@ -621,7 +643,7 @@ def _drive_info_dict(*, title: str, item_id: str, original_url: str, quality: st
         "available_formats": formats,
         "max_merge_height": height,
         "downloaded_height": height,
-        "downloaded_vcodec": "h264",
+        "downloaded_vcodec": "",
         "downloaded_universal": None,
         "downloaded_media": {"measured": False},
         "is_audio_only": False,

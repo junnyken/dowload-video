@@ -784,16 +784,20 @@ class TestCloudIntegrityUpgrades:
         import hashlib
         import os
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-        from app.services.mega_extractor import encrypt_mega_attributes, mega_b64encode
+        from app.services.mega_extractor import (
+            compute_mega_meta_mac_bytes,
+            encrypt_mega_attributes,
+            mega_b64encode,
+        )
 
         aes_key = bytes(range(16))
         iv = bytes(range(16, 24))
-        meta_mac = bytes(range(24, 32))
+        plaintext = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + (b"VIDGRAB_MEGA_OK_" * 4096)
+        meta_mac = compute_mega_meta_mac_bytes(plaintext, aes_key, iv)
         raw_k = bytes([a ^ b for a, b in zip(aes_key, iv + meta_mac)]) + iv + meta_mac
         key_b64 = mega_b64encode(raw_k)
         at_b64 = encrypt_mega_attributes({"n": "playable_test.mp4"}, aes_key)
 
-        plaintext = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + (b"VIDGRAB_MEGA_OK_" * 4096)
         expected_sha = hashlib.sha256(plaintext).hexdigest()
         cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv + b"\x00" * 8))
         enc = cipher.encryptor()
@@ -913,5 +917,200 @@ class TestCloudIntegrityUpgrades:
             info = await resolve_terabox_share("https://www.terabox.com/s/1TestSurl99", ndus="tok", client=client)
             assert info["title"] == "Tera_Lesson"
             assert info["direct_mp4_url"] == "https://d.terabox.com/file/real_dlink.mp4"
+
+    @pytest.mark.anyio
+    async def test_mega_mac_corrupted_file_rejected(self):
+        """Flipping 1 byte in Mega ciphertext MUST fail CBC-MAC verification and raise mega_integrity_failed."""
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from app.services.mega_extractor import (
+            compute_mega_meta_mac_bytes,
+            encrypt_mega_attributes,
+            mega_b64encode,
+        )
+
+        aes_key = bytes(range(16))
+        iv = bytes(range(16, 24))
+        plaintext = b"MEGA_INTEGRITY_TEST_" * 1024
+        meta_mac = compute_mega_meta_mac_bytes(plaintext, aes_key, iv)
+        raw_k = bytes([a ^ b for a, b in zip(aes_key, iv + meta_mac)]) + iv + meta_mac
+        key_b64 = mega_b64encode(raw_k)
+        at_b64 = encrypt_mega_attributes({"n": "corrupt_check.mp4"}, aes_key)
+
+        enc = Cipher(algorithms.AES(aes_key), modes.CTR(iv + b"\x00" * 8)).encryptor()
+        ct = bytearray(enc.update(plaintext) + enc.finalize())
+        ct[100] ^= 0xFF  # Corrupt 1 byte
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "g.api.mega.co.nz" in str(request.url):
+                return httpx.Response(200, json=[{
+                    "s": len(plaintext), "at": at_b64,
+                    "g": "https://gfs.userstorage.mega.co.nz/dl/corrupt-stream",
+                }])
+            return httpx.Response(200, headers={"Content-Length": str(len(ct))}, content=bytes(ct))
+
+        async with _mock_client(handler) as client:
+            with pytest.raises(ValueError, match="mega_integrity_failed"):
+                await resolve_mega_share(
+                    f"https://mega.nz/file/CorruptId#{key_b64}",
+                    client=client, decrypt_on_server=True,
+                )
+
+    def test_mega_rejects_wrong_key_and_16b_file_key(self):
+        """16-byte folder key on a file URL and wrong attribute keys must raise invalid_mega_key (no fake fallback)."""
+        from app.services.mega_extractor import (
+            decrypt_mega_attributes,
+            derive_mega_file_key,
+            encrypt_mega_attributes,
+            mega_b64encode,
+        )
+
+        folder_key_b64 = mega_b64encode(bytes(range(16)))
+        with pytest.raises(ValueError, match="invalid_mega_key"):
+            derive_mega_file_key(folder_key_b64)
+
+        at_b64 = encrypt_mega_attributes({"n": "real_video.mp4"}, bytes(range(16)))
+        with pytest.raises(ValueError, match="invalid_mega_key"):
+            decrypt_mega_attributes(at_b64, bytes(range(1, 17)))
+
+    @pytest.mark.anyio
+    async def test_mega_folder_real_node_decrypt_and_folder_file_resolve(self):
+        """Mega folders decrypt real folder title, real file node keys (AES-ECB), and resolve folder_file downloads."""
+        import hashlib
+        import os
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from app.services.mega_extractor import (
+            compute_mega_meta_mac_bytes,
+            encrypt_mega_attributes,
+            mega_b64encode,
+        )
+
+        folder_key = bytes(range(10, 26))
+        folder_key_b64 = mega_b64encode(folder_key)
+
+        # Encrypt folder root node key (16B) & folder title
+        root_node_key = bytes(range(30, 46))
+        ecb_enc = Cipher(algorithms.AES(folder_key), modes.ECB()).encryptor()
+        enc_root_k = mega_b64encode(ecb_enc.update(root_node_key) + ecb_enc.finalize())
+        root_at = encrypt_mega_attributes({"n": "Khoa Hoc Full HD"}, root_node_key)
+
+        # Encrypt file node key (32B) & file attributes & file stream
+        file_aes_key = bytes(range(50, 66))
+        file_iv = bytes(range(66, 74))
+        plaintext = b"FOLDER_FILE_MP4_PAYLOAD_" * 512
+        file_mac = compute_mega_meta_mac_bytes(plaintext, file_aes_key, file_iv)
+        raw_file_k = bytes(a ^ b for a, b in zip(file_aes_key, file_iv + file_mac)) + file_iv + file_mac
+        ecb_enc2 = Cipher(algorithms.AES(folder_key), modes.ECB()).encryptor()
+        enc_file_k = mega_b64encode(ecb_enc2.update(raw_file_k) + ecb_enc2.finalize())
+        file_at = encrypt_mega_attributes({"n": "Bai_01.mp4"}, file_aes_key)
+
+        ctr_enc = Cipher(algorithms.AES(file_aes_key), modes.CTR(file_iv + b"\x00" * 8)).encryptor()
+        ciphertext = ctr_enc.update(plaintext) + ctr_enc.finalize()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "g.api.mega.co.nz" in str(request.url):
+                body = request.content.decode("utf-8")
+                if '"a": "f"' in body or '"a":"f"' in body:
+                    return httpx.Response(200, json=[{
+                        "f": [
+                            {"h": "ROOT1", "t": 1, "k": f"OWNER:{enc_root_k}", "a": root_at},
+                            {"h": "FILE1", "t": 0, "s": len(plaintext), "k": f"OWNER:{enc_file_k}", "a": file_at},
+                        ]
+                    }])
+                return httpx.Response(200, json=[{
+                    "s": len(plaintext),
+                    "g": "https://gfs.userstorage.mega.co.nz/dl/folder-file-1",
+                }])
+            return httpx.Response(200, headers={"Content-Length": str(len(ciphertext))}, content=ciphertext)
+
+        async with _mock_client(handler) as client:
+            folder_info = await resolve_mega_share(
+                f"https://mega.nz/folder/FoldID99#{folder_key_b64}", client=client
+            )
+            assert folder_info["title"] == "Khoa Hoc Full HD"
+            assert len(folder_info["entries"]) == 1
+            assert folder_info["entries"][0]["filename"] == "Bai_01.mp4"
+            assert folder_info["entries"][0]["url"] == f"https://mega.nz/folder/FoldID99#{folder_key_b64}/file/FILE1"
+
+            # Now resolve & decrypt the file inside the folder
+            file_info = await resolve_mega_share(
+                folder_info["entries"][0]["url"], client=client, decrypt_on_server=True
+            )
+            path = file_info.get("local_file_path") or ""
+            try:
+                assert file_info["filename"] == "Bai_01.mp4"
+                assert path and os.path.exists(path)
+                with open(path, "rb") as fh:
+                    assert hashlib.sha256(fh.read()).hexdigest() == hashlib.sha256(plaintext).hexdigest()
+            finally:
+                if path and os.path.exists(path):
+                    os.remove(path)
+
+    @pytest.mark.anyio
+    async def test_mega_parallel_6conn_range_download_and_mac(self):
+        """Files > 4 MB download via parallel /start-end chunks with exact CTR offset and pass real CBC-MAC."""
+        import hashlib
+        import os
+        import re as _re
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from app.services.mega_extractor import (
+            compute_mega_meta_mac_bytes,
+            encrypt_mega_attributes,
+            mega_b64encode,
+        )
+
+        aes_key = bytes(range(16))
+        iv = bytes(range(16, 24))
+        plaintext = (b"PARALLEL_MEGA_45MB_BLOCK_" * 188000)  # ~4.7 MB (> 4 MiB threshold)
+        meta_mac = compute_mega_meta_mac_bytes(plaintext, aes_key, iv)
+        raw_k = bytes([a ^ b for a, b in zip(aes_key, iv + meta_mac)]) + iv + meta_mac
+        key_b64 = mega_b64encode(raw_k)
+        at_b64 = encrypt_mega_attributes({"n": "parallel_47mb.mp4"}, aes_key)
+
+        enc = Cipher(algorithms.AES(aes_key), modes.CTR(iv + b"\x00" * 8)).encryptor()
+        ciphertext = enc.update(plaintext) + enc.finalize()
+        seen_ranges = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            u = str(request.url)
+            if "g.api.mega.co.nz" in u:
+                return httpx.Response(200, json=[{
+                    "s": len(plaintext), "at": at_b64,
+                    "g": "https://gfs.userstorage.mega.co.nz/dl/bigfile",
+                }])
+            m = _re.search(r"/(\d+)-(\d+)$", u)
+            if m:
+                s, e = int(m.group(1)), int(m.group(2))
+                seen_ranges.append((s, e))
+                return httpx.Response(200, content=ciphertext[s : e + 1])
+            return httpx.Response(404)
+
+        async with _mock_client(handler) as client:
+            info = await resolve_mega_share(
+                f"https://mega.nz/file/BigParallel#{key_b64}",
+                client=client, decrypt_on_server=True,
+            )
+            path = info.get("local_file_path") or ""
+            try:
+                assert len(seen_ranges) >= 2
+                assert path and os.path.exists(path)
+                with open(path, "rb") as fh:
+                    assert hashlib.sha256(fh.read()).hexdigest() == hashlib.sha256(plaintext).hexdigest()
+            finally:
+                if path and os.path.exists(path):
+                    os.remove(path)
+
+    def test_gdrive_fmt_list_real_dimensions_and_no_hardcoded_vcodec(self):
+        """Drive fmt_list yields real WxH (e.g. vertical 1080x1920) instead of guessed 16:9, and vcodec is not hardcoded."""
+        from app.services.gdrive_extractor import _drive_info_dict, _parse_fmt_list
+
+        dims = _parse_fmt_list("37/1080x1920/9/0/115,22/720x1280/9/0/115")
+        assert dims[37] == (1080, 1920)
+        assert dims[22] == (720, 1280)
+        info = _drive_info_dict(
+            title="Vertical.mp4", item_id="abc", original_url="", quality="1080p",
+            local_file_path="/tmp/x.mp4", size_mb=10.0, height=1920, formats=[], duration=60,
+        )
+        assert info["downloaded_vcodec"] == ""
+
 
 

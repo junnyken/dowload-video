@@ -500,6 +500,16 @@ ERROR_META: dict[str, dict] = {
         "retryable": False,
         "suggested_action": "Kiểm tra lại liên kết hoặc xin link chia sẻ mới từ người gửi.",
     },
+    "invalid_mega_key": {
+        "user_message": "Khóa giải mã Mega.nz không hợp lệ hoặc bị thiếu phần sau dấu '#'.",
+        "retryable": False,
+        "suggested_action": "Sao chép đầy đủ toàn bộ đường dẫn Mega.nz bao gồm cả phần sau dấu '#' rồi thử lại.",
+    },
+    "mega_integrity_failed": {
+        "user_message": "Kiểm tra toàn vẹn dữ liệu (MAC) của tệp Mega.nz không khớp — tệp có thể bị lỗi mạng hoặc sai khóa.",
+        "retryable": True,
+        "suggested_action": "Thử tải lại tệp hoặc kiểm tra lại đường dẫn chia sẻ gốc.",
+    },
 }
 
 

@@ -1,3 +1,8 @@
+## 0.24.0
+- **Bộ tải đa luồng 4 MB viết thẳng bằng Rust (`chunked.rs`) cho Google Drive `/videoplayback`:** mở 12 kết nối ngắn 4 MB song song (đẩy tốc độ từ ~2,1 MB/s với `aria2c` lên 8–15+ MB/s như Tiện ích Chrome, tránh bị Google bóp băng thông kết nối dài).
+- **Hỗ trợ tải & giải mã trực tiếp Mega.nz (1–10+ GB) ngay trên App Desktop:** 6 kết nối song song, giải mã AES-128-CTR theo offset trực tiếp ra đĩa (không bị giới hạn 4 GB như trình duyệt) và **kiểm chứng toàn vẹn CBC-MAC** sau khi tải để loại bỏ hoàn toàn nguy cơ file hỏng.
+- Hỗ trợ nhận link Mega.nz trực tiếp từ Tiện ích Chrome `v5.34.0` (đã sửa giải mã tên file thật cho Mega).
+
 ## 0.23.4
 - Khắc phục lỗi không hiển thị dung lượng, `%`, tốc độ (MB/s) và thời gian còn lại (ETA) khi tải siêu tốc bằng `aria2c` 16 luồng (Google Drive View-Only, PikPak, Cloud): bật `--summary-interval=1` và bổ sung bộ đọc tiến trình `aria2c` trực tiếp trong `progress.rs`.
 

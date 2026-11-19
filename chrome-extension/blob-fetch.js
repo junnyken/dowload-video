@@ -212,6 +212,70 @@
     return counter;
   }
 
+  async function cbcMacChunk(subtle, cbcKey, data, iv16) {
+    const pad = (16 - (data.byteLength % 16)) % 16;
+    let padded = data;
+    if (pad) {
+      padded = new Uint8Array(data.byteLength + pad);
+      padded.set(data, 0);
+    }
+    if (!padded.byteLength) return iv16;
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-CBC', iv: iv16 }, cbcKey, padded));
+    // WebCrypto AES-CBC appends a 16-byte PKCS#7 padding block, so the last ciphertext
+    // block of `padded` sits at [padded.byteLength - 16 .. padded.byteLength].
+    return ct.slice(padded.byteLength - 16, padded.byteLength);
+  }
+
+  /** Computes Mega's 8-byte meta_mac streaming from a Blob/File (<= 1 MB RAM). */
+  async function computeMegaMetaMacFromBlob(blob, aesKeyBytes, iv8, subtle = globalThis.crypto.subtle) {
+    const cbcKey = await subtle.importKey('raw', aesKeyBytes, { name: 'AES-CBC' }, false, ['encrypt']);
+    const chunkIv = new Uint8Array(16);
+    chunkIv.set(iv8.subarray(0, 8), 0);
+    chunkIv.set(iv8.subarray(0, 8), 8);
+    const macs = [];
+    let pos = 0;
+    const total = blob.size;
+    let idx = 1;
+    while (pos < total) {
+      const csize = idx <= 7 ? idx * 131072 : 1048576;
+      idx++;
+      const slice = new Uint8Array(await blob.slice(pos, Math.min(total, pos + csize)).arrayBuffer());
+      if (!slice.byteLength) break;
+      macs.push(await cbcMacChunk(subtle, cbcKey, slice, chunkIv));
+      pos += slice.byteLength;
+    }
+    let finalMac;
+    if (!macs.length) {
+      finalMac = new Uint8Array(16);
+    } else {
+      const all = new Uint8Array(macs.length * 16);
+      for (let i = 0; i < macs.length; i++) all.set(macs[i], i * 16);
+      finalMac = await cbcMacChunk(subtle, cbcKey, all, new Uint8Array(16));
+    }
+    const meta = new Uint8Array(8);
+    for (let i = 0; i < 4; i++) {
+      meta[i] = finalMac[i] ^ finalMac[i + 4];
+      meta[i + 4] = finalMac[i + 8] ^ finalMac[i + 12];
+    }
+    return Array.from(meta, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /** Decrypts Mega's zero-padded AES-128-CBC 'at' attribute blob using WebCrypto. */
+  async function decryptMegaAttrZeroPadded(ctBytes, aesKeyBytes, subtle = globalThis.crypto.subtle) {
+    if (!ctBytes || !ctBytes.byteLength || ctBytes.byteLength % 16 !== 0) return null;
+    const key = await subtle.importKey('raw', aesKeyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+    const lastBlock = ctBytes.slice(ctBytes.byteLength - 16);
+    const padPlain = new Uint8Array(16).fill(16);
+    const padEnc = new Uint8Array(await subtle.encrypt({ name: 'AES-CBC', iv: lastBlock }, key, padPlain));
+    const ctWithPad = new Uint8Array(ctBytes.byteLength + 16);
+    ctWithPad.set(ctBytes, 0);
+    ctWithPad.set(padEnc.subarray(0, 16), ctBytes.byteLength);
+    const plain = new Uint8Array(await subtle.decrypt({ name: 'AES-CBC', iv: new Uint8Array(16) }, key, ctWithPad));
+    const txt = new TextDecoder().decode(plain).replace(/\0+$/, '');
+    if (!txt.startsWith('MEGA')) return null;
+    return JSON.parse(txt.slice(4));
+  }
+
   /**
    * Downloads and decrypts a Mega.nz AES-128-CTR stream in parallel 4 MB chunks
    * directly into OPFS (zero full-file RAM buffering), using the user's own IP.
@@ -289,6 +353,15 @@
         return { ok: false, error: String(failed.message || failed) };
       }
       const out = await sink.finalize();
+      if (opts.metaMacHex && typeof opts.metaMacHex === 'string' && opts.metaMacHex.length === 16) {
+        const actualMac = await computeMegaMetaMacFromBlob(out.blob, aesKeyBytes, iv8, subtle);
+        if (actualMac.toLowerCase() !== opts.metaMacHex.toLowerCase()) {
+          if (out.opfsName && typeof navigator !== 'undefined' && navigator.storage?.getDirectory) {
+            await navigator.storage.getDirectory().then((d) => d.removeEntry(out.opfsName)).catch(() => {});
+          }
+          return { ok: false, error: 'mega_integrity_failed' };
+        }
+      }
       return { ok: true, blob: out.blob, bytes: out.blob?.size ?? total, opfsName: out.opfsName || null, mode: 'mega_parallel' };
     } catch (e) {
       await sink.abort?.();
@@ -305,6 +378,8 @@
     parallelRangeDownload,
     hexToBytes,
     counterAtOffset,
+    computeMegaMetaMacFromBlob,
+    decryptMegaAttrZeroPadded,
     decryptMegaAesCtr,
   };
 
@@ -330,8 +405,9 @@
           const res = await decryptMegaAesCtr(msg.url, {
             aesKeyHex: msg.aesKeyHex,
             ivHex: msg.ivHex,
+            metaMacHex: msg.metaMacHex,
             totalBytes: msg.totalBytes,
-            pool: msg.pool || 4,
+            pool: msg.pool || 6,
           });
           if (!res.ok) return { ok: false, status: res.status, error: res.error };
           const url = URL.createObjectURL(res.blob);

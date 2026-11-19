@@ -16,6 +16,7 @@ mod app_update;
 mod auth;
 mod browser_login;
 mod channels;
+mod chunked;
 mod cleanup;
 mod checksum;
 mod claim_token;
@@ -87,19 +88,26 @@ const STOP_PAUSE: u8 = 1;
 const STOP_CANCEL: u8 = 2;
 
 struct Running {
-    tree: Mutex<proc::ProcessTree>,
-    stop: AtomicU8,
+    tree: Mutex<Option<proc::ProcessTree>>,
+    stop: Arc<AtomicU8>,
 }
 
 impl Running {
     fn new(tree: proc::ProcessTree) -> Arc<Self> {
-        Arc::new(Self { tree: Mutex::new(tree), stop: AtomicU8::new(STOP_NONE) })
+        Arc::new(Self { tree: Mutex::new(Some(tree)), stop: Arc::new(AtomicU8::new(STOP_NONE)) })
+    }
+    fn native() -> Arc<Self> {
+        Arc::new(Self { tree: Mutex::new(None), stop: Arc::new(AtomicU8::new(STOP_NONE)) })
     }
     fn kill(&self) -> std::io::Result<()> {
-        lock(&self.tree).kill()
+        if let Some(t) = lock(&self.tree).as_mut() {
+            t.kill()
+        } else {
+            Ok(())
+        }
     }
     fn swap_tree(&self, tree: proc::ProcessTree) {
-        *lock(&self.tree) = tree;
+        *lock(&self.tree) = Some(tree);
     }
 }
 
@@ -1179,6 +1187,120 @@ async fn start_download(
     } else {
         None
     };
+
+    // Native 4 MiB chunked parallel fast-path for Google Drive `/videoplayback`
+    // (12 short-lived Range connections -> 8–15+ MB/s) and Mega.nz (6 parallel
+    // `/start-end` Range connections + on-the-fly AES-128-CTR + CBC-MAC, 1–10+ GB).
+    if !audio_only && chunked::is_native_chunked_url(&url) {
+        let running = {
+            let mut map = lock(&jobs.downloads);
+            if map.contains_key(&job_id) {
+                return Err(CommandError::unknown("this job is already running"));
+            }
+            let r = Running::native();
+            map.insert(job_id.clone(), r.clone());
+            r
+        };
+        let ffprobe = paths[2].clone();
+        let ffmpeg = paths[1].clone();
+        let ext_subs = ext_subtitles.unwrap_or_default();
+        let preferred_title = out_name.as_ref().map(|n| n.title.to_string());
+        let app_for_thread = app.clone();
+        let job_id_thread = job_id.clone();
+        let url_thread = url.clone();
+        let out_dir_thread = out_dir.clone();
+        let headers_thread = headers.clone();
+
+        std::thread::spawn(move || {
+            let ck_path = ck
+                .as_ref()
+                .map(RunCookies::path)
+                .or_else(|| ext_ck.as_ref().map(|f| f.path()))
+                .map(PathBuf::from);
+            let app_prog = app_for_thread.clone();
+            let jid_prog = job_id_thread.clone();
+            let res = chunked::run_native_download(
+                &url_thread,
+                &out_dir_thread,
+                preferred_title.as_deref(),
+                &headers_thread,
+                ck_path.as_deref(),
+                running.stop.clone(),
+                move |p| {
+                    let pct = if p.total_bytes > 0 {
+                        Some((p.downloaded_bytes as f64 / p.total_bytes as f64 * 100.0).min(100.0))
+                    } else {
+                        None
+                    };
+                    let _ = app_prog.emit(
+                        EVENT_PROGRESS,
+                        ProgressEvent {
+                            job_id: &jid_prog,
+                            stage: progress::Stage::Downloading,
+                            percent: pct,
+                            downloaded_bytes: Some(p.downloaded_bytes),
+                            total_bytes: Some(p.total_bytes),
+                            speed_bps: Some(p.speed_bps),
+                            eta_sec: p.eta_sec,
+                        },
+                    );
+                },
+            );
+
+            lock(&app_for_thread.state::<Jobs>().downloads).remove(&job_id_thread);
+
+            let mut ev = DoneEvent {
+                job_id: job_id_thread.clone(),
+                cookies_used: ck.as_ref().map(|_| true).or_else(|| ext_ck.as_ref().map(|_| true)),
+                ..Default::default()
+            };
+            match res {
+                Ok(final_path) => match paths::canonical(&final_path) {
+                    Ok(canon) if canon.is_file() => {
+                        let store = app_for_thread.state::<Store>();
+                        if let Some(db) = &store.0 {
+                            let _ = db.add_produced(&canon, &job_id_thread);
+                            let _ = db.clear_partials(&job_id_thread);
+                        }
+                        if !ext_subs.is_empty() {
+                            fetch_and_save_companion_subs(
+                                &canon,
+                                &job_id_thread,
+                                &ext_subs,
+                                &headers_thread,
+                                store.0.as_ref(),
+                                Some(&ffmpeg),
+                            );
+                        }
+                        ev.state = "completed";
+                        ev.file_size = std::fs::metadata(&canon).ok().map(|m| m.len());
+                        ev.media = media::probe(&ffprobe, &paths::display_form(&canon));
+                        ev.file_path = Some(paths::display_form(&canon).to_string_lossy().into_owned());
+                    }
+                    _ => {
+                        ev.state = "failed";
+                        ev.error_code = Some(Code::Unknown.as_str());
+                        ev.error_message = Some(format!("Tệp tải xong không tồn tại: {}", final_path.display()));
+                    }
+                },
+                Err(chunked::ChunkError::Stopped(s)) => {
+                    ev.state = if s == STOP_CANCEL { "cancelled" } else { "paused" };
+                }
+                Err(err) => {
+                    ev.state = "failed";
+                    ev.error_code = Some(match &err {
+                        chunked::ChunkError::StreamExpired(_) => Code::Network.as_str(),
+                        _ => Code::Unknown.as_str(),
+                    });
+                    ev.error_message = Some(err.message());
+                }
+            }
+            let _ = app_for_thread.emit(EVENT_DONE, ev);
+            drop(ck);
+            drop(ext_ck);
+        });
+        return Ok(());
+    }
     let args = engine::download_args(
         &tools,
         &url,
