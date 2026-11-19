@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { usePlans } from '../lib/usePlans';
 import { SUPPORT_EMAIL } from '../lib/contact';
-import { Code, ExternalLink, CheckCircle2, AlertCircle, Key, Zap, Shield } from 'lucide-react';
+import { Code, ExternalLink, CheckCircle2, AlertCircle, Key, Zap, Shield, Building2, ArrowRight } from 'lucide-react';
 import { useTranslation, Trans } from 'react-i18next';
-import { useLang } from '../i18n';
+import { useLang, useLocalePath } from '../i18n';
+import { spaLink } from '../lib/spaLink';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -97,6 +98,72 @@ const methodColor = (m) => {
   return 'bg-line-strong text-fg-muted border-line-strong';
 };
 
+function ConnectApiOverview() {
+  const { t } = useTranslation('landing');
+  const lp = useLocalePath();
+  return (
+    <section aria-labelledby="apidocs-connect-title" className="w-full">
+      <h2 id="apidocs-connect-title" className="text-lg font-semibold text-fg tracking-tight">
+        {t('api.title')}
+      </h2>
+      <p className="mt-1 text-sm text-fg-muted">
+        {t('api.intro')}
+      </p>
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
+          <div className="flex items-center gap-2">
+            <Code className="w-4 h-4 text-fg-2" aria-hidden="true" />
+            <h3 className="text-sm font-semibold text-fg">{t('api.personal.title')}</h3>
+          </div>
+          <p className="mt-2 text-xs text-fg-muted leading-relaxed">
+            <Trans
+              t={t}
+              i18nKey="api.personal.body"
+              components={{
+                c1: <code className="bg-surface-2 px-1 rounded" />,
+                c2: <code className="bg-surface-2 px-1 rounded" />,
+              }}
+            />
+          </p>
+          <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
+            <a href={lp('/api-keys')} onClick={spaLink('/api-keys')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+              {t('api.personal.createKey')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            </a>
+            <a href={lp('/pricing')} onClick={spaLink('/pricing')} className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+              {t('api.personal.pricing')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            </a>
+          </div>
+        </div>
+        <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-fg-2" aria-hidden="true" />
+            <h3 className="text-sm font-semibold text-fg">{t('api.partner.title')}</h3>
+          </div>
+          <p className="mt-2 text-xs text-fg-muted leading-relaxed">
+            <Trans
+              t={t}
+              i18nKey="api.partner.body"
+              components={{ c1: <code className="bg-surface-2 px-1 rounded" /> }}
+            />
+          </p>
+          <div className="pt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs mt-auto">
+            <a href="#partner" className="inline-flex items-center gap-1 text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+              {t('api.partner.docs')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            </a>
+            <span className="text-fg-muted">{t('api.partner.contact')}</span>
+            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t('api.partner.mailSubject'))}`} className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+              Email
+            </a>
+            <a href="https://t.me/vidgrab_support" target="_blank" rel="noopener noreferrer" className="text-fg-2 hover:text-fg underline-offset-4 hover:underline">
+              Telegram
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function ApiDocsPage() {
   const [apiVersion, setApiVersion] = useState(null);
   const [expanded, setExpanded] = useState(null);
@@ -151,6 +218,9 @@ export default function ApiDocsPage() {
           {t('intro')}
         </p>
       </div>
+
+      {/* ── Connect VidGrab to your own system (Personal & Partner API) ── */}
+      <ConnectApiOverview />
 
       {/* ── RapidAPI Marketplace & OpenAPI Spec ───────────── */}
       <div className="p-5 rounded-2xl bg-surface border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">

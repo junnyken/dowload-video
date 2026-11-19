@@ -1,6 +1,7 @@
 import { Trans, useTranslation } from 'react-i18next';
 import { SUPPORT_EMAIL } from '../lib/contact';
 import { useLocalePath } from '../i18n';
+import QuickGuideSection from '../components/QuickGuideSection';
 
 // wording: BA review (the 10 Q&As live in locales/*/faq.json, items[])
 const CODE = 'rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-fg break-all';
@@ -15,6 +16,11 @@ export default function FaqPage({ onNavigate }) {
       <div className="mb-8 border-b border-line pb-6">
         <h1 className="text-3xl font-extrabold text-fg mb-2">{t('title')}</h1>
         <p className="text-fg-muted text-sm">{t('subtitle')}</p>
+      </div>
+
+      {/* ── Visual 3-step Quick Guide (moved from Home to keep Home clean) ── */}
+      <div className="mb-10">
+        <QuickGuideSection activeToolTab="single" />
       </div>
 
       <div className="space-y-3 mb-12">

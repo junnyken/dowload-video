@@ -13,7 +13,6 @@ import {
   Layers, Stamp, CalendarClock, Lock, Languages, ShieldCheck, Package
 } from 'lucide-react';
 import UpgradeModal from './UpgradeModal';
-import QuickGuideSection from './QuickGuideSection';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { trackEvent, EVENT, setExperiments } from '../utils/trackEvent';
@@ -4548,29 +4547,6 @@ export default function DashboardContent() {
           <p className="text-[11px] text-fg-muted mt-3 px-1">{t('threads.footnote')}</p>
         </div>
       )}
-
-      {/* Idle State — platform quickstart hints */}
-      {!videoInfo && !spotifyData && !threadsData && recentDownloads.length === 0 && !isLoading && (
-        <div className="w-full max-w-3xl mt-2 mb-6">
-          <div className="flex flex-wrap justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Sparkles className="w-3 h-3 flex-shrink-0 text-accent-text" /> {t('idle.tiktok')}
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Video className="w-3 h-3 flex-shrink-0 text-[#FF0000]" /> YouTube → 4K{!session && t('idle.signInSuffix')} · 1080p · MP3{/* wording: BA review */}
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <Music className="w-3 h-3 flex-shrink-0 text-[#1DB954]" /> Spotify → MP3 320kbps
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-fg-2 bg-surface border border-line hover:border-line-strong transition-colors">
-              <span className="text-sm leading-none font-black text-fg">@</span> {t('idle.threads')}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Quick Guide — below the tool ─────────────────── */}
-      <QuickGuideSection activeToolTab="single" />
 
     </div>
   );
