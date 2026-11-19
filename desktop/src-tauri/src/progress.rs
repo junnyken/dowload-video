@@ -73,8 +73,110 @@ pub fn parse_line(line: &str) -> Line {
                 return Line::FinalPath(p);
             }
         }
+    } else if let Some(aria) = parse_aria2(line) {
+        return aria;
     }
     Line::Other
+}
+
+fn parse_aria2_bytes(s: &str) -> Option<u64> {
+    const UNITS: &[(&str, f64)] = &[
+        ("TiB", 1024.0 * 1024.0 * 1024.0 * 1024.0),
+        ("GiB", 1024.0 * 1024.0 * 1024.0),
+        ("MiB", 1024.0 * 1024.0),
+        ("KiB", 1024.0),
+        ("TB", 1_000_000_000_000.0),
+        ("GB", 1_000_000_000.0),
+        ("MB", 1_000_000.0),
+        ("KB", 1_000.0),
+        ("B", 1.0),
+    ];
+    for (suffix, mult) in UNITS {
+        if let Some(num_str) = s.strip_suffix(suffix) {
+            let n: f64 = num_str.parse().ok()?;
+            if n.is_finite() && n >= 0.0 {
+                return Some((n * mult).round() as u64);
+            }
+            return None;
+        }
+    }
+    None
+}
+
+fn parse_aria2_eta(s: &str) -> Option<f64> {
+    let mut total = 0.0;
+    let mut cur: u64 = 0;
+    let mut has_digits = false;
+    let mut matched = false;
+    for ch in s.chars() {
+        if let Some(d) = ch.to_digit(10) {
+            cur = cur.saturating_mul(10).saturating_add(d as u64);
+            has_digits = true;
+        } else if has_digits {
+            let mult = match ch {
+                'd' => 86400.0,
+                'h' => 3600.0,
+                'm' => 60.0,
+                's' => 1.0,
+                _ => return None,
+            };
+            total += cur as f64 * mult;
+            cur = 0;
+            has_digits = false;
+            matched = true;
+        } else {
+            return None;
+        }
+    }
+    if matched && !has_digits { Some(total) } else { None }
+}
+
+/// Parses aria2c `--summary-interval=1` progress lines, e.g.:
+/// `[#881784 27MiB/110MiB(25%) CN:16 DL:16MiB ETA:4s]`
+fn parse_aria2(line: &str) -> Option<Line> {
+    let inner = line.trim().strip_prefix("[#")?.strip_suffix(']')?;
+    let mut tokens = inner.split_whitespace();
+    let _gid = tokens.next()?;
+    let progress_tok = tokens.next()?;
+    let (dl_str, rest) = progress_tok.split_once('/')?;
+    let (total_str, pct_opt) = match rest.split_once('(') {
+        Some((t, p)) => (
+            t,
+            p.trim_end_matches(')')
+                .trim_end_matches('%')
+                .parse::<f64>()
+                .ok()
+                .filter(|x| x.is_finite() && *x >= 0.0),
+        ),
+        None => (rest, None),
+    };
+    let downloaded = parse_aria2_bytes(dl_str);
+    let total = parse_aria2_bytes(total_str).filter(|t| *t > 0);
+    let mut speed_bps: Option<f64> = None;
+    let mut eta_sec: Option<f64> = None;
+    for tok in tokens {
+        if let Some(v) = tok.strip_prefix("DL:") {
+            speed_bps = parse_aria2_bytes(v).map(|b| b as f64);
+        } else if let Some(v) = tok.strip_prefix("ETA:") {
+            eta_sec = parse_aria2_eta(v);
+        }
+    }
+    let percent = match (downloaded, total) {
+        (Some(d), Some(t)) => Some((d as f64 / t as f64 * 100.0).min(100.0)),
+        _ => pct_opt.map(|p| p.min(100.0)),
+    };
+    Some(Line::Progress {
+        update: Update {
+            stage: Some(Stage::Downloading),
+            percent,
+            downloaded_bytes: downloaded,
+            total_bytes: total,
+            speed_bps,
+            eta_sec,
+            finished: false,
+        },
+        files: Vec::new(),
+    })
 }
 
 fn parse_download(v: &Value) -> Line {
@@ -215,6 +317,41 @@ mod tests {
         assert_eq!(parse_line(FILE), Line::FinalPath("/o/video [video].mp4".into()));
         // Non-ASCII arrives \u-escaped (json.dumps default).
         assert_eq!(parse_line(r#"VGFILE "C:\\D\\Vi\u1ec7t [x].mp4""#), Line::FinalPath("C:\\D\\Việt [x].mp4".into()));
+    }
+
+    #[test]
+    fn parses_aria2_summary_lines() {
+        let l = "[#881784 27MiB/110MiB(25%) CN:16 DL:16MiB ETA:4s]";
+        match parse_line(l) {
+            Line::Progress { update, files } => {
+                assert_eq!(update.stage, Some(Stage::Downloading));
+                assert_eq!(update.downloaded_bytes, Some(27 * 1024 * 1024));
+                assert_eq!(update.total_bytes, Some(110 * 1024 * 1024));
+                assert_eq!(update.speed_bps, Some((16 * 1024 * 1024) as f64));
+                assert_eq!(update.eta_sec, Some(4.0));
+                assert!(update.percent.is_some_and(|p| (p - 24.545).abs() < 0.1));
+                assert!(!update.finished);
+                assert!(files.is_empty());
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        let l2 = "[#a1b2c3 1.5GiB/3.0GiB(50%) CN:16 DL:8.5MiB ETA:2m15s]";
+        match parse_line(l2) {
+            Line::Progress { update, .. } => {
+                assert_eq!(update.eta_sec, Some(135.0));
+                assert!(update.percent.is_some_and(|p| (p - 50.0).abs() < 0.01));
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        let l3 = "[#a1b2c3 0B/368MiB(0%) CN:16 DL:0B]";
+        match parse_line(l3) {
+            Line::Progress { update, .. } => {
+                assert_eq!(update.downloaded_bytes, Some(0));
+                assert_eq!(update.total_bytes, Some(368 * 1024 * 1024));
+                assert_eq!(update.eta_sec, None);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 
     #[test]

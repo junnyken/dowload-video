@@ -1,3 +1,6 @@
+## 0.23.4
+- Khắc phục lỗi không hiển thị dung lượng, `%`, tốc độ (MB/s) và thời gian còn lại (ETA) khi tải siêu tốc bằng `aria2c` 16 luồng (Google Drive View-Only, PikPak, Cloud): bật `--summary-interval=1` và bổ sung bộ đọc tiến trình `aria2c` trực tiếp trong `progress.rs`.
+
 ## 0.23.3
 - Tải siêu tốc **Google Drive "Chỉ xem" (View-Only)** bị tắt nút tải bằng 16 kết nối song song (`aria2c -x16 -s16`) cho luồng `/videoplayback`, đẩy tốc độ từ ~150 KB/s lên 10–30 MB/s.
 - Hỗ trợ tải trọn bộ **Thư mục Google Drive**, nâng cấp trích xuất **OneDrive / SharePoint**, **Mega.nz** (giải mã trực tiếp file lớn 1–4 GB) và **Terabox** đa luồng.

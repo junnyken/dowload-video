@@ -292,7 +292,10 @@ pub fn download_args(
                 a.push("--downloader".into());
                 a.push(aria2c_path.as_os_str().to_owned());
                 a.push("--downloader-args".into());
-                a.push("aria2c:-x16 -s16 -k1M --connect-timeout=10".into());
+                a.push(
+                    "aria2c:-x16 -s16 -k1M --connect-timeout=10 --summary-interval=1 --console-log-level=notice --show-console-readout=false --enable-color=false"
+                        .into(),
+                );
             } else {
                 a.push("8".into());
                 if is_direct_media_file_url(url) {
