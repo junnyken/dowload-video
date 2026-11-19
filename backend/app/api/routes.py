@@ -1024,7 +1024,12 @@ async def fetch_link(
         elif is_onedrive_url(payload.url):
             info = await resolve_onedrive_share(payload.url, _quality, cookies_file=user_cookie_file)
         elif is_mega_url(payload.url):
-            info = await resolve_mega_share(payload.url, _quality)
+            info = await resolve_mega_share(
+                payload.url,
+                _quality,
+                progress_token=payload.progress_token or "",
+                decrypt_on_server=True,
+            )
         elif is_terabox_url(payload.url):
             info = await resolve_terabox_share(payload.url, _quality, pwd=_pass_code, cookies_file=user_cookie_file)
         elif is_dropbox_url(payload.url):

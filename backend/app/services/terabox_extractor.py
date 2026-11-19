@@ -161,6 +161,22 @@ def _load_netscape_cookies(cookies_file: Optional[str]) -> dict[str, str]:
     return out
 
 
+_JSTOKEN_RE = re.compile(
+    r'fn%28%22([A-Fa-f0-9]{20,})%22%29|["\']jsToken["\']\s*[:=]\s*["\']([A-Fa-f0-9]{20,})["\']|jsToken\s*=\s*["\']([A-Fa-f0-9]{20,})["\']',
+    re.I,
+)
+
+
+def extract_terabox_jstoken(html_text: str) -> str:
+    """Extract Terabox's anti-bot jsToken from a share page HTML response."""
+    if not html_text:
+        return ""
+    m = _JSTOKEN_RE.search(html_text)
+    if not m:
+        return ""
+    return next((g for g in m.groups() if g), "")
+
+
 async def resolve_terabox_share(
     url: str,
     quality: str = "video",
@@ -173,6 +189,8 @@ async def resolve_terabox_share(
     Resolve a public Terabox share link into a dict compatible with
     extract_video_info() in routes.py.
     """
+    import os
+
     parsed = parse_terabox_url(url)
     if not parsed:
         raise ValueError("invalid_url")
@@ -180,7 +198,8 @@ async def resolve_terabox_share(
     surl = parsed["surl"]
     effective_pwd = (pwd or parsed["pwd"] or "").strip()
     user_cookies = _load_netscape_cookies(cookies_file)
-    effective_ndus = (ndus or user_cookies.get("ndus") or "").strip()
+    env_ndus = (os.getenv("TERABOX_NDUS_COOKIE") or "").strip()
+    effective_ndus = (ndus or user_cookies.get("ndus") or env_ndus).strip()
 
     headers = {
         "User-Agent": _UA,
@@ -243,6 +262,25 @@ async def resolve_terabox_share(
         size_mb = round(int(target.get("size") or 0) / (1024 * 1024), 2)
 
         dlink = (target.get("dlink") or target.get("download_link") or "").strip()
+        if not dlink:
+            # Retry with jsToken extracted from the share page HTML (Terabox requires jsToken + ndus for dlink)
+            try:
+                page_resp = await client.get(
+                    f"{_API_BASE}/s/{surl}",
+                    headers={**headers, "Accept": "text/html,application/xhtml+xml,*/*"},
+                )
+                js_tok = extract_terabox_jstoken(page_resp.text or "") if page_resp.status_code < 400 else ""
+                if js_tok:
+                    retry_params = {**params, "app_id": "250528", "web": "1", "jsToken": js_tok}
+                    r2 = await client.get(f"{_API_BASE}/api/shorturlinfo", params=retry_params)
+                    if r2.status_code < 400:
+                        d2 = r2.json()
+                        l2 = d2.get("list") or []
+                        if l2:
+                            t2 = sorted(l2, key=lambda f: int(f.get("size") or 0), reverse=True)[0]
+                            dlink = (t2.get("dlink") or t2.get("download_link") or "").strip()
+            except Exception as _tb_err:
+                logger.debug("Terabox jsToken retry failed: %s", _tb_err)
         if not dlink:
             raise ValueError("owner_disabled_download")
 

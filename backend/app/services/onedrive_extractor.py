@@ -179,6 +179,18 @@ async def resolve_onedrive_share(
 
     try:
         resp = await client.get(api_url)
+        # If a short 1drv.ms URL fails Graph share resolution, follow the redirect
+        # to the canonical onedrive.live.com URL and retry with the resolved token.
+        if resp.status_code in (400, 404) and "1drv.ms" in url.lower():
+            try:
+                redir = await client.get(url, headers={"Accept": "text/html,*/*"})
+                resolved_url = str(redir.url or "").strip()
+                if resolved_url and resolved_url != url and is_onedrive_url(resolved_url):
+                    token = encode_onedrive_share_token(resolved_url)
+                    api_url = f"{_API_BASE}/shares/{token}/driveItem"
+                    resp = await client.get(api_url)
+            except Exception as _redir_err:
+                logger.debug("OneDrive 1drv.ms redirect retry failed: %s", _redir_err)
         ct = (resp.headers.get("content-type") or "").lower()
 
         if "application/json" in ct or (resp.text or "").lstrip().startswith("{"):

@@ -776,3 +776,142 @@ class TestCloudRegistriesAndErrors:
         assert load_od(str(ck_file)) == {"WLSSC": "onedrive_tok_456"}
         assert load_tb(str(ck_file)) == {"ndus": "terabox_ndus_789"}
 
+
+class TestCloudIntegrityUpgrades:
+    @pytest.mark.anyio
+    async def test_mega_server_aes_ctr_roundtrip_sha256(self):
+        """Server-side Mega decrypt produces bit-for-bit identical playable MP4 (SHA-256 verified)."""
+        import hashlib
+        import os
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from app.services.mega_extractor import encrypt_mega_attributes, mega_b64encode
+
+        aes_key = bytes(range(16))
+        iv = bytes(range(16, 24))
+        meta_mac = bytes(range(24, 32))
+        raw_k = bytes([a ^ b for a, b in zip(aes_key, iv + meta_mac)]) + iv + meta_mac
+        key_b64 = mega_b64encode(raw_k)
+        at_b64 = encrypt_mega_attributes({"n": "playable_test.mp4"}, aes_key)
+
+        plaintext = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + (b"VIDGRAB_MEGA_OK_" * 4096)
+        expected_sha = hashlib.sha256(plaintext).hexdigest()
+        cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv + b"\x00" * 8))
+        enc = cipher.encryptor()
+        ciphertext = enc.update(plaintext) + enc.finalize()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "g.api.mega.co.nz" in str(request.url):
+                return httpx.Response(200, json=[{
+                    "s": len(plaintext),
+                    "at": at_b64,
+                    "g": "https://gfs.userstorage.mega.co.nz/dl/real-enc-stream",
+                }])
+            if "gfs.userstorage.mega.co.nz" in str(request.url):
+                return httpx.Response(200, headers={"Content-Length": str(len(ciphertext))}, content=ciphertext)
+            return httpx.Response(404)
+
+        async with _mock_client(handler) as client:
+            info = await resolve_mega_share(
+                f"https://mega.nz/file/TestRoundTrip#{key_b64}",
+                client=client,
+                decrypt_on_server=True,
+            )
+            path = info.get("local_file_path") or ""
+            try:
+                assert info["direct_mp4_url"] is None
+                assert path and os.path.exists(path)
+                with open(path, "rb") as fh:
+                    out = fh.read()
+                assert out[4:12] == b"ftypmp42"
+                assert hashlib.sha256(out).hexdigest() == expected_sha
+            finally:
+                if path and os.path.exists(path):
+                    os.remove(path)
+
+    @pytest.mark.anyio
+    async def test_mega_server_max_mb_guardrail(self):
+        """Files > MEGA_SERVER_MAX_MB refuse server copy to protect Mega's 5GB/6h IP quota."""
+        from app.services.mega_extractor import encrypt_mega_attributes, mega_b64encode
+
+        aes_key = bytes(range(16))
+        iv = bytes(range(16, 24))
+        meta_mac = bytes(range(24, 32))
+        raw_k = bytes([a ^ b for a, b in zip(aes_key, iv + meta_mac)]) + iv + meta_mac
+        key_b64 = mega_b64encode(raw_k)
+        at_b64 = encrypt_mega_attributes({"n": "huge_movie.mp4"}, aes_key)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[{
+                "s": 900 * 1024 * 1024,
+                "at": at_b64,
+                "g": "https://gfs.userstorage.mega.co.nz/dl/huge",
+            }])
+
+        async with _mock_client(handler) as client:
+            with pytest.raises(ValueError, match="mega_file_too_large_for_server"):
+                await resolve_mega_share(
+                    f"https://mega.nz/file/HugeFile123#{key_b64}",
+                    client=client,
+                    decrypt_on_server=True,
+                )
+
+    @pytest.mark.anyio
+    async def test_onedrive_1drv_redirect_retry(self):
+        """Short 1drv.ms URL failing initial Graph call follows redirect and retries."""
+        resolved = "https://onedrive.live.com/?resid=ABC123&authkey=!XYZ"
+        resolved_tok = encode_onedrive_share_token(resolved)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            u = str(request.url)
+            if "1drv.ms" in u:
+                return httpx.Response(302, headers={"Location": resolved})
+            if u == resolved:
+                return httpx.Response(200, text="<html>ok</html>")
+            if resolved_tok in u:
+                return httpx.Response(200, json={
+                    "name": "OneDrive_Demo.mp4",
+                    "size": 10 * 1024 * 1024,
+                    "@microsoft.graph.downloadUrl": "https://public.dm.files.1drv.com/demo.mp4",
+                })
+            return httpx.Response(404, json={"error": {"code": "itemNotFound"}})
+
+        async with _mock_client(handler) as client:
+            info = await resolve_onedrive_share("https://1drv.ms/v/s!Amxyz12345", client=client)
+            assert info["title"] == "OneDrive_Demo"
+            assert info["direct_mp4_url"] == "https://public.dm.files.1drv.com/demo.mp4"
+
+    @pytest.mark.anyio
+    async def test_terabox_jstoken_extraction_and_retry(self):
+        """Terabox extractor parses jsToken from HTML and retries shorturlinfo to obtain dlink."""
+        from app.services.terabox_extractor import extract_terabox_jstoken
+
+        sample_html = '<script>window.jsToken = fn%28%22ABCDEF0123456789ABCDEF0123456789%22%29;</script>'
+        assert extract_terabox_jstoken(sample_html) == "ABCDEF0123456789ABCDEF0123456789"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            u = str(request.url)
+            if "/api/shorturlinfo" in u and "jsToken=" in u:
+                return httpx.Response(200, json={
+                    "errno": 0,
+                    "list": [{
+                        "fs_id": 111,
+                        "server_filename": "Tera_Lesson.mp4",
+                        "size": 50 * 1024 * 1024,
+                        "dlink": "https://d.terabox.com/file/real_dlink.mp4",
+                    }],
+                })
+            if "/api/shorturlinfo" in u:
+                return httpx.Response(200, json={
+                    "errno": 0,
+                    "list": [{"fs_id": 111, "server_filename": "Tera_Lesson.mp4", "size": 50 * 1024 * 1024, "dlink": ""}],
+                })
+            if "/s/" in u:
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text=sample_html)
+            return httpx.Response(404)
+
+        async with _mock_client(handler) as client:
+            info = await resolve_terabox_share("https://www.terabox.com/s/1TestSurl99", ndus="tok", client=client)
+            assert info["title"] == "Tera_Lesson"
+            assert info["direct_mp4_url"] == "https://d.terabox.com/file/real_dlink.mp4"
+
+

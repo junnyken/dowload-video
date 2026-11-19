@@ -181,27 +181,76 @@ async def download_and_decrypt_mega_file(
     iv: bytes,
     dest_path: str,
     client: Optional[httpx.AsyncClient] = None,
+    progress_token: str = "",
+    total_size: int = 0,
 ) -> str:
     """
-    Download an encrypted Mega stream from `download_url`, decrypt it on the fly
-    using AES-128-CTR, and write the plaintext file to `dest_path`.
+    Stream an encrypted Mega file from `download_url`, decrypt it on the fly
+    using AES-128-CTR (256 KB chunks, zero full-file RAM buffering), and write
+    the playable plaintext file to `dest_path`.
     """
+    import json as _json
+    import os
+    import time as _t
+
     counter_init = (iv[:8] if len(iv) >= 8 else iv.ljust(8, b"\x00")) + (b"\x00" * 8)
     cipher = Cipher(algorithms.AES(aes_key), modes.CTR(counter_init))
     decryptor = cipher.decryptor()
 
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(timeout=httpx.Timeout(_TIMEOUT), follow_redirects=True)
+        client = httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True)
 
+    def _report(status: str, done: int, total: int, elapsed: float) -> None:
+        if not progress_token:
+            return
+        try:
+            from app.core.redis_client import get_redis
+            speed = (done / elapsed) if elapsed > 0.05 else 0.0
+            pct = 100.0 if status == "finished" else (round(done / total * 100, 1) if total > 0 else 0.0)
+            eta = int((total - done) / speed) if (total > done and speed > 0) else 0
+            get_redis().setex(f"dl_progress:{progress_token}", 300, _json.dumps({
+                "status": status,
+                "percent": min(100.0, pct),
+                "speed_kbps": round(speed / 1024, 1),
+                "eta_seconds": eta,
+                "total_bytes": total,
+                "downloaded_bytes": done,
+            }))
+        except Exception:
+            pass
+
+    t0 = _t.monotonic()
+    downloaded = 0
+    last_report = 0.0
     try:
-        resp = await client.get(download_url)
-        if resp.status_code == 509:
-            raise ValueError("share_quota_exceeded")
-        resp.raise_for_status()
-        with open(dest_path, "wb") as fh:
-            fh.write(decryptor.update(resp.content) + decryptor.finalize())
+        async with client.stream("GET", download_url, timeout=httpx.Timeout(60.0)) as resp:
+            if resp.status_code == 509:
+                raise ValueError("share_quota_exceeded")
+            resp.raise_for_status()
+            cl = int(resp.headers.get("content-length") or 0) or total_size
+            with open(dest_path, "wb") as fh:
+                async for chunk in resp.aiter_bytes(256 * 1024):
+                    fh.write(decryptor.update(chunk))
+                    downloaded += len(chunk)
+                    now = _t.monotonic()
+                    if progress_token and now - last_report >= 0.4:
+                        last_report = now
+                        _report("downloading", downloaded, cl, now - t0)
+                tail = decryptor.finalize()
+                if tail:
+                    fh.write(tail)
+        if os.path.getsize(dest_path) <= 0:
+            raise ValueError("empty_mega_file")
+        _report("finished", downloaded, downloaded, _t.monotonic() - t0)
         return dest_path
+    except Exception:
+        try:
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+        except OSError:
+            pass
+        raise
     finally:
         if own_client:
             await client.aclose()
@@ -221,6 +270,8 @@ async def resolve_mega_share(
     url: str,
     quality: str = "video",
     client: Optional[httpx.AsyncClient] = None,
+    progress_token: str = "",
+    decrypt_on_server: bool = False,
 ) -> Dict[str, Any]:
     """
     Resolve a public Mega.nz share link into a dict compatible with
@@ -341,11 +392,35 @@ async def resolve_mega_share(
             "filename": filename,
         }
 
+        local_file_path = ""
+        if decrypt_on_server:
+            import os
+            from app.core.local_download import new_download_path
+            from app.services.downloader import DOWNLOAD_DIR
+
+            try:
+                max_server_mb = float(os.getenv("MEGA_SERVER_MAX_MB", "500"))
+            except ValueError:
+                max_server_mb = 500.0
+            if size_mb > max_server_mb:
+                raise ValueError(
+                    f"mega_file_too_large_for_server: Tệp Mega.nz nặng {size_mb:.0f} MB vượt ngưỡng {max_server_mb:.0f} MB "
+                    f"của máy chủ (nhằm tránh chạm giới hạn 5 GB/6h của Mega). Hãy dùng Tiện ích Chrome hoặc App Windows để giải mã trực tiếp bằng mạng máy bạn."
+                )
+            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+            safe_ext = re.sub(r"[^a-z0-9]", "", ext)[:8] or "mp4"
+            dest_path = new_download_path(DOWNLOAD_DIR, "mega_", safe_ext)
+            local_file_path = await download_and_decrypt_mega_file(
+                dl_url, aes_key, iv, dest_path,
+                client=client, progress_token=progress_token, total_size=size_bytes,
+            )
+
         return {
             "title": title,
             "filename": filename,
             "thumbnail_url": "",
-            "direct_mp4_url": dl_url,
+            "direct_mp4_url": None if local_file_path else dl_url,
+            "local_file_path": local_file_path,
             "original_url": url,
             "quality": quality,
             "duration": 0,

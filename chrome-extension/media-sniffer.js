@@ -42,8 +42,8 @@
   const NON_MANIFEST_EXT = /\.(js|mjs|cjs|css|png|jpe?g|gif|webp|avif|bmp|svg|ico|woff2?|ttf|otf|wasm|map|mp4|m4v|webm|mov|mkv|m4a|mp3|ogg|oga|opus|flac|wav|ts|m4s|m4f|cmfv|cmfa|aac|vtt|webvtt|srt|key|init|pdf|zip)$/i;
   const DISGUISED_HLS_MIMES = new Set(['', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'audio/mpegurl', 'audio/x-mpegurl', 'application/x-mpegurl']);
   const SOFT_HLS_MIMES = new Set(['text/html', 'application/json']);
-  const HLS_URL_HINT = /(?:^|[/?&=_.-])(m3u8|hls\d*|playlist|master|manifest|chunklist|urlset|index[-_]v\d)(?:$|[/?&=_.-])/i;
-  const STRONG_HLS_PATH_HINT = /(\.(m3u8?|txt)$|(?:^|[/_.-])(m3u8|playlist|master|chunklist|urlset)(?:$|[/_.-]))/i;
+  const HLS_URL_HINT = /(?:^|[/?&=_.-])(m3u8|hls\d*|playlist|master|manifest|videomanifest|chunklist|urlset|index[-_]v\d)(?:$|[/?&=_.-])/i;
+  const STRONG_HLS_PATH_HINT = /(\.(m3u8?|txt)$|(?:^|[/_.-])(m3u8|playlist|master|videomanifest|chunklist|urlset)(?:$|[/_.-]))/i;
   const RANGE_PARAMS = ['bytestart', 'byteend', 'range', 'rn', 'rbuf'];
   const JUNK_TITLE_RE = /^(?:just a moment\.{0,3}|attention required!?.*|(?:video\s*|jw\s*|html5\s*)?player|embed(?:\s+player)?|loading\.{0,3}|untitled|index|playlist|master|manifest)$/i;
   const FILE_LIKE_TITLE_RE = /^[a-z0-9_-]+\.(?:m3u8?|mpd|mp4|ts|txt|html?|php)$/i;
