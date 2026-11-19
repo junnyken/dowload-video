@@ -26,6 +26,15 @@ export function buildPlanRows(tiers) {
       get: (t) => (t.id === 'guest' ? false : tp('turboAll')),
     },
     {
+      // Google Drive View-Only & Full Folder Batch (8-conn parallel HTTP Range / 16-conn aria2c).
+      key: 'gdrive', label: tp('rows.gdrive'),
+      get: (t) => {
+        if (t.id === 'guest') return tp('gdriveGuest');
+        if (t.id === 'free') return tp('gdriveFree');
+        return tp('gdrivePaid');
+      },
+    },
+    {
       // PikPak share link (video) qua máy chủ VidGrab — tính vào lượt tải mỗi ngày.
       key: 'pikpak', label: tp('rows.pikpak'),
       get: () => tp('pikpakAll'),

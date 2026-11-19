@@ -7,9 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocalePath } from '../i18n';
 import { CHROME_STORE_URL } from '../lib/chromeExtension';
 import { trackEvent, EVENT } from '../utils/trackEvent';
+import PlatformIconStrip from '../components/PlatformIconStrip';
 
 const PILLAR_ICONS = [Cloud, Puzzle, Monitor];
-const CARD_ICONS = [Zap, Cloud, MousePointerClick, Subtitles, Volume2, RefreshCw, FolderOpen, Wand2];
+const CARD_ICONS = [FolderOpen, Zap, Cloud, MousePointerClick, Subtitles, Volume2, RefreshCw, FolderOpen, Wand2];
 
 export default function FeaturesPage({ onNavigate }) {
   const { t } = useTranslation('features');
@@ -76,6 +77,45 @@ export default function FeaturesPage({ onNavigate }) {
             </a>
           </div>
         </header>
+
+        {/* ── Supported Platforms Icon Strip ───────────────────────── */}
+        <PlatformIconStrip variant="showcase" className="mb-12 sm:mb-16" />
+
+        {/* ── Google Drive View-Only & Full Folder Spotlight ───────── */}
+        {t('gdriveSpotlight.title', { defaultValue: '' }) && (
+          <section className="mb-14 sm:mb-20 rounded-2xl border border-emerald-500/35 bg-gradient-to-br from-emerald-500/10 via-surface-2 to-surface-2 p-6 sm:p-8 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-6 justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-xs font-bold mb-3">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
+                    <path fill="#0066DA" d="M4.2 15.5L8.4 8.2l3.8 6.5L8 21H4.2z" />
+                    <path fill="#00AC47" d="M8.4 8.2L12.1 2h7.4l-3.7 6.2H8.4z" />
+                    <path fill="#EA4335" d="M15.8 8.2L19.5 2l4 6.8-3.7 6.2-4-6.8z" />
+                    <path fill="#00832D" d="M4.2 15.5L8 21h12l3.5-5.5H4.2z" opacity="0.92" />
+                    <path fill="#FFBA00" d="M12.2 14.7L15.8 8.2l4 6.8-3.8 6H8l4.2-6.3z" opacity="0.88" />
+                  </svg>
+                  {t('gdriveSpotlight.badge')}
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-fg tracking-tight">
+                  {t('gdriveSpotlight.title')}
+                </h2>
+                <p className="mt-2 text-sm text-fg-muted leading-relaxed">
+                  {t('gdriveSpotlight.desc')}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0 lg:w-[460px]">
+                {(t('gdriveSpotlight.points', { returnObjects: true }) || []).map((pt, i) => (
+                  <div key={i} className="rounded-xl border border-line bg-surface/90 p-3.5">
+                    <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 mb-1">
+                      {pt.tag}
+                    </div>
+                    <p className="text-xs text-fg-2 leading-snug">{pt.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ── 3-Pillar Ecosystem Overview ──────────────────────────── */}
         <section aria-labelledby="pillars-heading" className="mb-14 sm:mb-20">

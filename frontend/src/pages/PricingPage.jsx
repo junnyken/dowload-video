@@ -7,6 +7,7 @@ import { usePlans, formatVnd, formatUsd } from '../lib/usePlans';
 import { buildPlanRows } from '../lib/planRows';
 import { useTranslation } from 'react-i18next';
 import { useLang, useLocalePath } from '../i18n';
+import PlatformIconStrip from '../components/PlatformIconStrip';
 
 // Pricing page — Khách / Free / Pro. Every number comes from GET /api/v1/plans
 // (backend app/core/plans.py); nothing about limits is written in this file.
@@ -345,11 +346,12 @@ export default function PricingPage() {
             >
               <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               {lang === 'en'
-                ? 'See What’s New: Floating Video Pill, Soft-Sub MP4, Multi-Audio & Windows App'
-                : 'Khám phá Tính năng mới: Nút tải nổi, Phụ đề chìm MP4, Đa kênh tiếng & App Windows'}
+                ? 'See What’s New: Google Drive View-Only & Full Folders, Floating Pill & Windows App'
+                : 'Khám phá Tính năng mới: Google Drive Chỉ xem & Cả thư mục, Nút IDM nổi & App Windows'}
               <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </a>
           </div>
+          <PlatformIconStrip variant="compact" className="mt-6" />
         </div>
 
         {!ready && (

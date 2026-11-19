@@ -31,6 +31,7 @@ import { useResolveInput } from '../hooks/useResolveInput';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { qualityLabel } from '../lib/usePlans';
 import CapabilityBadge from './CapabilityBadge';
+import PlatformIconStrip from './PlatformIconStrip';
 import { readGuestHistory, addGuestHistory, removeGuestHistory, clearGuestHistory } from '../lib/guestHistory';
 import { localFileId, localAnyId, localVideoFirstId, localDownloadUrl, toFileId } from '../lib/localFile';
 
@@ -2069,6 +2070,9 @@ export default function DashboardContent() {
         errorCode={upgradeErrorCode}
         authToken={session?.access_token}
       />
+
+      {/* ── Supported platforms strip (highlights Google Drive View-Only & Full Folders) ── */}
+      <PlatformIconStrip variant="compact" className="max-w-3xl mb-4" />
 
       {/* ── Tool card (prompt box): URL row, mode tabs, options ── */}
       <div className="w-full max-w-3xl mb-6">

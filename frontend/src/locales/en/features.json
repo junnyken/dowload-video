@@ -25,9 +25,30 @@
       "desc": "16-connection aria2c + 10MB chunking with native yt-dlp & ffmpeg on Windows & Apple Silicon Macs: automatic .part resume on 90–99% drops, VIP cookie handoff, and soft-subtitle MP4 muxing."
     }
   ],
-  "flagshipTitle": "8 Breakthrough Capabilities Across the VidGrab Ecosystem",
-  "flagshipSub": "From IDM-style turbo downloads (free with sign-in) and direct PikPak Cloud links to 4K cinema/anime streams, Reup tools, and media teams.",
+  "flagshipTitle": "9 Breakthrough Capabilities Across the VidGrab Ecosystem",
+  "flagshipSub": "From Google Drive View-Only & full folder batch downloads and IDM-style 8–16 channel turbo speed to PikPak Cloud, 4K streams, and AI Creator Studio.",
+  "gdriveSpotlight": {
+    "badge": "NEW · GOOGLE DRIVE VIEW-ONLY & FULL FOLDER",
+    "title": "Download Google Drive \"View-Only\" Videos & Entire Folders Like a Channel",
+    "desc": "Download videos even when the owner disabled downloads: stream 1080p at 8 parallel HTTP Range connections (or 16 connections in the Windows App), and scan & batch-download every video inside a Drive folder in one click.",
+    "points": [
+      { "tag": "View-Only 1080p", "text": "Downloads view-only videos where the Download button is disabled — including private Gmail-shared files." },
+      { "tag": "Full Folder Batch", "text": "Auto-filters video files inside any Drive folder and saves them neatly into one subfolder like channel download." },
+      { "tag": "8–16x Turbo Speed", "text": "8 parallel HTTP Range connections in Extension/Web or 16-connection aria2c in Windows Desktop App." }
+    ]
+  },
   "cards": [
+    {
+      "tier": "Featured · Web, Extension & App",
+      "tierTone": "pro",
+      "title": "Google Drive \"View-Only\" & Full Folder Downloader (8–16 Connections)",
+      "desc": "Pinned IDM-style floating download pill on every Google Drive video player (including view-only links). On Drive folders with dozens of lessons, VidGrab scans all videos automatically and downloads them in parallel.",
+      "highlights": [
+        "Downloads 1080p view-only Drive videos for both public links and private Gmail-shared files",
+        "Scans entire Drive folders like a channel: auto-filters video files and groups them in one folder",
+        "Auto-hands off to Windows App (16-conn aria2c) when running, or runs 8-conn parallel OPFS in Chrome"
+      ]
+    },
     {
       "tier": "Free on Sign-In (Free+)",
       "tierTone": "pro",

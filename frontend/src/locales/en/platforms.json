@@ -1,6 +1,9 @@
 {
   "_note": "wording: BA review — English drafted with AI",
   "items": {
+    "googledrive": {
+      "description": "Download 1080p Google Drive videos (including View-Only files where download is disabled) and scan & batch-download entire folders like a channel at 8–16x speed."
+    },
     "tiktok": {
       "description": "Video, audio, channels, and bulk downloads without a watermark."
     },

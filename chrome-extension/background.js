@@ -2833,6 +2833,64 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
+  if (msg.type === 'VG_GDRIVE_FOLDER_DOWNLOAD') {
+    (async () => {
+      const tabId = sender && sender.tab ? sender.tab.id : null;
+      const items = Array.isArray(msg.items) ? msg.items.filter((x) => x && typeof x.url === 'string' && vgGDriveFileId(x.url)) : [];
+      if (!items.length) { sendResponse({ ok: false, error: 'no_items' }); return; }
+      const rawFolder = typeof msg.folderName === 'string' ? msg.folderName : 'Google Drive';
+      const safeFolder = self.vgDirect.safeName(rawFolder).slice(0, 60) || 'Google Drive';
+
+      const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;
+      const appConnected = !handoffOff && Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+      const via = appConnected ? 'app' : 'browser';
+      sendResponse({ ok: true, via, total: items.length });
+
+      const notify = (payload) => {
+        if (tabId != null) {
+          chrome.tabs.sendMessage(tabId, { type: 'VG_GDRIVE_FOLDER_PROGRESS', via, total: items.length, ...payload }).catch(() => {});
+        }
+      };
+
+      let completed = 0;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const fallbackTitle = (it.title || `Video ${i + 1}`).trim();
+        notify({ index: i + 1, title: fallbackTitle, completed, done: false });
+        const gd = await vgGDriveResolveStream(it.url).catch(() => null);
+        const itemTitle = (gd && gd.title) || fallbackTitle;
+        if (appConnected) {
+          const appPayload = (gd && gd.url)
+            ? { url: gd.url, title: `${safeFolder} - ${itemTitle}`, pageUrl: it.url, refererUrl: 'https://drive.google.com/', kind: 'file' }
+            : { url: it.url, title: `${safeFolder} - ${itemTitle}`, pageUrl: it.url, refererUrl: 'https://drive.google.com/' };
+          const r = await vgSendToApp(appPayload).catch(() => ({ ok: false }));
+          if (r && r.ok) completed++;
+        } else if (gd && gd.url) {
+          const cleanFile = self.vgDirect.safeName(itemTitle).slice(0, 100) || `video_${i + 1}`;
+          const targetName = `VidGrab/${safeFolder}/${cleanFile}.mp4`;
+          const ok = await vgSaveGDriveParallel(gd.url, targetName);
+          if (ok) {
+            completed++;
+            addToHistory({
+              title: itemTitle, thumbnail: '', url: it.url,
+              quality: 'HD', fileSize: '', noWatermark: true,
+              hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none',
+            });
+          }
+        }
+      }
+      notify({ index: items.length, completed, done: true });
+      chrome.notifications.create(`vg-gd-folder-${Date.now()}`, {
+        type: 'basic', iconUrl: 'assets/icon128.png',
+        title: `VidGrab · ${safeFolder}`,
+        message: via === 'app'
+          ? `Đã chuyển ${completed}/${items.length} video Google Drive sang App Windows.`
+          : `Đã tải xong ${completed}/${items.length} video Google Drive (8 luồng).`,
+        priority: 1,
+      });
+    })().catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (msg.type === 'VG_HLS_KEEP_FILES') {
     if (!_fromExtensionPage) { sendResponse({ ok: false, keep: [] }); return false; }
     hlsLoad().then(() => {

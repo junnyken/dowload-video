@@ -15,6 +15,12 @@ import { spaLink } from '../lib/spaLink';
 const PLATFORMS = [
   // ── Fully supported ────────────────────────────────────────────────
   {
+    name: 'Google Drive', status: 'full', logo: '📁',
+    features: ['video', 'audio', 'batch', 'folder', 'view-only', '1080p'],
+    domains: ['drive.google.com', 'docs.google.com'],
+    isNew: true,
+  },
+  {
     name: 'TikTok', status: 'full', logo: '🎵',
     features: ['video', 'audio', 'batch', 'channel', 'watermark-free'],
     domains: ['tiktok.com'],

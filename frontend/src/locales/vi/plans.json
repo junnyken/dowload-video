@@ -12,6 +12,7 @@
     "daily": "Lượt tải mỗi ngày",
     "quality": "Chất lượng tối đa",
     "turbo": "Tải siêu tốc 16 kênh aria2c / IDM (App Windows & macOS v0.23.1)",
+    "gdrive": "Google Drive (Video \"Chỉ xem\" bị tắt tải & Tải trọn bộ thư mục)",
     "pikpak": "Tải video từ link chia sẻ PikPak",
     "youtube": "YouTube",
     "trimClip": "Cắt đoạn video theo thời gian",
@@ -35,6 +36,9 @@
     "api": "API key"
   },
   "trimGuest": "Cắt thử ≤ 5 giây",
+  "gdriveGuest": "Video công khai / Chỉ xem (lẻ)",
+  "gdriveFree": "Chỉ xem 1080p + Tải cả thư mục (Extension 8 luồng)",
+  "gdrivePaid": "Đầy đủ: Chỉ xem 1080p + Tải trọn thư mục + 8–16 luồng (Web, Ext, App)",
   "trimFree": "Cắt thử ≤ 10 giây",
   "trimStarter": "Tới 2 phút (Full HD/4K)",
   "trimPro": "Tùy chỉnh đến 10 phút (Full HD/4K)",

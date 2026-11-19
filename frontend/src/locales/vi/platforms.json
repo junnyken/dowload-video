@@ -1,5 +1,8 @@
 {
   "items": {
+    "googledrive": {
+      "description": "Tải video Google Drive (kể cả chế độ \"Chỉ xem\" bị tắt nút tải) 1080p và quét tải trọn bộ cả thư mục như tải kênh với 8–16 luồng tốc độ cao."
+    },
     "tiktok": {
       "description": "Video, âm thanh, kênh, tải hàng loạt không watermark."
     },

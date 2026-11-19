@@ -24,9 +24,30 @@
       "desc": "Sức mạnh aria2c 16 kênh + chia khối 10MB kết hợp yt-dlp & ffmpeg ngay trên máy Windows & Apple Silicon: tự nối .part khi rớt mạng 90–99%, handoff Cookie VIP và ghép phụ đề chìm MP4."
     }
   ],
-  "flagshipTitle": "8 Tính năng Đột phá Mới nhất trên Hệ sinh thái VidGrab",
-  "flagshipSub": "Từ động cơ tải siêu tốc kiểu IDM (miễn phí khi đăng ký) đến tải link PikPak Cloud, cày phim/Anime 4K, làm sạch Reup và đội ngũ sản xuất media.",
+  "flagshipTitle": "9 Tính năng Đột phá Mới nhất trên Hệ sinh thái VidGrab",
+  "flagshipSub": "Từ tải video Google Drive Chỉ xem & cả thư mục như tải kênh, động cơ 8–16 luồng kiểu IDM đến PikPak Cloud, Anime 4K và AI Creator Studio.",
+  "gdriveSpotlight": {
+    "badge": "MỚI · GOOGLE DRIVE VIEW-ONLY & FULL FOLDER",
+    "title": "Tải Video Google Drive \"Chỉ xem\" & Quét Trọn Bộ Thư Mục như Tải Kênh",
+    "desc": "Vượt rào cản \"Tùy chọn tải xuống đã bị vô hiệu hóa\": tải sắc nét 1080p bằng 8 kết nối HTTP Range song song (hoặc 16 luồng qua App Windows), đồng thời quét & tải toàn bộ hàng chục video trong 1 thư mục Drive chỉ bằng 1 nút bấm.",
+    "points": [
+      { "tag": "Chỉ xem (View-Only)", "text": "Tải video bị chủ sở hữu tắt nút Download, hỗ trợ cả file riêng tư chia sẻ cho Gmail của bạn." },
+      { "tag": "Tải cả thư mục", "text": "Tự lọc đúng tệp video trong thư mục Drive, gom gọn vào 1 thư mục con như tải kênh." },
+      { "tag": "Nhanh gấp 8–16 lần", "text": "Chia khối 8 luồng HTTP Range (Extension/Web) hoặc 16 luồng aria2c (App Windows)." }
+    ]
+  },
   "cards": [
+    {
+      "tier": "Nổi bật · Web, Extension & App",
+      "tierTone": "pro",
+      "title": "Tải Video Google Drive \"Chỉ xem\" & Trọn Bộ Thư Mục (8–16 luồng)",
+      "desc": "Nút tải IDM nổi tự động ghim ngay góc phải trình phát video Google Drive (kể cả chế độ Chỉ xem bị tắt nút tải). Khi mở thư mục Drive có nhiều buổi học, VidGrab quét toàn bộ danh sách video và tải hàng loạt bằng 8–16 kết nối song song.",
+      "highlights": [
+        "Vượt chặn tải \"Chỉ xem\" 1080p mượt mà cho cả file công khai lẫn file riêng tư trên Chrome",
+        "Quét trọn bộ thư mục Drive như tải kênh: tự lọc file video, bỏ qua PDF/ảnh, gom vào 1 thư mục",
+        "Tự động chuyển sang App Windows (16 luồng aria2c) nếu đang mở, hoặc chạy 8 luồng ngay trên Extension"
+      ]
+    },
     {
       "tier": "Miễn phí khi Đăng ký (Free+)",
       "tierTone": "pro",

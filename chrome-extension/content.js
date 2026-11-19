@@ -358,6 +358,44 @@
         return;
       }
     });
+
+    // 5.31.0 Google Drive folder scanner: collects all video items ([data-id]) in
+    // public OR private/view-only folders directly from the user's logged-in Drive UI.
+    if (/(^|\.)drive\.google\.com$/i.test(location.hostname) && /\/folders\//.test(location.pathname)) {
+      const folderMatch = location.pathname.match(/\/folders\/([A-Za-z0-9_-]{10,})/);
+      const currentFolderId = folderMatch ? folderMatch[1] : '';
+      const VIDEO_EXT_RE = /\.(?:mp4|m4v|mkv|webm|mov|avi|flv|wmv|ts|3gp)\b/i;
+      const nodes = document.querySelectorAll('[data-id]');
+      for (let i = 0; i < nodes.length; i++) {
+        const el = nodes[i];
+        const fid = (el.getAttribute('data-id') || '').trim();
+        if (!fid || fid === currentFolderId || !/^[A-Za-z0-9_-]{15,64}$/.test(fid)) continue;
+        // Skip subfolders (Google Drive marks folders with data-target="folder" or aria-label mentioning folder/thư mục)
+        if (el.getAttribute('data-target') === 'folder') continue;
+        const nameEl = el.querySelector('.KL4NAf, [data-tooltip*="."], [role="gridcell"] span[data-tooltip], [role="gridcell"] .Q5txwe');
+        const rawName = (
+          (nameEl && (nameEl.getAttribute('data-tooltip') || nameEl.textContent))
+          || el.getAttribute('aria-label')
+          || ''
+        ).replace(/\s+/g, ' ').trim();
+        const aria = (el.getAttribute('aria-label') || '').trim();
+        const isVideo = VIDEO_EXT_RE.test(rawName)
+          || VIDEO_EXT_RE.test(aria)
+          || /\bvideo\b/i.test(aria)
+          || Boolean(el.querySelector('[aria-label*="video" i], [data-tooltip*="video" i], img[src*="icon_11_video"], img[src*="video_"]'));
+        if (!isVideo) continue;
+        const u = `https://drive.google.com/file/d/${fid}/view`;
+        videoSet.add(u);
+        const cleanTitle = rawName
+          .replace(/\s*(?:video|mp4|mkv|mov)\s*$/i, '')
+          .replace(/\.(?:mp4|m4v|mkv|webm|mov|avi|flv|wmv|ts|3gp)$/i, '')
+          .trim()
+          .slice(0, 160);
+        if (!vgItemMeta.has(u)) vgItemMeta.set(u, { title: cleanTitle || `Video ${fid.slice(0, 8)}`, thumb: '' });
+        else if (cleanTitle && !vgItemMeta.get(u).title) vgItemMeta.get(u).title = cleanTitle;
+      }
+    }
+
     return videoSet.size;
   }
 
@@ -916,6 +954,28 @@ window.addEventListener('message', (event) => {
     // 5.10.0 (owner 21/10): send only what today's allowance covers (first
     // collected = newest first); the rest stays here for a later press.
     // wording: BA review
+    const isGDriveFolder = /(^|\.)drive\.google\.com$/i.test(location.hostname) && /\/folders\//.test(location.pathname);
+    if (isGDriveFolder) {
+      sendText.textContent = '⬇️ Tải tất cả video Drive';
+      chrome.runtime.onMessage.addListener((m) => {
+        if (!m || m.type !== 'VG_GDRIVE_FOLDER_PROGRESS') return;
+        statusEl.dataset.locked = '1';
+        if (m.done) {
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = m.via === 'app'
+            ? `🚀 Đã gửi ${m.completed}/${m.total} video sang App Windows!`
+            : `✅ Hoàn tất ${m.completed}/${m.total} video (8 luồng)!`;
+          sendBtn.disabled = false;
+          sendText.textContent = '⬇️ Tải tất cả video Drive';
+        } else {
+          statusEl.style.color = '#f97316';
+          statusEl.textContent = m.via === 'app'
+            ? `🚀 Đang gửi ${m.index}/${m.total}: ${m.title || ''}`
+            : `⚡ Đang tải ${m.index}/${m.total} (8 luồng): ${m.title || ''}`;
+        }
+      });
+    }
+
     sendBtn.addEventListener('click', async () => {
       const pending = Array.from(videoSet).filter((u) => !vgSentUrls.has(u));
       if (videoSet.size === 0) {
@@ -924,6 +984,40 @@ window.addEventListener('message', (event) => {
       }
       if (pending.length === 0) {
         statusEl.textContent = t('pnl_all_sent');
+        return;
+      }
+
+      // Google Drive folder batch download (App Windows 16-conn if open, else Extension 8-conn parallel OPFS)
+      if (isGDriveFolder) {
+        sendBtn.disabled = true;
+        sendText.textContent = `⏳ Đang chuẩn bị ${pending.length} video...`;
+        const folderName = (document.title || 'Google Drive Folder')
+          .replace(/\s*-\s*Google\s*(?:Drive|Tài liệu|Docs|Disk).*$/i, '')
+          .trim() || 'Google Drive Folder';
+        const items = pending.map((u) => ({
+          url: u,
+          title: (vgItemMeta.get(u) && vgItemMeta.get(u).title) || '',
+        }));
+        chrome.runtime.sendMessage({
+          type: 'VG_GDRIVE_FOLDER_DOWNLOAD',
+          folderName,
+          items,
+        }, (res) => {
+          void chrome.runtime.lastError;
+          if (!res || !res.ok) {
+            statusEl.style.color = '#f87171';
+            statusEl.textContent = `❌ ${(res && res.error) || 'Không thể bắt đầu tải thư mục'}`;
+            sendBtn.disabled = false;
+            sendText.textContent = '⬇️ Tải tất cả video Drive';
+            return;
+          }
+          pending.forEach((u) => vgSentUrls.add(u));
+          statusEl.dataset.locked = '1';
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = res.via === 'app'
+            ? `🚀 Đang chuyển ${items.length} video sang App Windows...`
+            : `⚡ Bắt đầu tải ${items.length} video (8 luồng)...`;
+        });
         return;
       }
 

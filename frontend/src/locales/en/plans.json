@@ -19,6 +19,7 @@
     "daily": "Downloads per day",
     "quality": "Max quality",
     "turbo": "16-Channel aria2c / IDM Turbo (Windows & macOS App v0.23.1)",
+    "gdrive": "Google Drive (\"View-Only\" Videos & Full Folder Batch)",
     "pikpak": "Download videos from PikPak share links",
     "youtube": "YouTube",
     "trimClip": "Clip video by timestamp",
@@ -42,6 +43,9 @@
     "api": "API key"
   },
   "trimGuest": "Short clips ≤ 5s",
+  "gdriveGuest": "Public / View-Only (single video)",
+  "gdriveFree": "View-Only 1080p + Full Folder (8-conn Extension)",
+  "gdrivePaid": "Full: View-Only 1080p + Entire Folder + 8–16x Speed (Web, Ext, App)",
   "trimFree": "Short clips ≤ 10s",
   "trimStarter": "Up to 2 min (Full HD/4K)",
   "trimPro": "Up to 10 min (Full HD/4K)",
