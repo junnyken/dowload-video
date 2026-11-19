@@ -180,7 +180,14 @@ pub fn is_direct_media_file_url(url: &str) -> bool {
         ".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".flv", ".mp3", ".m4a", ".aac", ".opus", ".ogg", ".wav",
         ".flac",
     ];
-    EXTS.iter().any(|ext| path.ends_with(ext))
+    if EXTS.iter().any(|ext| path.ends_with(ext)) {
+        return true;
+    }
+    // Google Drive view-only stream URLs (rrN---sn-*.c.drive.google.com/videoplayback)
+    // throttle a single linear connection to ~150 KB/s, but support HTTP Range at
+    // 10-30 MB/s with aria2c -x16 -s16.
+    path.ends_with("/videoplayback")
+        && (lower.contains(".drive.google.com/") || lower.contains(".docs.google.com/"))
 }
 
 pub fn is_sensitive_cdn_url(url: &str) -> bool {

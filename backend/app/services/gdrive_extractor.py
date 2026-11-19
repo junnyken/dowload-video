@@ -447,10 +447,42 @@ def _pick_itag(streams: dict[int, str], quality: str) -> Optional[int]:
     return order[0] if order else None
 
 
+def _publish_gdrive_progress(
+    progress_token: str, status: str, downloaded: int, total: int, elapsed: float,
+) -> None:
+    if not progress_token:
+        return
+    try:
+        import json as _json
+        from app.core.redis_client import get_redis
+        speed = (downloaded / elapsed) if elapsed > 0.05 else 0.0
+        pct = 100.0 if status == "finished" else (round(downloaded / total * 100, 1) if total > 0 else 0.0)
+        eta = int((total - downloaded) / speed) if (total > downloaded and speed > 0) else 0
+        get_redis().setex(f"dl_progress:{progress_token}", 300, _json.dumps({
+            "status": status,
+            "percent": min(100.0, pct),
+            "speed_kbps": round(speed / 1024, 1),
+            "eta_seconds": eta,
+            "total_bytes": total,
+            "downloaded_bytes": downloaded,
+        }))
+    except Exception:
+        pass
+
+
 async def _copy_drive_stream(
-    client: httpx.AsyncClient, gvi: Dict[str, Any], quality: str,
+    client: httpx.AsyncClient,
+    gvi: Dict[str, Any],
+    quality: str,
+    progress_token: str = "",
 ) -> Optional[tuple[str, float, int]]:
-    """Copies the chosen muxed stream with the client that holds DRIVE_STREAM. (path, MB, height)."""
+    """
+    Copies the chosen muxed stream with the client that holds DRIVE_STREAM.
+    Uses 8-connection parallel HTTP Range chunks (4 MB each) to bypass Google's
+    ~150 KB/s per-connection playback throttle (measured 19/11: 11.2 MB/s vs 1.5 MB/s).
+    Falls back to single-stream GET if Range/206 is unavailable.
+    """
+    import asyncio
     import os
     import time as _t
     from app.core.local_download import new_download_path
@@ -464,22 +496,106 @@ async def _copy_drive_stream(
         budget = float(os.getenv("GDRIVE_SERVER_DOWNLOAD_MAX_SEC", "900"))
     except ValueError:
         budget = 900.0
-    deadline = _t.monotonic() + max(30.0, budget)
+    t0 = _t.monotonic()
+    deadline = t0 + max(30.0, budget)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     path = new_download_path(DOWNLOAD_DIR, "gdrive_", "mp4")
+    base_headers = {"Referer": "https://drive.google.com/"}
+
+    # 1. Fast Range probe to discover total_size & confirm 206 Partial Content support
+    total_size = 0
     try:
-        async with client.stream("GET", url, headers={"Referer": "https://drive.google.com/"},
-                                 timeout=httpx.Timeout(60.0)) as resp:
-            if resp.status_code >= 400:
-                logger.info("gdrive stream itag %s answered %s", itag, resp.status_code)
-                return None
+        probe = await client.get(
+            url,
+            headers={**base_headers, "Range": "bytes=0-0"},
+            timeout=httpx.Timeout(20.0),
+        )
+        if probe.status_code == 206:
+            cr = probe.headers.get("content-range") or ""
+            m_tot = re.search(r"/(\d+)\s*$", cr)
+            if m_tot:
+                total_size = int(m_tot.group(1))
+    except Exception:
+        total_size = 0
+
+    chunk_size = 4 * 1024 * 1024  # 4 MB per Range request
+    try:
+        if total_size > chunk_size:
+            # Parallel 8-worker HTTP Range download
+            ranges = [
+                (s, min(s + chunk_size - 1, total_size - 1))
+                for s in range(0, total_size, chunk_size)
+            ]
+            sem = asyncio.Semaphore(8)
+            downloaded = 0
+            last_report = 0.0
+            _publish_gdrive_progress(progress_token, "downloading", 0, total_size, 0.0)
+
             with open(path, "wb") as fh:
-                async for chunk in resp.aiter_bytes(256 * 1024):
-                    fh.write(chunk)
-                    if _t.monotonic() > deadline:
-                        raise TimeoutError("gdrive server copy budget exceeded")
-        if os.path.getsize(path) <= 0:
+                fh.truncate(total_size)
+
+                async def _fetch_range(start: int, end: int) -> None:
+                    nonlocal downloaded, last_report
+                    async with sem:
+                        for attempt in range(3):
+                            if _t.monotonic() > deadline:
+                                raise TimeoutError("gdrive server copy budget exceeded")
+                            try:
+                                r = await client.get(
+                                    url,
+                                    headers={**base_headers, "Range": f"bytes={start}-{end}"},
+                                    timeout=httpx.Timeout(60.0),
+                                )
+                                if r.status_code not in (200, 206):
+                                    raise RuntimeError(f"HTTP {r.status_code}")
+                                data = r.content
+                                expected = end - start + 1
+                                if len(data) != expected and r.status_code == 206:
+                                    raise RuntimeError(f"short read {len(data)} != {expected}")
+                                fh.seek(start)
+                                fh.write(data[:expected])
+                                downloaded += expected
+                                now = _t.monotonic()
+                                if progress_token and (now - last_report >= 0.4 or downloaded >= total_size):
+                                    last_report = now
+                                    _publish_gdrive_progress(
+                                        progress_token, "downloading", downloaded, total_size, now - t0
+                                    )
+                                return
+                            except Exception:
+                                if attempt == 2:
+                                    raise
+                                await asyncio.sleep(0.5 * (attempt + 1))
+
+                await asyncio.gather(*(_fetch_range(s, e) for s, e in ranges))
+        else:
+            # Single linear stream fallback (small files <= 4 MB or servers without 206)
+            downloaded = 0
+            last_report = 0.0
+            async with client.stream(
+                "GET", url, headers=base_headers, timeout=httpx.Timeout(60.0)
+            ) as resp:
+                if resp.status_code >= 400:
+                    logger.info("gdrive stream itag %s answered %s", itag, resp.status_code)
+                    return None
+                cl = int(resp.headers.get("content-length") or 0) or total_size
+                with open(path, "wb") as fh:
+                    async for chunk in resp.aiter_bytes(256 * 1024):
+                        fh.write(chunk)
+                        downloaded += len(chunk)
+                        now = _t.monotonic()
+                        if now > deadline:
+                            raise TimeoutError("gdrive server copy budget exceeded")
+                        if progress_token and now - last_report >= 0.5:
+                            last_report = now
+                            _publish_gdrive_progress(
+                                progress_token, "downloading", downloaded, cl, now - t0
+                            )
+
+        final_bytes = os.path.getsize(path)
+        if final_bytes <= 0:
             raise ValueError("empty file")
+        _publish_gdrive_progress(progress_token, "finished", final_bytes, final_bytes, _t.monotonic() - t0)
     except Exception as e:
         logger.warning("gdrive server copy failed (itag %s): %s", itag, e)
         try:
@@ -526,6 +642,7 @@ async def _extract_drive_player_stream(
     client: httpx.AsyncClient,
     quality: str = "video",
     original_url: str = "",
+    progress_token: str = "",
 ) -> Optional[Dict[str, Any]]:
     """
     Fallback extractor for view-only Google Drive videos where downloads are disabled by owner.
@@ -537,7 +654,7 @@ async def _extract_drive_player_stream(
     """
     gvi = await _drive_get_video_info(item_id, client)
     if gvi:
-        local = await _copy_drive_stream(client, gvi, quality)
+        local = await _copy_drive_stream(client, gvi, quality, progress_token=progress_token)
         if local:
             path, size_mb, height = local
             info_dict = _drive_info_dict(
@@ -760,6 +877,7 @@ async def resolve_gdrive_share(
     quality: str = "video",
     client: Optional[httpx.AsyncClient] = None,
     cookies_file: Optional[str] = None,
+    progress_token: str = "",
 ) -> Dict[str, Any]:
     """
     Resolve a Google Drive file or folder link into a dict compatible with
@@ -845,7 +963,8 @@ async def resolve_gdrive_share(
             except ValueError as err:
                 if str(err) == "owner_disabled_download":
                     player_info = await _extract_drive_player_stream(
-                        item_id, client, quality=quality, original_url=url
+                        item_id, client, quality=quality, original_url=url,
+                        progress_token=progress_token,
                     )
                     if player_info:
                         return player_info
@@ -859,7 +978,8 @@ async def resolve_gdrive_share(
                 size_mb = confirmed["size_mb"]
             else:
                 player_info = await _extract_drive_player_stream(
-                    item_id, client, quality=quality, original_url=url
+                    item_id, client, quality=quality, original_url=url,
+                    progress_token=progress_token,
                 )
                 if player_info:
                     return player_info

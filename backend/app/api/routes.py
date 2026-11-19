@@ -1015,7 +1015,12 @@ async def fetch_link(
             from app.services.pikpak_extractor import resolve_pikpak_share
             info = await resolve_pikpak_share(payload.url, _quality, pass_code=_pass_code)
         elif is_gdrive_url(payload.url):
-            info = await resolve_gdrive_share(payload.url, _quality, cookies_file=user_cookie_file)
+            info = await resolve_gdrive_share(
+                payload.url,
+                _quality,
+                cookies_file=user_cookie_file,
+                progress_token=payload.progress_token or "",
+            )
         elif is_onedrive_url(payload.url):
             info = await resolve_onedrive_share(payload.url, _quality, cookies_file=user_cookie_file)
         elif is_mega_url(payload.url):
