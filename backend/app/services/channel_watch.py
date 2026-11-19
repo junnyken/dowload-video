@@ -84,10 +84,18 @@ _MESSAGES = {
     "invalid_status": "Trạng thái không hợp lệ.",  # wording: BA review
     "invalid_since": "Mốc thời gian không hợp lệ.",  # wording: BA review
     "inbox_not_ready": "Hộp thư đang được cập nhật, tạm chưa đánh dấu được. Vui lòng thử lại sau.",  # wording: BA review
+    "scan_now_cooldown": "Kênh này vừa được quét xong. Vui lòng thử lại sau {wait}.",
     "invalid_request": "Yêu cầu không hợp lệ.",  # wording: BA review
 }
 
-PLATFORM_LABELS = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram"}
+PLATFORM_LABELS = {
+    "tiktok": "TikTok",
+    "youtube": "YouTube",
+    "instagram": "Instagram",
+    "gdrive": "Google Drive",
+    "facebook": "Facebook",
+    "bilibili": "Bilibili",
+}
 
 
 class WatchError(Exception):
@@ -158,8 +166,8 @@ class ChannelRef:
 # Hosts of platforms we recognise but cannot watch in this phase.
 _KNOWN_UNSUPPORTED = (
     "youtu.be", "douyin.com", "iesdouyin.com", "kuaishou.com",
-    "xiaohongshu.com", "xhslink.com", "rednote.com", "facebook.com", "fb.watch",
-    "x.com", "twitter.com", "threads.net", "threads.com", "bilibili.com", "b23.tv",
+    "xiaohongshu.com", "xhslink.com", "rednote.com", "fb.watch",
+    "x.com", "twitter.com", "threads.net", "threads.com", "b23.tv",
     "reddit.com", "pinterest.com", "pin.it", "soundcloud.com", "vimeo.com",
     "dailymotion.com", "twitch.tv", "snapchat.com", "likee.video", "weibo.com",
 )
@@ -168,6 +176,12 @@ _TIKTOK_SHORT_HOSTS = ("vm.tiktok.com", "vt.tiktok.com")
 _TIKTOK_PROFILE_RE = re.compile(r"^/@([A-Za-z0-9_.]{1,40})(?:/.*)?$")
 _YOUTUBE_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com")
 _INSTAGRAM_HOSTS = ("instagram.com", "www.instagram.com", "m.instagram.com")
+_GDRIVE_HOSTS = ("drive.google.com", "docs.google.com")
+_FACEBOOK_HOSTS = ("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com")
+_BILIBILI_HOSTS = ("space.bilibili.com", "www.bilibili.com", "bilibili.com", "m.bilibili.com")
+_FB_PROFILE_RE = re.compile(r"^/(?:profile\.php\?id=(\d+)|([A-Za-z0-9_.\-]{2,80})(?:/(?:videos|reels)?)?/?)$")
+_FB_RESERVED = frozenset({"watch", "reel", "reels", "videos", "groups", "share", "story.php", "photo", "photos", "events", "marketplace", "gaming", "login", "help"})
+_BILI_SPACE_RE = re.compile(r"^/(?:space/)?(\d{2,20})(?:/.*)?$")
 # instagram.com/<username>[/reels|/] — not /p/, /reel/, /stories/, /explore…
 _IG_PROFILE_RE = re.compile(r"^/([A-Za-z0-9_.]{1,30})(?:/(?:reels|tagged)?)?/?$")
 _IG_RESERVED = frozenset({"p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct",
@@ -200,6 +214,12 @@ def platform_of_url(url: str) -> Optional[str]:
         return "youtube"
     if host in _INSTAGRAM_HOSTS:
         return "instagram"
+    if host in _GDRIVE_HOSTS:
+        return "gdrive"
+    if host in _FACEBOOK_HOSTS:
+        return "facebook"
+    if host in _BILIBILI_HOSTS:
+        return "bilibili"
     for h in _KNOWN_UNSUPPORTED:
         if host == h or host.endswith("." + h):
             return f"other:{h}"
@@ -284,6 +304,39 @@ def resolve_channel_url(url: str, *, resolve_short: Callable[[str], str] = None,
             raise WatchError("unsupported_url")
         return ChannelRef(platform="instagram", external_channel_id=name,
                           canonical_url=f"https://www.instagram.com/{name}/", display_name=f"@{name}")
+    if platform == "gdrive":
+        from app.services.gdrive_extractor import parse_gdrive_url
+        parsed = parse_gdrive_url(url)
+        if not parsed or parsed[0] != "folder":
+            raise WatchError("unsupported_url")
+        fid = parsed[1]
+        return ChannelRef(
+            platform="gdrive",
+            external_channel_id=fid,
+            canonical_url=f"https://drive.google.com/drive/folders/{fid}",
+            display_name=f"Google Drive ({fid[:8]})",
+        )
+    if platform == "facebook":
+        parts = urlsplit(url)
+        path_q = parts.path + (f"?{parts.query}" if parts.path == "/profile.php" else "")
+        m = _FB_PROFILE_RE.match(path_q)
+        slug = (m.group(1) or m.group(2) or "").strip() if m else ""
+        if not slug or slug.lower() in _FB_RESERVED:
+            raise WatchError("unsupported_url")
+        canon = f"https://www.facebook.com/profile.php?id={slug}" if m.group(1) else f"https://www.facebook.com/{slug}"
+        return ChannelRef(platform="facebook", external_channel_id=slug.lower(),
+                          canonical_url=canon, display_name=f"@{slug}")
+    if platform == "bilibili":
+        m = _BILI_SPACE_RE.match(urlsplit(url).path or "")
+        mid = m.group(1) if m else ""
+        if not mid:
+            raise WatchError("unsupported_url")
+        return ChannelRef(
+            platform="bilibili",
+            external_channel_id=mid,
+            canonical_url=f"https://space.bilibili.com/{mid}/video",
+            display_name=f"Bilibili #{mid}",
+        )
 
     # tiktok
     if _host_of(url) in _TIKTOK_SHORT_HOSTS:
@@ -818,11 +871,135 @@ def _list_instagram(source: dict, limit: int, *, run=None) -> list:
     return entries
 
 
+_GDRIVE_VIDEO_EXT_RE = re.compile(r"\.(?:mp4|m4v|mkv|webm|mov|avi|flv|wmv|ts|3gp)\b", re.I)
+
+
+def _list_gdrive(source: dict, limit: int) -> list:
+    """List video files inside a public Google Drive folder (free, 0 proxy cost)."""
+    from app.services.gdrive_extractor import _run_sync, resolve_gdrive_share
+
+    url = source.get("canonical_url") or ""
+    try:
+        info = _run_sync(resolve_gdrive_share(url))
+    except ValueError as exc:
+        code = str(exc)
+        if code in ("owner_disabled_download", "share_expired", "invalid_url"):
+            raise ListingError("not_found_or_private", permanent=True)
+        raise ListingError("provider_unavailable", permanent=False)
+    except Exception:
+        raise ListingError("provider_unavailable", permanent=False)
+
+    entries = info.get("entries") or []
+    out: list[dict] = []
+    for item in entries:
+        fid = (item.get("id") or "").strip()
+        title = (item.get("title") or "").strip()
+        if not fid:
+            continue
+        # Prefer explicit video files; keep items without extension only if nothing has a video ext
+        if title and "." in title and not _GDRIVE_VIDEO_EXT_RE.search(title):
+            continue
+        out.append({
+            "id": fid,
+            "url": f"https://drive.google.com/file/d/{fid}/view",
+            "title": re.sub(_GDRIVE_VIDEO_EXT_RE, "", title).strip() or f"Video {fid[:8]}",
+            "thumbnail": f"https://drive.google.com/thumbnail?id={fid}&sz=w480",
+            "duration": 0,
+        })
+        if len(out) >= max(1, limit):
+            break
+    if not out:
+        raise ListingError("empty", permanent=True)
+    return out
+
+
+def _list_ytdlp_generic(source: dict, limit: int, platform: str) -> list:
+    """Free flat-playlist listing via yt-dlp (used for Facebook Pages & Bilibili spaces)."""
+    import yt_dlp  # noqa: PLC0415
+
+    url = source.get("canonical_url") or ""
+    n = max(1, min(limit, cfg.HARD_MAX_ITEMS_PER_SCAN * 3))
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": "in_playlist",
+        "playlistend": n,
+        "socket_timeout": 20,
+        "ignoreerrors": True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            data = ydl.extract_info(url, download=False)
+    except Exception:
+        raise ListingError("provider_unavailable", permanent=False)
+
+    raw_entries = (data or {}).get("entries") or []
+    out: list[dict] = []
+    for e in raw_entries:
+        if not isinstance(e, dict):
+            continue
+        vid = str(e.get("id") or "").strip()
+        vurl = (e.get("webpage_url") or e.get("url") or "").strip()
+        if not vurl and platform == "bilibili" and vid:
+            vurl = f"https://www.bilibili.com/video/{vid}"
+        if not vurl:
+            continue
+        out.append({
+            "id": vid or vurl,
+            "url": vurl,
+            "title": (e.get("title") or "").strip()[:200],
+            "thumbnail": (e.get("thumbnail") or "").strip(),
+            "duration": int(e.get("duration") or 0),
+        })
+        if len(out) >= n:
+            break
+    if not out:
+        raise ListingError("empty", permanent=True)
+    return out
+
+
+def _list_facebook(source: dict, limit: int) -> list:
+    return _list_ytdlp_generic(source, limit, "facebook")
+
+
+def _list_bilibili(source: dict, limit: int) -> list:
+    return _list_ytdlp_generic(source, limit, "bilibili")
+
+
 PROVIDERS: dict[str, tuple[str, Callable[[dict, int], list]]] = {
     "tiktok": ("tikwm", _list_tiktok),
     "youtube": ("youtube_rss", _list_youtube),
     "instagram": (IG_PROVIDER, _list_instagram),
+    "gdrive": ("gdrive_folder", _list_gdrive),
+    "facebook": ("ytdlp_facebook", _list_facebook),
+    "bilibili": ("ytdlp_bilibili", _list_bilibili),
 }
+
+
+def scan_now_subscription(
+    sb, rc, user_id: str, sub_id: str, *, cooldown_sec: int = 900,
+) -> dict:
+    """User-triggered manual scan of a followed channel/folder with per-sub cooldown."""
+    if cfg.kill_switch(rc):
+        raise WatchError("watch_disabled", 503)
+    res = sb.table("watch_subscriptions").select("*").eq("id", sub_id).eq("user_id", user_id).execute()
+    sub = _one(res)
+    if not sub or sub.get("status") == "removed":
+        raise WatchError("not_found", 404)
+    key = f"watch:scannow:{user_id}:{sub_id}"
+    try:
+        ttl = rc.ttl(key) if rc is not None else -2
+    except Exception:
+        ttl = -2
+    if ttl and ttl > 0:
+        raise WatchError("scan_now_cooldown", 429, wait=_wait_text(ttl), retry_after_sec=int(ttl))
+    try:
+        if rc is not None:
+            rc.setex(key, max(60, cooldown_sec), "1")
+    except Exception:
+        pass
+    outcome = scan_source(sub["source_id"], sb=sb, rc=rc)
+    return {"ok": True, "source_id": sub["source_id"], "result": outcome}
 
 
 # ── DB helpers ───────────────────────────────────────────────────────

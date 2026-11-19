@@ -124,6 +124,9 @@ export default function WatchPage() {
   }, []);
 
   const [reloadKey, setReloadKey] = useState(0);
+  const [scanningId, setScanningId] = useState(null);
+  const [keywordFilter, setKeywordFilter] = useState('');
+  const [skipShorts, setSkipShorts] = useState(false);
   const load = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
@@ -233,6 +236,30 @@ export default function WatchPage() {
     const r = await fetch(`${API}/subscriptions/${id}`, withAuth({ method: 'DELETE' }));
     if (!r.ok) setErr(errText(await r.json().catch(() => ({}))));
     load();
+  }
+
+  async function scanNow(id) {
+    if (scanningId) return;
+    setScanningId(id);
+    setErr('');
+    setMsg('');
+    try {
+      const r = await fetch(`${API}/subscriptions/${id}/scan-now`, withAuth({ method: 'POST' }));
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErr(errText(d));
+      } else {
+        const added = Number(d?.result?.new_items || 0);
+        setMsg(getLang() === 'en'
+          ? (added > 0 ? `Scan complete: found ${added} new video(s)!` : 'Scan complete: channel is up to date.')
+          : (added > 0 ? `Quét xong: phát hiện ${added} video mới!` : 'Quét xong: kênh hiện chưa có video mới.'));
+        load();
+      }
+    } catch {
+      setErr(T.genericError);
+    } finally {
+      setScanningId(null);
+    }
   }
 
   async function markRead(payload, optimistic) {
@@ -402,7 +429,13 @@ export default function WatchPage() {
   }
 
   const canAdd = status.enabled && status.used < status.limits.max_sources;
-  const channelGroups = groupWatchItemsByChannel(inbox.items);
+  const kw = keywordFilter.trim().toLowerCase();
+  const filteredInboxItems = (inbox.items || []).filter((it) => {
+    if (kw && !String(it.title || '').toLowerCase().includes(kw)) return false;
+    if (skipShorts && Number(it.duration_sec || it.duration || 0) > 0 && Number(it.duration_sec || it.duration || 0) < 30) return false;
+    return true;
+  });
+  const channelGroups = groupWatchItemsByChannel(filteredInboxItems);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -447,9 +480,19 @@ export default function WatchPage() {
         </button>
       </form>
 
-      <div className="mb-4 px-4 py-2.5 bg-surface-2 border border-line rounded-xl text-xs text-fg-muted flex flex-wrap gap-x-4 gap-y-1">
-        <span>{T.used(status.used, status.limits.max_sources)}</span>
-        <span>{T.every(Math.max(1, Math.round(status.limits.min_interval_sec / 3600)))}</span>
+      <div className="mb-4 px-4 py-2.5 bg-surface-2 border border-line rounded-xl text-xs text-fg-muted flex flex-col gap-1.5">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <span>{T.used(status.used, status.limits.max_sources)}</span>
+          <span>{T.every(Math.max(1, Math.round(status.limits.min_interval_sec / 3600)))}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span className="text-[11px] text-fg-muted">{getLang() === 'en' ? 'Supported:' : 'Hỗ trợ theo dõi:'}</span>
+          {['TikTok', 'YouTube', 'Instagram', 'Google Drive Folder', 'Facebook', 'Bilibili'].map((p) => (
+            <span key={p} className="px-2 py-0.5 rounded-full bg-surface border border-line text-[10px] font-semibold text-fg-2">
+              {p}
+            </span>
+          ))}
+        </div>
       </div>
 
       {err && (
@@ -488,7 +531,12 @@ export default function WatchPage() {
                   </p>
                 )}
                 {s.source.status === 'degraded' && <p className="text-xs text-danger">{T.degraded}</p>}
-                <div className="flex items-center gap-2 pt-0.5">
+                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                  <button onClick={() => scanNow(s.id)} disabled={scanningId === s.id || paused}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent/40 bg-accent-soft/50 text-xs font-semibold text-accent-text hover:opacity-90 cursor-pointer disabled:opacity-50">
+                    <RefreshCw className={`w-3.5 h-3.5 ${scanningId === s.id ? 'animate-spin' : ''}`} />
+                    {getLang() === 'en' ? (scanningId === s.id ? 'Scanning...' : 'Scan now') : (scanningId === s.id ? 'Đang quét...' : 'Quét ngay')}
+                  </button>
                   <button onClick={() => patch(s.id, { status: paused ? 'active' : 'paused' })}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line-strong text-xs text-fg-muted hover:text-fg cursor-pointer">
                     {paused ? <><Play className="w-3.5 h-3.5" /> {T.resume}</> : <><Pause className="w-3.5 h-3.5" /> {T.pause}</>}
@@ -519,9 +567,20 @@ export default function WatchPage() {
               <option key={s.id} value={s.id}>{s.source.display_name || s.source.canonical_url}</option>
             ))}
           </select>
+          <input
+            type="text"
+            value={keywordFilter}
+            onChange={(e) => setKeywordFilter(e.target.value)}
+            placeholder={getLang() === 'en' ? 'Filter by title keyword...' : 'Lọc theo từ khóa tiêu đề...'}
+            className="min-w-0 sm:w-48 px-3 py-2 rounded-xl bg-surface-2 border border-line text-xs text-fg"
+          />
           <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer">
             <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
             {T.unreadOnly}
+          </label>
+          <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer">
+            <input type="checkbox" checked={skipShorts} onChange={(e) => setSkipShorts(e.target.checked)} />
+            {getLang() === 'en' ? 'Skip < 30s' : 'Bỏ video < 30s'}
           </label>
           <button onClick={markAll} disabled={inbox.unread === 0 || !inbox.ready}
             className="sm:ml-auto px-3 py-2 rounded-lg border border-line-strong text-xs font-bold text-fg-muted hover:text-fg cursor-pointer disabled:opacity-50">

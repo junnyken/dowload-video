@@ -199,6 +199,14 @@ def delete_watch_subscription(sub_id: str, user=Depends(get_optional_user)):
     return {"removed": True}
 
 
+@router.post("/watch/subscriptions/{sub_id}/scan-now")
+def post_watch_scan_now(sub_id: str, user=Depends(get_optional_user)):
+    """Manually trigger an immediate scan of a followed channel/folder (15 min cooldown)."""
+    _require_enabled()
+    user = _require_user(user)
+    return cw.scan_now_subscription(cw._sb(), cw._rc(), user["id"], sub_id)
+
+
 @router.get("/watch/items")
 def get_watch_items(request: Request, since: Optional[str] = None, user=Depends(get_optional_user)):
     _require_enabled()

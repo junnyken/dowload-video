@@ -912,4 +912,210 @@ export const platformPages = [
       { q: 'Video riêng tư hoặc đặt mật khẩu có tải được không?', a: 'Không, VidGrab chỉ hỗ trợ các video Dailymotion công khai.' },
     ],
   },
+  {
+    slug: 'tai-video-google-drive',
+    slugEn: 'google-drive-video-downloader',
+    en: {
+      title: 'Google Drive Video Downloader — View-Only 1080p & Full Folder | VidGrab',
+      description: 'Download Google Drive videos even when the owner disabled downloads (View-Only), plus batch-download entire Drive folders at 8–16x HTTP Range speed.',
+      h1: 'Download Google Drive Videos (View-Only & Full Folders)',
+      intro: 'Paste a Google Drive file or folder link below to download 1080p MP4 videos — including View-Only videos where the Download button is disabled — at 8–16 parallel connections.',
+      steps: [
+        { title: 'Copy the Google Drive video or folder link', text: 'Open the file (drive.google.com/file/d/...) or folder (drive.google.com/drive/folders/...) and copy the URL.' },
+        { title: 'Paste into VidGrab or click the IDM pill', text: 'Paste public links here, or click the floating VidGrab IDM pill directly on Google Drive for private Gmail-shared videos.' },
+        { title: 'Download at 8–16x speed', text: 'Save 1080p MP4 or MP3 at 8 parallel Range connections in Chrome/Web, or 16-connection aria2c in the Windows App.' },
+      ],
+      faq: [
+        { q: 'Can VidGrab download Google Drive "View-Only" videos where download is disabled?', a: 'Yes. VidGrab extracts the 1080p/720p player stream directly and accelerates transfer with 8–16 parallel HTTP Range connections.' },
+        { q: 'How do I download private Google Drive videos shared only with my Gmail?', a: 'Install the VidGrab Chrome Extension, open the video in Chrome, and click the floating "Download with VidGrab" IDM pill on the player.' },
+        { q: 'Can I download all videos inside a Google Drive folder at once?', a: 'Yes. On Starter, Pro, or Team plans, open the Drive folder in Chrome to scan all videos automatically and batch-download them into one subfolder.' },
+      ],
+    },
+    platform: 'Google Drive',
+    title: 'Tải video Google Drive "Chỉ xem" 1080p & Tải cả thư mục | VidGrab',
+    description:
+      'Tải video Google Drive bị tắt nút tải ("Chỉ xem" / View-Only) chất lượng 1080p và quét tải toàn bộ video trong 1 thư mục Drive với tốc độ 8–16 luồng chuẩn IDM.',
+    h1: 'Tải video Google Drive (Kể cả "Chỉ xem" & Cả thư mục)',
+    intro:
+      'Dán link tệp hoặc thư mục Google Drive vào ô bên trên để tải video 1080p sắc nét — hỗ trợ cả video bị chủ sở hữu tắt quyền tải xuống và tải hàng loạt trọn bộ khóa học.',
+    steps: [
+      { title: 'Sao chép link video hoặc thư mục Google Drive', text: 'Mở video (drive.google.com/file/d/...) hoặc thư mục (drive.google.com/drive/folders/...) và copy đường dẫn.' },
+      { title: 'Dán vào VidGrab hoặc bấm nút IDM nổi', text: 'Dán link công khai vào ô trên, hoặc dùng tiện ích Chrome VidGrab để bấm nút tải nổi ngay trên trình phát Drive cho cả file riêng tư.' },
+      { title: 'Tải siêu tốc 8–16 luồng', text: 'Hệ thống tự chia khối 8 luồng HTTP Range (Web/Extension) hoặc 16 luồng aria2c trên App Windows để tải nhanh gấp 8–16 lần.' },
+    ],
+    faq: [
+      { q: 'Video Google Drive bị tắt nút tải ("Chỉ xem" / View-Only) có tải được không?', a: 'Có. VidGrab hỗ trợ trích xuất luồng phát 1080p/720p trực tiếp và tăng tốc bằng 8–16 kết nối song song, không bị bóp tốc độ 1 luồng.' },
+      { q: 'Video chia sẻ riêng cho Gmail của tôi có tải được không?', a: 'Được. Bạn cài tiện ích Chrome VidGrab, mở trực tiếp video đó trên Chrome và bấm nút IDM nổi "Tải với VidGrab" góc phải video.' },
+      { q: 'Có thể tải toàn bộ video trong một thư mục Google Drive không?', a: 'Có. Với các gói trả phí (Starter / Pro / Team), bạn mở thư mục Drive trên Chrome để tự động quét lọc mọi file video và tải tất cả vào 1 thư mục con.' },
+    ],
+  },
+  {
+    slug: 'tai-video-pikpak',
+    slugEn: 'pikpak-video-downloader',
+    en: {
+      title: 'PikPak Video Downloader — Direct Share Link MP4 | VidGrab',
+      description: 'Paste a public mypikpak.com/s/... share link to download original HD/4K videos without logging in, accelerated with 16-connection aria2c on Windows.',
+      h1: 'Download PikPak Cloud Videos',
+      intro: 'Paste any public PikPak share link (mypikpak.com/s/...) below to resolve the original video stream and save it at full speed.',
+      steps: [
+        { title: 'Copy the PikPak share link', text: 'Copy the public mypikpak.com/s/... link (and optional passcode if set).' },
+        { title: 'Paste into VidGrab', text: 'Paste the link into the box above and press Extract.' },
+        { title: 'Save at full speed', text: 'Pick the original quality and download directly or via the 16-connection Windows App.' },
+      ],
+      faq: [
+        { q: 'Do I need a PikPak account to download?', a: 'No, public PikPak share links are resolved directly without signing in.' },
+        { q: 'Are large multi-GB PikPak files supported?', a: 'Yes, use the VidGrab Windows App with 16-connection aria2c and automatic .part resume for multi-GB cloud files.' },
+      ],
+    },
+    platform: 'PikPak',
+    title: 'Tải video PikPak Cloud trực tiếp từ link chia sẻ gốc | VidGrab',
+    description:
+      'Dán link chia sẻ công khai mypikpak.com/s/... để tải video PikPak chất lượng gốc không cần đăng nhập, tăng tốc 16 luồng aria2c trên App Windows.',
+    h1: 'Tải video PikPak Cloud',
+    intro:
+      'Dán link chia sẻ công khai mypikpak.com/s/... vào ô bên trên để lấy luồng video chất lượng gốc và tải nhanh ổn định về máy.',
+    steps: [
+      { title: 'Sao chép link chia sẻ PikPak', text: 'Copy đường dẫn công khai dạng mypikpak.com/s/... (kèm mật khẩu nếu có).' },
+      { title: 'Dán vào VidGrab', text: 'Dán link vào ô phía trên và bấm Trích xuất.' },
+      { title: 'Tải về tốc độ cao', text: 'Chọn chất lượng gốc và tải trực tiếp hoặc chuyển sang App Windows 16 luồng aria2c.' },
+    ],
+    faq: [
+      { q: 'Có cần đăng nhập tài khoản PikPak không?', a: 'Không, link chia sẻ công khai PikPak được giải mã trực tiếp không cần đăng nhập.' },
+      { q: 'File PikPak nặng vài GB có tải ổn định không?', a: 'Rất ổn định khi tải qua App Windows VidGrab với 16 luồng aria2c và tự nối tiếp .part nếu rớt mạng.' },
+    ],
+  },
+  {
+    slug: 'tai-video-onedrive',
+    slugEn: 'onedrive-video-downloader',
+    en: {
+      title: 'OneDrive & SharePoint Video Downloader — Save MP4 | VidGrab',
+      description: 'Download videos from public OneDrive (1drv.ms, onedrive.live.com) and SharePoint share links in original MP4 quality.',
+      h1: 'Download OneDrive & SharePoint Videos',
+      intro: 'Paste a public 1drv.ms, onedrive.live.com, or SharePoint video share link below to extract and save the original MP4 file.',
+      steps: [
+        { title: 'Copy the OneDrive share link', text: 'Copy the public 1drv.ms or onedrive.live.com link.' },
+        { title: 'Paste into VidGrab', text: 'Paste the URL above and click Extract.' },
+        { title: 'Save MP4 to your device', text: 'Download directly in your browser or accelerate via the VidGrab Desktop App.' },
+      ],
+      faq: [
+        { q: 'Are short 1drv.ms links supported?', a: 'Yes, both short 1drv.ms links and full onedrive.live.com / SharePoint URLs are supported.' },
+        { q: 'What about organization-only SharePoint videos?', a: 'Connect your account cookies in the VidGrab Desktop App or use the Chrome Extension while logged in.' },
+      ],
+    },
+    platform: 'OneDrive',
+    title: 'Tải video OneDrive & SharePoint chất lượng gốc MP4 | VidGrab',
+    description:
+      'Dán link chia sẻ OneDrive (1drv.ms, onedrive.live.com) hoặc SharePoint để tải video MP4 chất lượng gốc về máy tính và điện thoại.',
+    h1: 'Tải video OneDrive & SharePoint',
+    intro:
+      'Dán đường dẫn chia sẻ 1drv.ms, onedrive.live.com hoặc SharePoint vào ô bên trên để trích xuất và lưu file video gốc về máy.',
+    steps: [
+      { title: 'Sao chép link OneDrive', text: 'Copy link chia sẻ dạng 1drv.ms hoặc onedrive.live.com.' },
+      { title: 'Dán vào VidGrab', text: 'Dán link vào ô phía trên và bấm Trích xuất.' },
+      { title: 'Lưu file MP4 về máy', text: 'Tải ngay trên trình duyệt hoặc tăng tốc đa luồng qua App Windows.' },
+    ],
+    faq: [
+      { q: 'Link rút gọn 1drv.ms có dùng được không?', a: 'Có, cả link rút gọn 1drv.ms lẫn link onedrive.live.com và SharePoint đều được hỗ trợ.' },
+      { q: 'Video SharePoint nội bộ công ty có tải được không?', a: 'Bạn có thể kết nối cookie tài khoản trên App Windows hoặc tải trực tiếp qua tiện ích Chrome khi đang đăng nhập.' },
+    ],
+  },
+  {
+    slug: 'tai-video-mega',
+    slugEn: 'mega-video-downloader',
+    en: {
+      title: 'Mega.nz Video Downloader — Direct MP4 & Folder | VidGrab',
+      description: 'Paste a public mega.nz file or folder link to extract and download videos smoothly with resumable multi-connection transfers.',
+      h1: 'Download Mega.nz Videos',
+      intro: 'Paste a public mega.nz/file/... or mega.nz/folder/... link below to extract and save videos cleanly.',
+      steps: [
+        { title: 'Copy the Mega.nz link', text: 'Copy the full mega.nz link including the decryption key after #.' },
+        { title: 'Paste into VidGrab', text: 'Paste it into the input box above and press Extract.' },
+        { title: 'Download your video', text: 'Save the decrypted MP4 file directly to your device.' },
+      ],
+      faq: [
+        { q: 'Do I need the #key part of the Mega link?', a: 'Yes, keep the full Mega URL including the # decryption key so VidGrab can unlock the file.' },
+      ],
+    },
+    platform: 'Mega.nz',
+    title: 'Tải video Mega.nz tốc độ cao định dạng MP4 | VidGrab',
+    description:
+      'Dán link tệp hoặc thư mục công khai mega.nz để giải mã và tải video MP4 ổn định về máy tính và điện thoại.',
+    h1: 'Tải video Mega.nz',
+    intro:
+      'Dán link mega.nz/file/... hoặc mega.nz/folder/... vào ô bên trên để giải mã và tải video về máy nhanh chóng.',
+    steps: [
+      { title: 'Sao chép đầy đủ link Mega.nz', text: 'Copy trọn vẹn đường dẫn mega.nz (bao gồm cả mã khóa giải mã sau dấu #).' },
+      { title: 'Dán vào VidGrab', text: 'Dán link vào ô phía trên và bấm Trích xuất.' },
+      { title: 'Tải video về máy', text: 'Lưu tệp video MP4 đã giải mã trực tiếp về thiết bị.' },
+    ],
+    faq: [
+      { q: 'Có cần giữ phần mã sau dấu # trong link Mega không?', a: 'Có, hãy giữ nguyên đầy đủ link Mega có khóa giải mã sau dấu # để hệ thống mở khóa file.' },
+    ],
+  },
+  {
+    slug: 'tai-video-terabox',
+    slugEn: 'terabox-video-downloader',
+    en: {
+      title: 'Terabox Video Downloader — No App Needed | VidGrab',
+      description: 'Download videos from Terabox & 1024terabox share links directly in MP4 without installing the Terabox client.',
+      h1: 'Download Terabox Videos',
+      intro: 'Paste a public terabox.com or 1024terabox.com share link below to extract and download videos cleanly.',
+      steps: [
+        { title: 'Copy the Terabox share link', text: 'Copy the terabox.com/s/... or 1024terabox.com/s/... link.' },
+        { title: 'Paste into VidGrab', text: 'Paste the link above (enter extract code if protected) and click Extract.' },
+        { title: 'Save MP4 directly', text: 'Download directly or accelerate via the VidGrab Windows App.' },
+      ],
+      faq: [
+        { q: 'Are password-protected Terabox links supported?', a: 'Yes, simply enter the 4-character extract code when prompted.' },
+      ],
+    },
+    platform: 'Terabox',
+    title: 'Tải video Terabox & 1024terabox không cần cài app | VidGrab',
+    description:
+      'Dán link chia sẻ terabox.com hoặc 1024terabox.com để tải video MP4 trực tiếp về máy không cần cài ứng dụng Terabox.',
+    h1: 'Tải video Terabox',
+    intro:
+      'Dán link chia sẻ terabox.com/s/... hoặc 1024terabox.com/s/... vào ô bên trên để trích xuất và tải video về máy.',
+    steps: [
+      { title: 'Sao chép link chia sẻ Terabox', text: 'Copy link dạng terabox.com/s/... hoặc 1024terabox.com/s/...' },
+      { title: 'Dán vào VidGrab', text: 'Dán link vào ô phía trên (nhập mã trích xuất nếu link có mật khẩu) và bấm Trích xuất.' },
+      { title: 'Lưu video MP4', text: 'Tải trực tiếp trên trình duyệt hoặc qua App Windows.' },
+    ],
+    faq: [
+      { q: 'Link Terabox có mã trích xuất (mật khẩu) có tải được không?', a: 'Có, bạn chỉ cần nhập mã trích xuất 4 ký tự vào ô mật khẩu khi hệ thống yêu cầu.' },
+    ],
+  },
+  {
+    slug: 'tai-video-telegram',
+    slugEn: 'telegram-video-downloader',
+    en: {
+      title: 'Telegram Video Downloader — Public Channel Posts | VidGrab',
+      description: 'Paste a public t.me channel post link to download Telegram videos in MP4 directly in your browser.',
+      h1: 'Download Telegram Public Channel Videos',
+      intro: 'Paste any public Telegram post link (t.me/channel/123) below to extract and save the video in MP4.',
+      steps: [
+        { title: 'Copy the Telegram post link', text: 'Right-click or tap Share on a public Telegram channel video and choose Copy Post Link.' },
+        { title: 'Paste into VidGrab', text: 'Paste the t.me/... URL above and press Extract.' },
+        { title: 'Download MP4', text: 'Save the video directly to your phone or computer.' },
+      ],
+      faq: [
+        { q: 'Can private Telegram groups be downloaded?', a: 'No, only public Telegram channel posts with a t.me/channel/id URL are supported.' },
+      ],
+    },
+    platform: 'Telegram',
+    title: 'Tải video Telegram từ kênh công khai (t.me) | VidGrab',
+    description:
+      'Dán link bài đăng kênh công khai t.me/... để tải video Telegram định dạng MP4 trực tiếp về máy tính và điện thoại.',
+    h1: 'Tải video Telegram công khai',
+    intro:
+      'Dán đường dẫn bài đăng kênh Telegram công khai (t.me/tenkenh/123) vào ô bên trên để lưu video MP4 về máy nhanh chóng.',
+    steps: [
+      { title: 'Sao chép link bài đăng Telegram', text: 'Nhấn chuột phải hoặc bấm Chia sẻ trên video kênh công khai → Sao chép liên kết bài đăng.' },
+      { title: 'Dán vào VidGrab', text: 'Dán link t.me/... vào ô phía trên và bấm Trích xuất.' },
+      { title: 'Tải video MP4', text: 'Lưu video trực tiếp về điện thoại hoặc máy tính.' },
+    ],
+    faq: [
+      { q: 'Nhóm Telegram riêng tư có tải được không?', a: 'Không, VidGrab chỉ hỗ trợ video từ các kênh Telegram công khai có link t.me/tenkenh/id.' },
+    ],
+  },
 ];

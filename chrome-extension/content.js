@@ -1005,8 +1005,13 @@ window.addEventListener('message', (event) => {
         }, (res) => {
           void chrome.runtime.lastError;
           if (!res || !res.ok) {
-            statusEl.style.color = '#f87171';
-            statusEl.textContent = `❌ ${(res && res.error) || 'Không thể bắt đầu tải thư mục'}`;
+            statusEl.dataset.locked = '1';
+            statusEl.style.color = res && res.error === 'tier_required' ? '#fbbf24' : '#f87171';
+            statusEl.textContent = (res && (res.message || res.error)) || 'Không thể bắt đầu tải thư mục';
+            if (res && (res.error === 'tier_required' || res.error === 'signin_required')) {
+              sendResult.style.display = 'block';
+              sendResult.innerHTML = '<a href="https://dowloadvideo.io.vn/pricing" target="_blank" rel="noopener" style="color:#fbbf24;font-weight:700;text-decoration:underline">👑 Xem các gói Starter / Pro / Team →</a>';
+            }
             sendBtn.disabled = false;
             sendText.textContent = '⬇️ Tải tất cả video Drive';
             return;

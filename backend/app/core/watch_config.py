@@ -48,9 +48,8 @@ HARD_MAX_ITEMS_PER_SCAN = 20
 HARD_MAX_FOLLOWUP_PAGES = 5
 JITTER = 0.12
 
-# Platforms with a FREE native listing implemented in this phase. China
-# platforms (paid access layer) are deliberately absent.
-IMPLEMENTED_PLATFORMS = frozenset({"tiktok", "youtube", "instagram"})
+# Platforms with a FREE native listing implemented (China paid-proxy platforms stay absent).
+IMPLEMENTED_PLATFORMS = frozenset({"tiktok", "youtube", "instagram", "gdrive", "facebook", "bilibili"})
 # Listed through a PAID provider: Pro / Team / Enterprise (and admins) only.
 PAID_PLATFORMS = frozenset({"instagram"})
 

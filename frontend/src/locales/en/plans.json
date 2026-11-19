@@ -43,9 +43,9 @@
     "api": "API key"
   },
   "trimGuest": "Short clips ≤ 5s",
-  "gdriveGuest": "Public / View-Only (single video)",
-  "gdriveFree": "View-Only 1080p + Full Folder (8-conn Extension)",
-  "gdrivePaid": "Full: View-Only 1080p + Entire Folder + 8–16x Speed (Web, Ext, App)",
+  "gdriveGuest": "Public single video",
+  "gdriveFree": "Single 1080p incl. View-Only (8-conn Ext / 16-conn App)",
+  "gdrivePaid": "Full: View-Only + Entire Folder Batch + Auto Folder Watch",
   "trimFree": "Short clips ≤ 10s",
   "trimStarter": "Up to 2 min (Full HD/4K)",
   "trimPro": "Up to 10 min (Full HD/4K)",

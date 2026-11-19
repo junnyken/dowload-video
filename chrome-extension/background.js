@@ -2836,6 +2836,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'VG_GDRIVE_FOLDER_DOWNLOAD') {
     (async () => {
       const tabId = sender && sender.tab ? sender.tab.id : null;
+      // Full-folder batch download is a paid-tier feature (Starter / Pro / Team);
+      // single Google Drive videos (including View-Only) remain free for all signed-in accounts.
+      const gate = await vgCheckUniversalStreamTier();
+      const paidTiers = new Set(['starter', 'pro', 'team', 'enterprise', 'admin']);
+      if (!gate.authenticated) {
+        sendResponse({
+          ok: false,
+          error: 'signin_required',
+          message: 'Vui lòng đăng nhập tài khoản trả phí (Starter / Pro / Team) để tải hàng loạt cả thư mục Google Drive.',
+        });
+        return;
+      }
+      if (!paidTiers.has(String(gate.tier || '').toLowerCase())) {
+        sendResponse({
+          ok: false,
+          error: 'tier_required',
+          message: 'Tải hàng loạt cả thư mục Google Drive dành cho gói trả phí (Starter / Pro / Team). Bạn vẫn có thể mở từng video để tải lẻ miễn phí!',
+        });
+        return;
+      }
       const items = Array.isArray(msg.items) ? msg.items.filter((x) => x && typeof x.url === 'string' && vgGDriveFileId(x.url)) : [];
       if (!items.length) { sendResponse({ ok: false, error: 'no_items' }); return; }
       const rawFolder = typeof msg.folderName === 'string' ? msg.folderName : 'Google Drive';

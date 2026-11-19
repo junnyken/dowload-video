@@ -36,9 +36,9 @@
     "api": "API key"
   },
   "trimGuest": "Cắt thử ≤ 5 giây",
-  "gdriveGuest": "Video công khai / Chỉ xem (lẻ)",
-  "gdriveFree": "Chỉ xem 1080p + Tải cả thư mục (Extension 8 luồng)",
-  "gdrivePaid": "Đầy đủ: Chỉ xem 1080p + Tải trọn thư mục + 8–16 luồng (Web, Ext, App)",
+  "gdriveGuest": "Video công khai (lẻ)",
+  "gdriveFree": "Tải lẻ 1080p kể cả Chỉ xem (Extension 8 luồng / App 16 luồng)",
+  "gdrivePaid": "Đầy đủ: Tải lẻ Chỉ xem + Tải hàng loạt cả thư mục + Theo dõi thư mục",
   "trimFree": "Cắt thử ≤ 10 giây",
   "trimStarter": "Tới 2 phút (Full HD/4K)",
   "trimPro": "Tùy chỉnh đến 10 phút (Full HD/4K)",
