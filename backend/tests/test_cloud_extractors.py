@@ -244,6 +244,54 @@ class TestGDriveExtractor:
             assert info["available_formats"][0]["ext"] == "mp4"
             assert info["available_formats"][1]["height"] == 360
 
+    @pytest.mark.anyio
+    async def test_gdrive_view_only_get_video_info_local_copy(self):
+        """View-only video uses get_video_info + server-side stream copy with DRIVE_STREAM cookie."""
+        import os
+        from urllib.parse import urlencode
+
+        uc_disabled_html = "<html><body>Only the owner and editors can download this file.</body></html>"
+        gvi_body = urlencode({
+            "status": "ok",
+            "title": "Demo_View_Only.mp4",
+            "length_seconds": "42",
+            "fmt_stream_map": (
+                "37|https://rr2---sn-demo.c.drive.google.com/videoplayback?id=1GviDemo&itag=37,"
+                "22|https://rr2---sn-demo.c.drive.google.com/videoplayback?id=1GviDemo&itag=22,"
+                "18|https://rr2---sn-demo.c.drive.google.com/videoplayback?id=1GviDemo&itag=18"
+            ),
+        })
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            u = str(request.url)
+            if "export=download" in u:
+                return httpx.Response(403, headers={"Content-Type": "text/html"}, text=uc_disabled_html)
+            if "get_video_info" in u:
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "application/x-www-form-urlencoded", "Set-Cookie": "DRIVE_STREAM=tok123; Path=/"},
+                    text=gvi_body,
+                )
+            if "rr2---sn-demo.c.drive.google.com/videoplayback" in u:
+                return httpx.Response(200, headers={"Content-Type": "video/mp4"}, content=b"\x00\x00\x00\x18ftypmp42" + b"0" * 4096)
+            return httpx.Response(404)
+
+        async with _mock_client(handler) as client:
+            info = await resolve_gdrive_share(
+                "https://drive.google.com/file/d/1GviDemo12345/view",
+                client=client,
+            )
+            try:
+                assert info["title"] == "Demo_View_Only"
+                assert info["direct_mp4_url"] is None
+                assert info["local_file_path"] and os.path.exists(info["local_file_path"])
+                assert info["downloaded_height"] == 1080
+                assert info["duration"] == 42
+                assert [f["height"] for f in info["available_formats"]] == [1080, 720, 360]
+            finally:
+                if info.get("local_file_path") and os.path.exists(info["local_file_path"]):
+                    os.remove(info["local_file_path"])
+
     def test_gdrive_folder_batch_extraction(self):
         folder_html = """
         <html>

@@ -1484,8 +1484,64 @@ function vgNormalizeSocialUrl(rawUrl) {
   }
 }
 
+function vgGDriveFileId(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    const u = new URL(rawUrl.trim());
+    if (!/(^|\.)(drive|docs)\.google\.com$/i.test(u.hostname)) return '';
+    const m = u.pathname.match(/\/file\/d\/([A-Za-z0-9_-]{10,})/);
+    if (m) return m[1];
+    const qid = u.searchParams.get('id') || u.searchParams.get('docid');
+    if (qid && /^[A-Za-z0-9_-]{10,}$/.test(qid)) return qid;
+  } catch { /* ignore */ }
+  return '';
+}
+
+async function vgGDriveResolveStream(rawUrl) {
+  const fileId = vgGDriveFileId(rawUrl);
+  if (!fileId) return null;
+  const uIdxMatch = String(rawUrl).match(/\/u\/(\d+)\//);
+  const endpoints = [];
+  if (uIdxMatch) endpoints.push(`https://drive.google.com/u/${uIdxMatch[1]}/get_video_info?docid=${encodeURIComponent(fileId)}&drive_originator_app=303`);
+  endpoints.push(`https://drive.google.com/u/0/get_video_info?docid=${encodeURIComponent(fileId)}&drive_originator_app=303`);
+  endpoints.push(`https://drive.google.com/get_video_info?docid=${encodeURIComponent(fileId)}&drive_originator_app=303`);
+
+  const pref = [37, 22, 59, 18];
+  for (const ep of [...new Set(endpoints)]) {
+    try {
+      const resp = await fetch(ep, { credentials: 'include' });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      const params = new URLSearchParams(text);
+      if (params.get('status') !== 'ok') continue;
+      const fmtMap = params.get('fmt_stream_map') || '';
+      const streams = new Map();
+      for (const part of fmtMap.split(',')) {
+        const idx = part.indexOf('|');
+        if (idx <= 0) continue;
+        const itag = Number(part.slice(0, idx));
+        const url = part.slice(idx + 1).trim();
+        if (itag && /^https:\/\//i.test(url) && !streams.has(itag)) streams.set(itag, url);
+      }
+      if (!streams.size) continue;
+      let chosenUrl = '';
+      for (const it of pref) {
+        if (streams.has(it)) { chosenUrl = streams.get(it); break; }
+      }
+      if (!chosenUrl) chosenUrl = streams.values().next().value;
+      const rawTitle = (params.get('title') || '').trim().replace(/\.(?:mp4|m4v|webm|mov|mkv|avi)$/i, '').trim();
+      return { url: chosenUrl, title: rawTitle || `Google Drive ${fileId}`, via: 'gdrive_video_info' };
+    } catch { /* try next endpoint */ }
+  }
+  return null;
+}
+
 /** The file of the video page in `tabId`: the page's own data first, then the sniffer. */
 async function vgFindMedia(tabId, targetUrl = '') {
+  if (vgGDriveFileId(targetUrl)) {
+    const gd = await vgGDriveResolveStream(targetUrl).catch(() => null);
+    if (gd && gd.url) return gd;
+  }
   const isDouyinTarget = /(^|\.)douyin\.com$/i.test((() => { try { return new URL(targetUrl).hostname; } catch { return ''; } })());
   const until = Date.now() + self.vgDirect.FIND_TIMEOUT_MS;
   let attempts = 0;
@@ -2671,10 +2727,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (/^抖音(?:精选)?(?:电脑版)?$/i.test(title.trim())) title = '';
       const pageUrl = (typeof msg.pageUrl === 'string' && /^https?:\/\//i.test(msg.pageUrl)) ? vgNormalizeSocialUrl(msg.pageUrl) : url;
       const dy = msg.douyinDirect;
-      const gd = msg.gdriveDirect;
+      let gd = msg.gdriveDirect;
       let host = '';
       try { host = new URL(url).hostname; } catch {}
       const isGDrive = /(^|\.)(drive|docs)\.google\.com$/i.test(host);
+      if (isGDrive && !(gd && typeof gd.url === 'string' && /^https:\/\//i.test(gd.url))) {
+        gd = await vgGDriveResolveStream(pageUrl || url).catch(() => null);
+      }
 
       // 1. Hand directly to running VidGrab Desktop App if available & enabled
       const handoffOff = (await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false;

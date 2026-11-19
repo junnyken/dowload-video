@@ -42,6 +42,7 @@ assert(S.classify(d('https://cdn.x/a.m4a', { 'content-type': 'audio/mp4', 'conte
 assert(S.classify(d('https://cdn.x/page', { 'content-type': 'text/html' })) === null, 'html ignored');
 assert(S.classify(d('https://rr3---sn.googlevideo.com/videoplayback?x=1', { 'content-type': 'video/mp4', 'content-length': 9e6 })) === null, 'YouTube CDN never listed');
 assert(S.classify(d('https://drive.google.com/videoplayback?id=123&itag=22', { 'content-type': 'video/mp4', 'content-length': 25e6 })).kind === 'file', 'Google Drive videoplayback allowed as file');
+assert(S.classify(d('https://rr2---sn-npoe7nek.c.drive.google.com/videoplayback?id=1&itag=22', { 'content-type': 'video/mp4', 'content-length': 25e6 })).kind === 'file', 'Drive stream host rrN---sn-*.c.drive.google.com allowed');
 assert(S.classify(d('https://www.youtube.com/x.m3u8')) === null, 'youtube.com never listed');
 assert(S.classify(d('https://cdn.x/v.mp4', { 'content-type': 'video/mp4', 'content-length': 9e6 }, { tabId: -1 })) === null, 'requests outside a tab ignored');
 assert(S.classify(d('https://cdn.x/v.mp4', { 'content-type': 'video/mp4', 'content-length': 9e6 }, { statusCode: 404 })) === null, 'errors ignored');

@@ -388,6 +388,139 @@ _ITAG_MAP: dict[int, tuple[int, str, str, bool]] = {
 }
 
 
+_MUXED_PREF = (37, 22, 59, 18)
+
+
+def _parse_fmt_stream_map(raw: str) -> dict[int, str]:
+    out: dict[int, str] = {}
+    for part in (raw or "").split(","):
+        itag_s, sep, url = part.strip().partition("|")
+        if sep and itag_s.isdigit() and url.startswith("http"):
+            out.setdefault(int(itag_s), url)
+    return out
+
+
+async def _drive_get_video_info(item_id: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
+    """Drive player's own stream map (also sets DRIVE_STREAM on `client`). None when unavailable."""
+    try:
+        resp = await client.get(
+            "https://drive.google.com/u/0/get_video_info",
+            params={"docid": item_id, "drive_originator_app": "303"},
+            headers={"Referer": f"https://drive.google.com/file/d/{item_id}/view"},
+        )
+    except Exception as e:
+        logger.info("gdrive get_video_info failed for %s: %s", item_id, e)
+        return None
+    if resp.status_code >= 400:
+        return None
+    qs = parse_qs(resp.text or "")
+    if (qs.get("status") or [""])[0] != "ok":
+        reason = (qs.get("reason") or [""])[0]
+        logger.info("gdrive get_video_info not ok for %s: %s", item_id, reason[:120])
+        return None
+    streams = _parse_fmt_stream_map((qs.get("fmt_stream_map") or [""])[0])
+    if not streams:
+        return None
+    title = (qs.get("title") or [""])[0].strip() or f"gdrive_{item_id}"
+    try:
+        duration = int(float((qs.get("length_seconds") or ["0"])[0]))
+    except ValueError:
+        duration = 0
+    formats = []
+    for it in sorted(streams, key=lambda i: _ITAG_MAP.get(i, (0,))[0], reverse=True):
+        h = _ITAG_MAP.get(it, (0, "", "mp4", True))[0]
+        formats.append({"quality": f"{h}p" if h else str(it), "height": h,
+                        "width": round(h * 16 / 9) if h else 0, "url": "", "ext": "mp4", "itag": it})
+    return {"title": title, "streams": streams, "formats": formats, "duration": duration}
+
+
+def _pick_itag(streams: dict[int, str], quality: str) -> Optional[int]:
+    cap = 0
+    m = re.search(r"(\d{3,4})", quality or "")
+    if m:
+        cap = int(m.group(1))
+    order = [i for i in _MUXED_PREF if i in streams] or list(streams)
+    if cap:
+        fit = [i for i in order if 0 < _ITAG_MAP.get(i, (0,))[0] <= cap]
+        if fit:
+            return fit[0]
+    return order[0] if order else None
+
+
+async def _copy_drive_stream(
+    client: httpx.AsyncClient, gvi: Dict[str, Any], quality: str,
+) -> Optional[tuple[str, float, int]]:
+    """Copies the chosen muxed stream with the client that holds DRIVE_STREAM. (path, MB, height)."""
+    import os
+    import time as _t
+    from app.core.local_download import new_download_path
+    from app.services.downloader import DOWNLOAD_DIR
+
+    itag = _pick_itag(gvi["streams"], quality)
+    if itag is None:
+        return None
+    url = gvi["streams"][itag]
+    try:
+        budget = float(os.getenv("GDRIVE_SERVER_DOWNLOAD_MAX_SEC", "900"))
+    except ValueError:
+        budget = 900.0
+    deadline = _t.monotonic() + max(30.0, budget)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    path = new_download_path(DOWNLOAD_DIR, "gdrive_", "mp4")
+    try:
+        async with client.stream("GET", url, headers={"Referer": "https://drive.google.com/"},
+                                 timeout=httpx.Timeout(60.0)) as resp:
+            if resp.status_code >= 400:
+                logger.info("gdrive stream itag %s answered %s", itag, resp.status_code)
+                return None
+            with open(path, "wb") as fh:
+                async for chunk in resp.aiter_bytes(256 * 1024):
+                    fh.write(chunk)
+                    if _t.monotonic() > deadline:
+                        raise TimeoutError("gdrive server copy budget exceeded")
+        if os.path.getsize(path) <= 0:
+            raise ValueError("empty file")
+    except Exception as e:
+        logger.warning("gdrive server copy failed (itag %s): %s", itag, e)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+    return path, round(os.path.getsize(path) / (1024 * 1024), 2), _ITAG_MAP.get(itag, (0,))[0]
+
+
+def _drive_info_dict(*, title: str, item_id: str, original_url: str, quality: str, local_file_path: str,
+                     size_mb: float, height: int, formats: list, duration: int) -> Dict[str, Any]:
+    clean = re.sub(r"\.(?:mp4|m4v|webm|mov|mkv|avi)$", "", title, flags=re.I).strip() or f"gdrive_{item_id}"
+    return {
+        "title": clean,
+        "thumbnail_url": f"https://drive.google.com/thumbnail?id={item_id}&sz=w640",
+        "direct_mp4_url": None,
+        "local_file_path": local_file_path,
+        "original_url": original_url or f"https://drive.google.com/file/d/{item_id}/view",
+        "quality": quality,
+        "duration": duration,
+        "file_size_mb": size_mb,
+        "available_formats": formats,
+        "max_merge_height": height,
+        "downloaded_height": height,
+        "downloaded_vcodec": "h264",
+        "downloaded_universal": None,
+        "downloaded_media": {"measured": False},
+        "is_audio_only": False,
+        "uploader": "Google Drive",
+        "has_subtitles": False,
+        "has_auto_captions": False,
+        "available_subtitle_languages": [],
+        "subtitle_source": "none",
+        "chapters": [],
+        "tags": [],
+        "images": [],
+        "audio_url": "",
+    }
+
+
 async def _extract_drive_player_stream(
     item_id: str,
     client: httpx.AsyncClient,
@@ -396,8 +529,47 @@ async def _extract_drive_player_stream(
 ) -> Optional[Dict[str, Any]]:
     """
     Fallback extractor for view-only Google Drive videos where downloads are disabled by owner.
-    Extracts HTML5 videoplayback streams from Google Drive player preview/view pages.
+    1. get_video_info (the endpoint the Drive player itself uses; measured 19/11: returns
+       fmt_stream_map with muxed itags 37/22/18 on *.c.drive.google.com). Those stream URLs
+       are bound to this client's IP + DRIVE_STREAM cookie, so the file is copied here with
+       the SAME client and served as a local file (a bare URL would 403 anywhere else).
+    2. Legacy: videoplayback URLs embedded in the preview/view HTML.
     """
+    gvi = await _drive_get_video_info(item_id, client)
+    if gvi:
+        local = await _copy_drive_stream(client, gvi, quality)
+        if local:
+            path, size_mb, height = local
+            info_dict = _drive_info_dict(
+                title=gvi["title"], item_id=item_id, original_url=original_url, quality=quality,
+                local_file_path=path, size_mb=size_mb, height=height, formats=gvi["formats"],
+                duration=gvi["duration"],
+            )
+            if (quality or "").lower().startswith(("mp3", "audio")):
+                import os
+                import subprocess
+                mp3_path = path[:-4] + ".mp3" if path.endswith(".mp4") else path + ".mp3"
+                try:
+                    subprocess.run(
+                        ["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", path,
+                         "-vn", "-acodec", "libmp3lame", "-q:a", "2", mp3_path],
+                        check=True, timeout=120,
+                    )
+                    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0:
+                        os.remove(path)
+                        info_dict["local_file_path"] = mp3_path
+                        info_dict["local_mp3_path"] = mp3_path
+                        info_dict["is_audio_only"] = True
+                        info_dict["file_size_mb"] = round(os.path.getsize(mp3_path) / (1024 * 1024), 2)
+                except Exception as mp3_err:
+                    logger.warning("gdrive mp3 extraction failed (%s) — keeping mp4", type(mp3_err).__name__)
+                    if os.path.exists(mp3_path):
+                        try:
+                            os.remove(mp3_path)
+                        except OSError:
+                            pass
+            return info_dict
+
     for endpoint in (
         f"https://drive.google.com/file/d/{item_id}/preview",
         f"https://drive.google.com/file/d/{item_id}/view",
@@ -419,7 +591,8 @@ async def _extract_drive_player_stream(
 
         html_text = resp.text or ""
         lower = html_text.lower()
-        if "you need access" in lower or "request access" in lower or "servicelogin" in lower:
+        final_u = str(resp.url).lower()
+        if "accounts.google.com" in final_u or "you need access" in lower or "request access" in lower:
             raise ValueError("owner_disabled_download")
 
         # Extract title
@@ -777,7 +950,8 @@ class GDriveExtractor(BaseExtractor):
         except Exception as e:
             return self._make_error_result("processing_failed", str(e))
 
-        dl_url = info.get("direct_mp4_url", "")
+        dl_url = info.get("direct_mp4_url") or ""
+        local_path = info.get("local_file_path") or ""
         return ExtractResult(
             platform="gdrive",
             source_type="video",
@@ -785,9 +959,10 @@ class GDriveExtractor(BaseExtractor):
             author="Google Drive",
             thumbnail=info.get("thumbnail_url", ""),
             direct_url=dl_url,
+            local_file_path=local_path,
             formats=[FormatInfo(quality="original", url=dl_url, size_estimate_mb=info.get("file_size_mb", 0.0))],
             raw_metadata=info,
-            extraction_method="gdrive_uc",
+            extraction_method="gdrive_stream" if local_path else "gdrive_uc",
         )
 
     def extract_batch(self, url: str, limit: int = 50, **kwargs) -> BatchResult:
