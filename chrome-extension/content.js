@@ -1604,6 +1604,57 @@ window.addEventListener('message', (event) => {
     shadow.append(style, pill);
     (document.documentElement || document.body).appendChild(hostEl);
 
+    const isGDriveFilePage = () => /(^|\.)(drive|docs)\.google\.com$/i.test(window.location.hostname)
+      && /\/(?:file\/d\/|open\?id=)([A-Za-z0-9_-]{10,})/.test(window.location.href);
+
+    const findGDrivePlayerEl = () => {
+      if (!isGDriveFilePage()) return null;
+      const selectors = [
+        'iframe#drive-viewer-video-player-object-0',
+        'iframe[src*="youtube.googleapis.com"]',
+        'iframe[src*="video"]',
+        'iframe[allow*="autoplay"]',
+        '.drive-viewer-video-player',
+        '[role="main"] iframe',
+      ];
+      for (const sel of selectors) {
+        const els = document.querySelectorAll(sel);
+        for (let i = 0; i < els.length; i++) {
+          const el = els[i];
+          const r = el.getBoundingClientRect();
+          if (r.width >= 180 && r.height >= 135 && r.bottom > 60 && r.top < window.innerHeight - 40) {
+            return el;
+          }
+        }
+      }
+      // Fallback when Drive renders the video player inside a nested/shadow wrapper
+      // (e.g. /file/d/<id>/edit with "BUOI 17.mp4", "Chương", "Bản chép lời"):
+      const titleText = [
+        document.title || '',
+        document.querySelector('[data-tooltip*="."], div[role="heading"], .drive-viewer-toolstrip-name')?.textContent || '',
+      ].join(' ');
+      const hasVideoExt = /\.(?:mp4|m4v|mkv|webm|mov|avi|flv|wmv|ts)\b/i.test(titleText);
+      const hasVideoChrome = Boolean(document.querySelector(
+        '[aria-label*="Chương" i], [aria-label*="Chapters" i], [aria-label*="Bản chép lời" i], [aria-label*="Transcript" i]'
+      ));
+      if (hasVideoExt || hasVideoChrome) {
+        return {
+          __vgGDriveVirtual: true,
+          getBoundingClientRect() {
+            return {
+              top: 66,
+              left: 24,
+              right: Math.max(300, window.innerWidth - 16),
+              bottom: Math.max(300, window.innerHeight - 24),
+              width: Math.max(260, window.innerWidth - 40),
+              height: Math.max(220, window.innerHeight - 90),
+            };
+          },
+        };
+      }
+      return null;
+    };
+
     const findVideoAtPoint = (x, y) => {
       const vids = document.querySelectorAll('video');
       let bestVid = null;
@@ -1621,7 +1672,8 @@ window.addEventListener('message', (event) => {
         const area = r.width * r.height * (v.paused ? 1 : 2);
         if (area > bestArea) { bestArea = area; bestVid = v; }
       }
-      return bestVid;
+      if (bestVid) return bestVid;
+      return findGDrivePlayerEl();
     };
 
     const positionPill = (v) => {
@@ -1648,9 +1700,12 @@ window.addEventListener('message', (event) => {
       positionPill(v);
       pill.classList.add('visible');
       clearTimeout(state.hideTimer);
-      state.hideTimer = setTimeout(() => {
-        if (!state.overPill && !state.busy) pill.classList.remove('visible');
-      }, 4500);
+      // Keep the IDM pill pinned on Google Drive video pages until user closes it
+      if (!isGDriveFilePage()) {
+        state.hideTimer = setTimeout(() => {
+          if (!state.overPill && !state.busy) pill.classList.remove('visible');
+        }, 4500);
+      }
     };
 
     pill.addEventListener('mouseenter', () => {
@@ -1659,9 +1714,11 @@ window.addEventListener('message', (event) => {
     });
     pill.addEventListener('mouseleave', () => {
       state.overPill = false;
-      state.hideTimer = setTimeout(() => {
-        if (!state.busy) pill.classList.remove('visible');
-      }, 900);
+      if (!isGDriveFilePage()) {
+        state.hideTimer = setTimeout(() => {
+          if (!state.busy) pill.classList.remove('visible');
+        }, 900);
+      }
     });
 
     closeBtn.addEventListener('click', (ev) => {
@@ -1718,10 +1775,13 @@ window.addEventListener('message', (event) => {
       else if (state.activeVideo && !state.dismissed) positionPill(state.activeVideo);
     });
 
-    setTimeout(() => {
-      const initialVid = findVideoAtPoint(null, null);
-      if (initialVid) showForVideo(initialVid);
-    }, 900);
+    for (const delay of [900, 2200, 4500]) {
+      setTimeout(() => {
+        if (state.dismissed) return;
+        const initialVid = findVideoAtPoint(null, null);
+        if (initialVid) showForVideo(initialVid);
+      }, delay);
+    }
 
     window.__vgSocialHoverPill = {
       resetOnNav() {

@@ -347,14 +347,24 @@ function vgNeedsReferer(url) {
   return VG_REFERER_RULES.some((r) => r.domains.some((d) => host === d || host.endsWith('.' + d)));
 }
 
-// The file fetched in the offscreen page (which gets the Referer), then saved from a blob: URL.
+function vgIsGDriveStreamUrl(u) {
+  return typeof u === 'string' && /(?:^|[./])(drive|docs)\.google\.com\/videoplayback\b/i.test(u);
+}
+
+// The file fetched in the offscreen page (which gets the Referer and 8-conn parallel HTTP Range OPFS), then saved from a blob: URL.
 let vgBlobSaves = 0;
-async function vgSaveViaPage(url, name) {
+async function vgSaveViaPage(url, name, opts = {}) {
   vgBlobSaves++;
   let blobUrl = null;
   try {
     await ensureOffscreen();
-    const r = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'BLOB_FETCH', url });
+    const r = await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      type: 'BLOB_FETCH',
+      url,
+      ...(opts.credentials ? { credentials: opts.credentials } : {}),
+      ...(opts.pool ? { pool: opts.pool } : {}),
+    });
     if (!r || !r.ok) return false;
     blobUrl = r.url;
     return await vgSaveFile(blobUrl, name);
@@ -366,6 +376,12 @@ async function vgSaveViaPage(url, name) {
     if (blobUrl) setTimeout(() => chrome.runtime.sendMessage({ target: 'offscreen', type: 'BLOB_RELEASE', url: blobUrl }).catch(() => {}).finally(() => closeOffscreenIfIdle()), 60_000);
     else closeOffscreenIfIdle();
   }
+}
+
+async function vgSaveGDriveParallel(url, name) {
+  // 8-connection parallel HTTP Range download into OPFS (~11 MB/s vs ~150 KB/s single stream)
+  if (await vgSaveViaPage(url, name, { credentials: 'include', pool: 8 })) return true;
+  return vgSaveFile(url, name);
 }
 
 // Download preferring the user's own IP; fall back to the server proxy if the
@@ -1649,13 +1665,21 @@ async function vgHandToApp(payload) {
   if (!payload || !payload.url || String(payload.quality || 'video').startsWith('mp3')) return null;
   let host = '';
   try { host = new URL(payload.url).hostname; } catch { return null; }
-  if (!/(^|\.)tiktok\.com$/i.test(host) && self.vgDirect.directEligible({ url: payload.url, quality: 'video' })) return null;
+  const isGDrive = Boolean(vgGDriveFileId(payload.url));
+  if (!isGDrive && !/(^|\.)tiktok\.com$/i.test(host) && self.vgDirect.directEligible({ url: payload.url, quality: 'video' })) return null;
   if ((await chrome.storage.local.get('vg_app_handoff').catch(() => ({}))).vg_app_handoff === false) return null;
-  const app = await vgFindApp().catch(() => ({ port: null }));
-  if (!app.port) return null;
-  const r = await vgSendToApp({ url: payload.url, title: payload.title || '', pageUrl: payload.url }).catch(() => ({ ok: false }));
+  const appConnected = Boolean((vgNativePort && vgNativeApp.up) || (await vgFindApp().catch(() => ({ port: null }))).port);
+  if (!appConnected) return null;
+  let sendItem = { url: payload.url, title: payload.title || '', pageUrl: payload.url };
+  if (isGDrive) {
+    const gd = await vgGDriveResolveStream(payload.url).catch(() => null);
+    sendItem = (gd && gd.url)
+      ? { url: gd.url, title: gd.title || payload.title || 'Google Drive Video', pageUrl: payload.url, refererUrl: 'https://drive.google.com/', kind: 'file' }
+      : { url: payload.url, title: payload.title || 'Google Drive Video', pageUrl: payload.url, refererUrl: 'https://drive.google.com/' };
+  }
+  const r = await vgSendToApp(sendItem).catch(() => ({ ok: false }));
   if (!r.ok) return null;
-  return { data: { success: true, title: payload.title || t('sent_to_app_title'), sent_to_app: true }, via: 'app' };
+  return { data: { success: true, title: sendItem.title || payload.title || t('sent_to_app_title'), sent_to_app: true }, via: 'app' };
 }
 
 async function vgSaveVideo(payload, signal, pageTabId) {
@@ -1686,7 +1710,10 @@ async function vgSaveVideo(payload, signal, pageTabId) {
 
   if (media && !(signal && signal.aborted)) {
     const name = await vgFileName(media.title, payload.url);
-    if (await (vgNeedsReferer(media.url) ? vgSaveViaPage(media.url, name) : vgSaveFile(media.url, name))) {
+    const saved = vgIsGDriveStreamUrl(media.url)
+      ? await vgSaveGDriveParallel(media.url, name)
+      : await (vgNeedsReferer(media.url) ? vgSaveViaPage(media.url, name) : vgSaveFile(media.url, name));
+    if (saved) {
       if (claim && claim.claimId) vgSettle(claim.claimId, 'completed');
       addToHistory({ title: media.title || 'Video', thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
                      noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });
@@ -2768,7 +2795,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (directStream) {
         const safeName = await vgFileName(directStream.title, url);
         sendResponse({ ok: true, via: 'browser', statusText: t('pill_started_browser') });
-        const ok = await vgSaveFile(directStream.url, safeName);
+        const ok = vgIsGDriveStreamUrl(directStream.url)
+          ? await vgSaveGDriveParallel(directStream.url, safeName)
+          : await vgSaveFile(directStream.url, safeName);
         if (ok) {
           addToHistory({
             title: directStream.title || title || 'Video', thumbnail: '', url,

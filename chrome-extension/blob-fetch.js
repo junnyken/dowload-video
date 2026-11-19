@@ -5,7 +5,7 @@
 ((root) => {
   'use strict';
 
-  const POOL = 6;
+  const POOL = 8;
   const CHUNK_BYTES = 4 * 1024 * 1024;
   const MIN_PARALLEL_BYTES = 4 * 1024 * 1024;
   const MAX_PARALLEL_BYTES = 1536 * 1024 * 1024;
@@ -76,9 +76,10 @@
     const minBytes = opts.minBytes ?? MIN_PARALLEL_BYTES;
     const maxBytes = opts.maxBytes ?? MAX_PARALLEL_BYTES;
     const createSink = opts.createSink || createBrowserSink;
+    const credentials = opts.credentials || 'omit';
 
     const singleFetch = async () => {
-      const r = await fetchImpl(url, { credentials: 'omit' });
+      const r = await fetchImpl(url, { credentials });
       if (!r.ok) return { ok: false, status: r.status };
       const blob = await r.blob();
       return { ok: true, blob, bytes: blob.size, opfsName: null, mode: 'single' };
@@ -89,7 +90,7 @@
       probe = await fetchImpl(url, {
         method: 'GET',
         headers: { Range: 'bytes=0-0' },
-        credentials: 'omit',
+        credentials,
       });
     } catch {
       return singleFetch();
@@ -136,7 +137,7 @@
             const res = await fetchImpl(url, {
               method: 'GET',
               headers: { Range: `bytes=${range.start}-${range.end}` },
-              credentials: 'omit',
+              credentials,
             });
             if (res.status === 200) {
               if (res.body && typeof res.body.cancel === 'function') {
@@ -207,7 +208,10 @@
       if (!msg || msg.target !== 'offscreen') return false;
       if (msg.type === 'BLOB_FETCH') {
         (async () => {
-          const res = await parallelRangeDownload(msg.url);
+          const res = await parallelRangeDownload(msg.url, {
+            ...(msg.credentials ? { credentials: msg.credentials } : {}),
+            ...(msg.pool ? { pool: msg.pool } : {}),
+          });
           if (!res.ok) return { ok: false, status: res.status };
           const url = URL.createObjectURL(res.blob);
           urls.set(url, res.opfsName || null);
