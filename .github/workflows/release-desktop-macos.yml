@@ -166,12 +166,14 @@ jobs:
             ${{ steps.verify.outputs.sum_path }}
 
       - name: Upload macOS DMG asset to junnyken/vidgrab-releases
-        if: ${{ inputs.publish_to_releases == true }}
+        if: ${{ github.event_name == 'push' || inputs.publish_to_releases == true }}
         env:
           GH_TOKEN: ${{ secrets.VIDGRAB_RELEASES_PAT }}
           TARGET_REPO: "junnyken/vidgrab-releases"
         run: |
           set -euo pipefail
+          GH_TOKEN="$(echo -n "$GH_TOKEN" | tr -d '[:space:]')"
+          export GH_TOKEN
           VER="${{ steps.meta.outputs.version }}"
           TAG="v$VER"
           ASSETS=("${{ steps.verify.outputs.dmg_path }}")
@@ -181,5 +183,9 @@ jobs:
           if [ -n "${{ steps.verify.outputs.sig_path }}" ]; then
             ASSETS+=("${{ steps.verify.outputs.sig_path }}")
           fi
-          gh release upload "$TAG" "${ASSETS[@]}" --repo "$TARGET_REPO" --clobber
+          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --repo "$TARGET_REPO" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$TARGET_REPO" --title "VidGrab $VER" --notes "- Bản cập nhật VidGrab $VER (Windows + macOS Apple Silicon)." --draft
+          fi
           echo "Uploaded macOS assets to https://github.com/$TARGET_REPO/releases/tag/$TAG"

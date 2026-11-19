@@ -1,3 +1,8 @@
+## 0.23.3
+- Tải siêu tốc **Google Drive "Chỉ xem" (View-Only)** bị tắt nút tải bằng 16 kết nối song song (`aria2c -x16 -s16`) cho luồng `/videoplayback`, đẩy tốc độ từ ~150 KB/s lên 10–30 MB/s.
+- Hỗ trợ tải trọn bộ **Thư mục Google Drive**, nâng cấp trích xuất **OneDrive / SharePoint**, **Mega.nz** (giải mã trực tiếp file lớn 1–4 GB) và **Terabox** đa luồng.
+- Sửa lỗi biên dịch TypeScript (`allowImportingTsExtensions`) và đồng bộ tự động phát hành cả bản Windows x64 (`.exe`) lẫn macOS Apple Silicon (`.dmg`).
+
 ## 0.23.2
 - Khắc phục lỗi khi bấm nút tải nổi kiểu IDM trên Douyin (`douyin.com/jingxuan?modal_id=...`) hoặc TikTok feed chuyển sang App Windows bị nhận nhầm là luồng `Other · Tải trên máy này`: tự động chuẩn hóa URL sang `douyin.com/video/<id>` và gửi thẳng luồng MP4 gốc không logo kèm Referer sang App Windows.
 - Khắc phục triệt để lỗi Tiện ích Chrome (`v5.30.3`) tải lặp lại video đầu tiên khi lướt sang các video tiếp theo trên Douyin/Reels: bắt đầy đủ các API feed (`/tab/feed/`, `/channel/feed/`, `/module/feed/`, `cards`) và ưu tiên đúng thẻ `<video>` đang phát trên màn hình.
