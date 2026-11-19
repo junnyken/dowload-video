@@ -2071,8 +2071,8 @@ export default function DashboardContent() {
         authToken={session?.access_token}
       />
 
-      {/* ── Supported platforms strip (highlights Google Drive View-Only & Full Folders) ── */}
-      <PlatformIconStrip variant="compact" className="max-w-3xl mb-4" />
+      {/* ── Supported platforms strip (highlights Google Drive View-Only & Full Folders + Cloud) ── */}
+      <PlatformIconStrip variant="compact" showNewHint className="max-w-3xl mb-4" />
 
       {/* ── Tool card (prompt box): URL row, mode tabs, options ── */}
       <div className="w-full max-w-3xl mb-6">

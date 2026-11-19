@@ -3,6 +3,21 @@
     "googledrive": {
       "description": "Tải video Google Drive (kể cả chế độ \"Chỉ xem\" bị tắt nút tải) 1080p và quét tải trọn bộ cả thư mục như tải kênh với 8–16 luồng tốc độ cao."
     },
+    "onedrive": {
+      "description": "Tải video từ link chia sẻ OneDrive (1drv.ms, onedrive.live.com) & SharePoint, hỗ trợ cả chế độ \"Chỉ xem\" qua tiện ích Chrome."
+    },
+    "meganz": {
+      "description": "Giải mã AES-128-CTR và tải video Mega.nz đa luồng trực tiếp (tới 4 GB qua tiện ích Chrome, không tốn quota Server)."
+    },
+    "terabox": {
+      "description": "Tải video Terabox / 1024terabox bằng 8 luồng HTTP Range song song không cần cài ứng dụng Terabox."
+    },
+    "pikpak": {
+      "description": "Giải mã trực tiếp link chia sẻ công khai mypikpak.com/s/... chất lượng gốc không cần đăng nhập."
+    },
+    "telegram": {
+      "description": "Tải video MP4 từ các bài đăng kênh Telegram công khai (t.me/tenkenh/id)."
+    },
     "tiktok": {
       "description": "Video, âm thanh, kênh, tải hàng loạt không watermark."
     },

@@ -4,6 +4,21 @@
     "googledrive": {
       "description": "Download 1080p Google Drive videos (including View-Only files where download is disabled) and scan & batch-download entire folders like a channel at 8–16x speed."
     },
+    "onedrive": {
+      "description": "Download videos from public OneDrive (1drv.ms, onedrive.live.com) & SharePoint links, including View-Only streams via Chrome Extension."
+    },
+    "meganz": {
+      "description": "Multi-threaded AES-128-CTR decryption for Mega.nz videos (up to 4 GB directly via Chrome Extension using your own IP)."
+    },
+    "terabox": {
+      "description": "Download Terabox & 1024terabox videos at 8 parallel HTTP Range connections without installing the Terabox app."
+    },
+    "pikpak": {
+      "description": "Direct original-quality video downloads from public mypikpak.com/s/... share links with no login required."
+    },
+    "telegram": {
+      "description": "Download MP4 videos directly from public Telegram channel posts (t.me/channel/id)."
+    },
     "tiktok": {
       "description": "Video, audio, channels, and bulk downloads without a watermark."
     },

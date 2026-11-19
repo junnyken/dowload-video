@@ -21,6 +21,36 @@ const PLATFORMS = [
     isNew: true,
   },
   {
+    name: 'OneDrive', status: 'full', logo: '☁️',
+    features: ['video', 'audio', 'view-only', '1080p'],
+    domains: ['1drv.ms', 'onedrive.live.com', 'sharepoint.com'],
+    isNew: true,
+  },
+  {
+    name: 'Mega.nz', status: 'full', logo: '🔴',
+    features: ['video', 'audio', 'batch', '1080p'],
+    domains: ['mega.nz', 'mega.co.nz'],
+    isNew: true,
+  },
+  {
+    name: 'Terabox', status: 'full', logo: '📦',
+    features: ['video', 'audio', 'batch', '1080p'],
+    domains: ['terabox.com', '1024terabox.com', 'teraboxapp.com'],
+    isNew: true,
+  },
+  {
+    name: 'PikPak', status: 'full', logo: '⚡',
+    features: ['video', 'audio', '4K'],
+    domains: ['mypikpak.com'],
+    isNew: true,
+  },
+  {
+    name: 'Telegram', status: 'full', logo: '✈️',
+    features: ['video', 'audio'],
+    domains: ['t.me'],
+    isNew: true,
+  },
+  {
     name: 'TikTok', status: 'full', logo: '🎵',
     features: ['video', 'audio', 'batch', 'channel', 'watermark-free'],
     domains: ['tiktok.com'],
