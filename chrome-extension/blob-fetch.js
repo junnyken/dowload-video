@@ -8,7 +8,7 @@
   const POOL = 8;
   const CHUNK_BYTES = 4 * 1024 * 1024;
   const MIN_PARALLEL_BYTES = 4 * 1024 * 1024;
-  const MAX_PARALLEL_BYTES = 1536 * 1024 * 1024;
+  const MAX_PARALLEL_BYTES = 4096 * 1024 * 1024;
   const MAX_MEM_PARALLEL_BYTES = 128 * 1024 * 1024;
 
   function parseContentRangeTotal(header) {
@@ -226,7 +226,7 @@
       return { ok: false, error: 'invalid_mega_key' };
     }
     const cryptoKey = await subtle.importKey('raw', aesKeyBytes, { name: 'AES-CTR' }, false, ['decrypt']);
-    const pool = Math.max(1, opts.pool || 4);
+    const pool = Math.max(1, opts.pool || 6);
     const chunkSize = (opts.chunkSize || CHUNK_BYTES) - ((opts.chunkSize || CHUNK_BYTES) % 16);
     const createSink = opts.createSink || createBrowserSink;
 

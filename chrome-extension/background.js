@@ -395,6 +395,167 @@ async function vgSaveGDriveParallel(url, name) {
   return vgSaveFile(url, name);
 }
 
+// ── 5.33.0: Client-side Mega.nz (1–4 GB WebCrypto AES-128-CTR OPFS, user IP) ──
+function vgMegaParseUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const s = rawUrl.trim();
+  const mNew = s.match(/mega\.(?:co\.)?nz\/file\/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)/i);
+  if (mNew) return { id: mNew[1], key: mNew[2] };
+  const mOld = s.match(/mega\.(?:co\.)?nz\/#!([A-Za-z0-9_-]+)!([A-Za-z0-9_-]+)/i);
+  if (mOld) return { id: mOld[1], key: mOld[2] };
+  return null;
+}
+
+function vgMegaB64ToBytes(b64) {
+  let s = String(b64 || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function vgBytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function vgMegaDecryptAttr(atB64, aesKeyBytes) {
+  try {
+    const ct = vgMegaB64ToBytes(atB64);
+    const key = await crypto.subtle.importKey('raw', aesKeyBytes, { name: 'AES-CBC' }, false, ['decrypt']);
+    // Mega pads attributes with zero bytes rather than PKCS#7, so append 1 encrypted padding block or slice if decrypt succeeds
+    const zeroIv = new Uint8Array(16);
+    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv: zeroIv }, key, ct));
+    const txt = new TextDecoder().decode(plain).replace(/\0+$/, '');
+    if (txt.startsWith('MEGA')) {
+      const obj = JSON.parse(txt.slice(4));
+      return (obj && obj.n) || '';
+    }
+  } catch { /* fallback title */ }
+  return '';
+}
+
+async function vgMegaResolveAndSave(rawUrl, fallbackTitle = '') {
+  const parsed = vgMegaParseUrl(rawUrl);
+  if (!parsed) return null;
+  const rawKey = vgMegaB64ToBytes(parsed.key);
+  if (rawKey.length < 32) return null;
+  const aesKey = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) aesKey[i] = rawKey[i] ^ rawKey[i + 16];
+  const iv8 = rawKey.slice(16, 24);
+
+  const apiResp = await fetch('https://g.api.mega.co.nz/cs?id=1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([{ a: 'g', g: 1, p: parsed.id }]),
+  });
+  if (apiResp.status === 509) throw new Error('Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.');
+  if (!apiResp.ok) return null;
+  const payload = await apiResp.json().catch(() => null);
+  const item = Array.isArray(payload) ? payload[0] : payload;
+  if (typeof item === 'number') {
+    if (item === -17 || item === -18) throw new Error('Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.');
+    return null;
+  }
+  const dlUrl = item && typeof item.g === 'string' ? item.g.trim() : '';
+  if (!dlUrl) return null;
+
+  const attrName = item.at ? await vgMegaDecryptAttr(item.at, aesKey) : '';
+  const cleanTitle = (attrName || fallbackTitle || `Mega_${parsed.id}`)
+    .replace(/\.(?:mp4|m4v|mkv|webm|mov|avi)$/i, '')
+    .trim();
+  const safeName = await vgFileName(cleanTitle, rawUrl);
+
+  vgBlobSaves++;
+  let blobUrl = null;
+  try {
+    await ensureOffscreen();
+    const r = await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      type: 'MEGA_DECRYPT_FETCH',
+      url: dlUrl,
+      aesKeyHex: vgBytesToHex(aesKey),
+      ivHex: vgBytesToHex(iv8),
+      totalBytes: Number(item.s || 0),
+      pool: 6,
+    });
+    if (!r || !r.ok) {
+      if (r && (r.status === 509 || r.error === 'share_quota_exceeded')) {
+        throw new Error('Mega.nz đã đạt giới hạn băng thông miễn phí (~5 GB/6h) trên mạng này.');
+      }
+      return null;
+    }
+    blobUrl = r.url;
+    const saved = await vgSaveFile(blobUrl, safeName);
+    return saved ? { title: cleanTitle, url: dlUrl, via: 'mega_webcrypto' } : null;
+  } finally {
+    vgBlobSaves--;
+    if (blobUrl) setTimeout(() => chrome.runtime.sendMessage({ target: 'offscreen', type: 'BLOB_RELEASE', url: blobUrl }).catch(() => {}).finally(() => closeOffscreenIfIdle()), 60_000);
+    else closeOffscreenIfIdle();
+  }
+}
+
+// ── 5.33.0: Client-side Terabox (uses browser ndus cookie + jsToken + 8-conn parallel OPFS) ──
+function vgTeraboxParseUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  try {
+    const u = new URL(rawUrl.trim());
+    const h = u.hostname.toLowerCase();
+    if (!/(^|\.)(terabox|1024tera|1024terabox|teraboxapp|freeterabox|mirrobox|nephobox|4funbox)\.com$/i.test(h)) return null;
+    const m = u.pathname.match(/\/s\/([A-Za-z0-9_-]+)/i);
+    const surl = (m && m[1]) || u.searchParams.get('surl') || '';
+    if (!surl) return null;
+    return { origin: u.origin, surl };
+  } catch { return null; }
+}
+
+async function vgTeraboxResolveStream(rawUrl) {
+  const parsed = vgTeraboxParseUrl(rawUrl);
+  if (!parsed) return null;
+  const pickFromList = (list) => {
+    const files = [];
+    for (const it of (list || [])) {
+      if (String(it.isdir || '0') === '0') files.push(it);
+      else if (Array.isArray(it.list)) files.push(...it.list);
+    }
+    files.sort((a, b) => Number(b.size || 0) - Number(a.size || 0));
+    const best = files[0];
+    if (!best) return null;
+    const dlink = String(best.dlink || best.download_link || '').trim();
+    const title = String(best.server_filename || best.filename || `Terabox_${parsed.surl}`)
+      .replace(/\.(?:mp4|m4v|mkv|webm|mov|avi)$/i, '').trim();
+    return dlink ? { url: dlink, title, via: 'terabox_parallel' } : null;
+  };
+
+  try {
+    const r1 = await fetch(`${parsed.origin}/api/shorturlinfo?shorturl=${encodeURIComponent(parsed.surl)}&root=1`, { credentials: 'include' });
+    if (r1.ok) {
+      const d1 = await r1.json().catch(() => null);
+      const hit1 = pickFromList(d1 && d1.list);
+      if (hit1) return hit1;
+    }
+    // Retry with jsToken from share page HTML
+    const pageResp = await fetch(`${parsed.origin}/s/${encodeURIComponent(parsed.surl)}`, { credentials: 'include' });
+    if (pageResp.ok) {
+      const html = await pageResp.text();
+      const jm = html.match(/fn%28%22([A-Fa-f0-9]{20,})%22%29|["']jsToken["']\s*[:=]\s*["']([A-Fa-f0-9]{20,})["']/i);
+      const jsToken = jm ? (jm[1] || jm[2] || '') : '';
+      if (jsToken) {
+        const r2 = await fetch(
+          `${parsed.origin}/api/shorturlinfo?app_id=250528&web=1&jsToken=${encodeURIComponent(jsToken)}&shorturl=${encodeURIComponent(parsed.surl)}&root=1`,
+          { credentials: 'include' },
+        );
+        if (r2.ok) {
+          const d2 = await r2.json().catch(() => null);
+          const hit2 = pickFromList(d2 && d2.list);
+          if (hit2) return hit2;
+        }
+      }
+    }
+  } catch { /* fallback */ }
+  return null;
+}
+
 // Download preferring the user's own IP; fall back to the server proxy if the
 // direct download is interrupted (403 / CORS / referer-gated CDN).
 function smartDownload({ rawUrl, base, safeName, finalExt, saveAs, subDir }) {
@@ -1700,6 +1861,29 @@ async function vgSaveVideo(payload, signal, pageTabId) {
   if (payload && payload.url) {
     payload = { ...payload, url: vgNormalizeSocialUrl(payload.url) };
   }
+  // Mega.nz: decrypt AES-128-CTR directly on the user's IP (supports 1–4 GB without hitting server 5GB/6h quota)
+  if (payload && payload.url && vgMegaParseUrl(payload.url) && !String(payload.quality || 'video').startsWith('mp3')) {
+    const megaRes = await vgMegaResolveAndSave(payload.url, payload.title || '');
+    if (megaRes) {
+      addToHistory({ title: megaRes.title, thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
+                     noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });
+      return { data: { success: true, title: megaRes.title, thumbnail_url: '', direct_mp4_url: megaRes.url },
+               dlUrl: megaRes.url, finalExt: 'mp4', safeName: megaRes.title, via: 'direct:mega_webcrypto' };
+    }
+  }
+  // Terabox: resolve with browser's ndus + jsToken and download with 8 parallel Range connections
+  if (payload && payload.url && vgTeraboxParseUrl(payload.url) && !String(payload.quality || 'video').startsWith('mp3')) {
+    const tb = await vgTeraboxResolveStream(payload.url).catch(() => null);
+    if (tb && tb.url) {
+      const name = await vgFileName(tb.title, payload.url);
+      if (await vgSaveGDriveParallel(tb.url, name)) {
+        addToHistory({ title: tb.title, thumbnail: '', url: payload.url, quality: 'HD', fileSize: '',
+                       noWatermark: true, hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none' });
+        return { data: { success: true, title: tb.title, thumbnail_url: '', direct_mp4_url: tb.url },
+                 dlUrl: tb.url, finalExt: 'mp4', safeName: name, via: 'direct:terabox_parallel' };
+      }
+    }
+  }
   const toApp = await vgHandToApp(payload);
   if (toApp) return toApp;
   // storage.local vg_direct === false: everything through the server (kill switch, tests)
@@ -2774,6 +2958,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const isGDrive = /(^|\.)(drive|docs)\.google\.com$/i.test(host);
       if (isGDrive && !(gd && typeof gd.url === 'string' && /^https:\/\//i.test(gd.url))) {
         gd = await vgGDriveResolveStream(pageUrl || url).catch(() => null);
+      }
+
+      // 0. Mega.nz direct WebCrypto AES-128-CTR multi-threaded OPFS (supports 1–4 GB on user's IP)
+      if (vgMegaParseUrl(url)) {
+        sendResponse({ ok: true, via: 'browser', statusText: '⚡ Giải mã 6 luồng Mega...' });
+        try {
+          const megaRes = await vgMegaResolveAndSave(url, title);
+          if (megaRes) {
+            addToHistory({
+              title: megaRes.title, thumbnail: '', url,
+              quality: 'HD', fileSize: '', noWatermark: true,
+              hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none',
+            });
+            return;
+          }
+        } catch (err) {
+          if (tabId != null) {
+            chrome.tabs.sendMessage(tabId, { type: 'VG_SHOW_TOAST', text: t('toast_err', err.message || String(err)) }).catch(() => {});
+          }
+          return;
+        }
+      }
+
+      // 0b. Terabox direct 8-connection parallel OPFS using browser ndus cookie
+      if (vgTeraboxParseUrl(url)) {
+        const tb = await vgTeraboxResolveStream(url).catch(() => null);
+        if (tb && tb.url) {
+          const safeName = await vgFileName(tb.title || title || 'terabox', url);
+          sendResponse({ ok: true, via: 'browser', statusText: '⚡ Tải 8 luồng Terabox...' });
+          const ok = await vgSaveGDriveParallel(tb.url, safeName);
+          if (ok) {
+            addToHistory({
+              title: tb.title || title || 'Terabox Video', thumbnail: '', url,
+              quality: 'HD', fileSize: '', noWatermark: true,
+              hasSubtitle: false, subtitleLanguages: [], subtitleSource: 'none',
+            });
+            return;
+          }
+        }
       }
 
       // 1. Hand directly to running VidGrab Desktop App if available & enabled

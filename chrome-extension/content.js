@@ -1703,8 +1703,15 @@ window.addEventListener('message', (event) => {
     shadow.append(style, pill);
     (document.documentElement || document.body).appendChild(hostEl);
 
-    const isGDriveFilePage = () => /(^|\.)(drive|docs)\.google\.com$/i.test(window.location.hostname)
-      && /\/(?:file\/d\/|open\?id=)([A-Za-z0-9_-]{10,})/.test(window.location.href);
+    const isGDriveFilePage = () => {
+      const h = window.location.hostname;
+      const u = window.location.href;
+      if (/(^|\.)(drive|docs)\.google\.com$/i.test(h) && /\/(?:file\/d\/|open\?id=)([A-Za-z0-9_-]{10,})/.test(u)) return true;
+      if (/(^|\.)mega\.(?:co\.)?nz$/i.test(h) && /\/(?:file\/|#!)[A-Za-z0-9_-]+/i.test(u)) return true;
+      if (/(^|\.)(terabox|1024tera|1024terabox|teraboxapp)\.com$/i.test(h) && /\/s\/[A-Za-z0-9_-]+/i.test(u)) return true;
+      if (/(^|\.)(onedrive\.live\.com|sharepoint\.com)$/i.test(h) && (/:v:|stream\.aspx|\.(?:mp4|mkv|mov|webm)\b/i.test(u) || /\.(?:mp4|mkv|mov|webm)\b/i.test(document.title || ''))) return true;
+      return false;
+    };
 
     const findGDrivePlayerEl = () => {
       if (!isGDriveFilePage()) return null;
@@ -1715,6 +1722,7 @@ window.addEventListener('message', (event) => {
         'iframe[allow*="autoplay"]',
         '.drive-viewer-video-player',
         '[role="main"] iframe',
+        '.video-player, .mega-video, #video-player',
       ];
       for (const sel of selectors) {
         const els = document.querySelectorAll(sel);
@@ -1726,8 +1734,8 @@ window.addEventListener('message', (event) => {
           }
         }
       }
-      // Fallback when Drive renders the video player inside a nested/shadow wrapper
-      // (e.g. /file/d/<id>/edit with "BUOI 17.mp4", "Chương", "Bản chép lời"):
+      // Fallback when Cloud Drive / Mega / Terabox / SharePoint renders the player inside a nested/shadow wrapper:
+      const isNonDriveCloud = /(^|\.)(mega\.(?:co\.)?nz|(?:terabox|1024tera|1024terabox|teraboxapp)\.com|onedrive\.live\.com|sharepoint\.com)$/i.test(window.location.hostname);
       const titleText = [
         document.title || '',
         document.querySelector('[data-tooltip*="."], div[role="heading"], .drive-viewer-toolstrip-name')?.textContent || '',
@@ -1736,7 +1744,7 @@ window.addEventListener('message', (event) => {
       const hasVideoChrome = Boolean(document.querySelector(
         '[aria-label*="Chương" i], [aria-label*="Chapters" i], [aria-label*="Bản chép lời" i], [aria-label*="Transcript" i]'
       ));
-      if (hasVideoExt || hasVideoChrome) {
+      if (isNonDriveCloud || hasVideoExt || hasVideoChrome) {
         return {
           __vgGDriveVirtual: true,
           getBoundingClientRect() {
